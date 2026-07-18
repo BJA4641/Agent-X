@@ -1,5 +1,6 @@
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
 import SettingsPanel from "@/components/SettingsPanel";
+import ChannelConnections from "@/components/ChannelConnections";
 
 const TENANT = "me";
 
@@ -28,36 +29,13 @@ export default async function SettingsPage() {
       </p>
 
       <h2 style={{ marginTop: 28 }}>Channel connections</h2>
-      <div className="grid">
-        <div className="card">
-          <h3>Instagram</h3>
-          <p className="note">
-            Auto-posting uses Meta&apos;s official API. Your access token and account ID live as
-            worker variables (<span className="mono">IG_ACCESS_TOKEN</span>, <span className="mono">IG_USER_ID</span> on Railway) —
-            Module 6 of the Instagram course walks you through getting them. Until Meta approves the app,
-            the Studio prepares everything and you post with one copy-paste.
-          </p>
-        </div>
-        <div className="card">
-          <h3>YouTube</h3>
-          <p className="note">
-            Shorts upload keys (<span className="mono">YT_CLIENT_ID</span>, <span className="mono">YT_CLIENT_SECRET</span>,{" "}
-            <span className="mono">YT_REFRESH_TOKEN</span>) arrive with the YouTube course track. The same videos
-            the Studio renders for Reels work as Shorts today via download → upload.
-          </p>
-        </div>
-        <div className="card">
-          <h3>TikTok</h3>
-          <p className="note">
-            Manual by design — TikTok&apos;s API restricts auto-posting for new apps, and native uploads perform
-            better anyway. The <a href="/dashboard/tiktok">TikTok page</a> gives you the download + caption + sound flow.
-          </p>
-        </div>
-      </div>
-      <p className="note" style={{ marginTop: 8 }}>
-        One-click per-user OAuth connections ship with the multi-user SaaS version — for now, connections are
-        factory-level variables so your token never touches the browser.
+      <p className="note" style={{ maxWidth: 720, marginBottom: 12 }}>
+        Connect each account you want Agent-X to post to. Tokens are encrypted at rest
+        and the worker only reads them server-side. Instagram auto-posting works once your
+        Meta app is approved; until then Studio prepares everything and one click copies
+        the caption/video for manual upload.
       </p>
+      <ChannelConnections />
 
       <SettingsPanel
         isAdmin={isAdmin}
