@@ -1,0 +1,7 @@
+edge-tts>=7.0.0
+pillow>=10.0.0
+anthropic>=0.40.0
+supabase>=2.6.0
+google-api-python-client>=2.140.0
+google-auth-oauthlib>=1.2.0
+# system dependency: ffmpeg
