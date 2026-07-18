@@ -1,0 +1,11 @@
+.env
+.env.local
+__pycache__/
+node_modules/
+.next/
+pipeline/data/
+pipeline/output/
+*.tsbuildinfo
+STOP
+yt_token.json
+*.token.json
