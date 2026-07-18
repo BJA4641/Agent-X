@@ -3,6 +3,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import Sidebar from "@/components/Sidebar";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default async function DashLayout({ children }: { children: React.ReactNode }) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) redirect("/login");
@@ -13,7 +14,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
     <>
       <header className="site"><div className="wrap">
         <Link href="/" className="logo" style={{ textDecoration: "none" }}>build<b>along</b></Link>
-        <nav className="top">{admin && <Link href="/studio">Studio</Link>}<span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>{user.email}</span></nav>
+        <nav className="top">{admin && <Link href="/studio">Studio</Link>}<span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>{user.email}</span><ThemeToggle /></nav>
       </div></header>
       <div className="wrap shell">
         <Sidebar admin={admin} />

@@ -21,7 +21,7 @@ export default function Sidebar({ admin }: { admin: boolean }) {
     { href: "/studio", label: "Studio · production" },
     { href: "/trends", label: "Trends · scout desk" },
   ]});
-  groups.push({ label: "Account", items: [{ href: "/dashboard/settings", label: "Settings" }] });
+  groups.push({ label: "Account", items: [{ href: "/dashboard/models", label: "Models · leaderboard" }, { href: "/dashboard/settings", label: "Settings" }] });
   const on = (href: string) => (href === "/dashboard" ? path === href : path.startsWith(href));
   return (
     <aside className="sidebar">

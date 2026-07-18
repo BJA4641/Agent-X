@@ -111,3 +111,17 @@ footer.site { border-top: 1px solid var(--line); padding: 32px 0; color: var(--d
   .sidegroup { margin-top: 0; flex-direction: row; flex-wrap: wrap; }
   .sidegroup h5 { display: none; }
 }
+
+/* ---- light mode ---- */
+:root[data-theme="light"] {
+  --bg: #F5F6F8;
+  --panel: #FFFFFF;
+  --line: #DCE1E8;
+  --ink: #1B212B;
+  --dim: #5A6270;
+  --idea: #77808F;
+  --draft: #A87E0C;
+  --approved: #178A50;
+  --scheduled: #1F6FD0;
+  --published: #8A3FD1;
+}
