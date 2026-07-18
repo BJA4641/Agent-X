@@ -80,4 +80,4 @@ def budget_ok(next_cost: float) -> bool:
 
 def _sb():
     from supabase import create_client
-    return create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+    return create_client(config.get("SUPABASE_URL"), config.supabase_service_key())

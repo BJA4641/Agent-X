@@ -28,7 +28,7 @@ def _db_setting():
         return {}
     try:
         from supabase import create_client
-        sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+        sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
         r = sb.table("settings").select("value").eq("tenant_id", config.TENANT_ID).eq("key", "model").execute().data
         return (r[0]["value"] or {}) if r else {}
     except Exception:

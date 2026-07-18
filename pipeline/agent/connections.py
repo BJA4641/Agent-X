@@ -61,7 +61,7 @@ def _decrypt_creds(ciphertext: str) -> dict:
     if config.HAS_SUPABASE:
         try:
             from supabase import create_client
-            sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
             res = sb.rpc("decrypt_creds", {"ciphertext": ciphertext}).execute()
             return res.data or {}
         except Exception:
@@ -83,7 +83,7 @@ def credentials_for(user_id: str, platform: str) -> Optional[dict]:
     if config.HAS_SUPABASE and user_id and user_id != "me":
         try:
             from supabase import create_client
-            sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
             row = (sb.table("user_connections")
                      .select("credentials, cred_enc, display_name, status")
                      .eq("user_id", user_id).eq("platform", platform)
@@ -106,7 +106,7 @@ def active_platforms_for_user(user_id: str) -> list[str]:
     if config.HAS_SUPABASE and user_id and user_id != "me":
         try:
             from supabase import create_client
-            sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
             rows = (sb.table("user_connections")
                       .select("platform").eq("user_id", user_id).eq("status", "active")
                       .execute().data)

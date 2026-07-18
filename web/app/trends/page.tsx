@@ -17,21 +17,39 @@ async function fetchText(url: string): Promise<string> {
   } catch { return ""; }
 }
 
+// Decode HTML entities (&amp;, &quot;, &#39;, &lt;, &gt;, numeric) so titles read correctly
+function decodeHtml(s: string): string {
+  if (!s) return s;
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&nbsp;/g, " ");
+}
+
 function headlines(xml: string): string[] {
   const out: string[] = [];
   const re = /<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>/g;
   let m; let first = true;
-  while ((m = re.exec(xml))) { if (first) { first = false; continue; } out.push(m[1].replace(/\s*-\s*[^-]+$/, "").trim()); }
+  while ((m = re.exec(xml))) {
+    if (first) { first = false; continue; }
+    out.push(decodeHtml(m[1].replace(/\s*-\s*[^-]+$/, "").trim()));
+  }
   return out;
 }
 
 type Outlier = { title: string; url: string; views: number; ratio: number; channel: string };
 
 function outliers(xml: string): Outlier[] {
-  const channel = (xml.match(/<title>(.*?)<\/title>/) || [])[1] || "channel";
+  const channel = decodeHtml((xml.match(/<title>(.*?)<\/title>/) || [])[1] || "channel");
   const entries = xml.split("<entry>").slice(1);
   const vids = entries.map(e => ({
-    title: (e.match(/<title>(.*?)<\/title>/) || [])[1] || "",
+    title: decodeHtml((e.match(/<title>(.*?)<\/title>/) || [])[1] || ""),
     url: (e.match(/<link rel="alternate" href="(.*?)"/) || [])[1] || "#",
     views: parseInt((e.match(/views="(\d+)"/) || [])[1] || "0", 10),
   })).filter(v => v.views > 0);

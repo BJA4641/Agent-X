@@ -271,12 +271,47 @@ insert into niches (slug, name, emoji, starter_channels, starter_queries, descri
 on conflict (slug) do nothing;
 
 -- =====================================================================
--- 7. Storage buckets (create via dashboard if these statements fail;
---    they require the s3 protocol and are easier to make by hand):
---    - media  (public, 500mb limit)
---    - proofs (private, 8mb limit)
---    - agent-avatars (public)
+-- 7. Storage buckets (safe to re-run; inserts skip if already existing)
+--    media   – public (Instagram/Shorts need public URLs)
+--    proofs  – private (course verification screenshots)
+--    agent-avatars – public (future agent feed icons)
 -- =====================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('media','media',true,524288000,array['image/png','image/jpeg','video/mp4','audio/mpeg']::text[])
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('proofs','proofs',false,8388608,array['image/png','image/jpeg']::text[])
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('agent-avatars','agent-avatars',true,2097152,array['image/png','image/jpeg','image/webp']::text[])
+on conflict (id) do nothing;
+
+-- Public read policy on media
+drop policy if exists "media public read" on storage.objects;
+create policy "media public read" on storage.objects for select
+  using (bucket_id = 'media');
+
+-- Authenticated users can upload to media & proofs & agent-avatars in their own folder
+drop policy if exists "auth upload own folder" on storage.objects;
+create policy "auth upload own folder" on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id in ('media','proofs','agent-avatars')
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Owners can update/delete their own files
+drop policy if exists "auth update own" on storage.objects;
+create policy "auth update own" on storage.objects for update
+  to authenticated
+  using ((storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "auth delete own" on storage.objects;
+create policy "auth delete own" on storage.objects for delete
+  to authenticated
+  using ((storage.foldername(name))[1] = auth.uid()::text);
 
 -- Done.
 select 'setup complete' as status;

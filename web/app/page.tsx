@@ -2,53 +2,82 @@ import Header from "@/components/Header";
 import Waitlist from "@/components/Waitlist";
 import { TRACKS } from "@/lib/tracks";
 
+const MONEY_PATHS = [
+  { emoji: "🎯", title: "Affiliate from view one", body: "Link tools you actually feature. No follower minimum. Disclosure built into every step." },
+  { emoji: "📺", title: "YouTube ad revenue (long-form)", body: "The only 'paid per view' model that scales. Shorts feed the long-form ladder that hits YPP." },
+  { emoji: "🛍️", title: "Your own ecommerce brand", body: "Proven product → your brand → your store. Rebrand, don't resell, to survive the algo and the margins." },
+  { emoji: "🧲", title: "Comment → DM → email → product", body: "A $17–47 digital product sold to the list you build. This is the highest-margin lever on the whole map." },
+  { emoji: "💰", title: "Creator bonuses when eligible", body: "TikTok Rewards, Instagram bonuses — optional top-up, never the plan A. We tell you exactly when they unlock." },
+  { emoji: "🤝", title: "Brand deals later", body: "Once you have a real niche audience, inbound pays per post. Not a day-one promise." },
+];
+
 export default function Landing() {
   return (
     <>
       <Header />
       <main>
         <div className="wrap hero">
-          <p className="eyebrow">A production line for one-person media</p>
-          <h1>Your content page, run like a studio.</h1>
+          <p className="eyebrow">Agent-X · autonomous AI agents that build you real income streams</p>
+          <h1>From zero to your first online money stream — step by step, with AI agents doing the heavy work.</h1>
           <p className="sub">
-            BuildAlong plans topics, drafts faceless vertical videos, and queues them on a board.
-            Nothing publishes until you press approve — you stay the editor, the machine does the grind.
+            Pick a money path. Agents research, write scripts, draft Reels/Shorts/TikToks and a rebrandable store.
+            You approve. Nothing gets published or launched until you say so. Every step is a verified checkbox,
+            every method is the version that actually pays in 2026.
           </p>
 
-          {/* signature: the real board state machine as an editor timeline */}
-          <div className="timeline" role="img" aria-label="Content pipeline: idea, draft, your approval, scheduled, published">
-            <div className="ruler"><span>mon</span><span>tue</span><span>wed</span><span>thu</span><span>fri</span></div>
+          <div className="timeline" role="img" aria-label="Agent pipeline: strategy → draft → you approve → scheduled → published → paid">
+            <div className="ruler"><span>agents work</span><span>you review</span><span>publish</span><span>earn</span></div>
             <div className="clips">
-              <div className="clip idea">idea<small>strategy queues it</small></div>
-              <div className="clip draft">drafted<small>script + voice + video</small></div>
-              <div className="clip approved">approved<small>one click — yours</small></div>
-              <div className="clip scheduled">scheduled<small>next open slot</small></div>
-              <div className="clip published">published<small>receipts + metrics</small></div>
+              <div className="clip idea">strategy<small>picks proven angles</small></div>
+              <div className="clip draft">content<small>script + voice + video</small></div>
+              <div className="clip approved">you approve<small>green light = yours</small></div>
+              <div className="clip scheduled">scheduled<small>multi-platform slots</small></div>
+              <div className="clip published">published<small>tracked to income</small></div>
             </div>
-            <p className="legend">Every video moves left to right. The <b>green step is you</b> — the system never skips it.</p>
+            <p className="legend">Five agent stations, one human editor. The <b>green step is you</b> — agents never skip it.</p>
           </div>
         </div>
 
         <section id="how">
           <div className="wrap">
-            <h2>How it works</h2>
-            <p className="lead">One loop, five states. The same board you see above is the actual data model.</p>
+            <h2>How Agent-X works</h2>
+            <p className="lead">A team of AI agents running 24/7 on your accounts. You are the CEO, not the intern.</p>
             <div className="grid3">
-              <div className="card"><h3>Strategy reads the numbers</h3><p>Winners and losers from last week decide next week's topics. No performance data yet? It starts from a proven angle and learns.</p></div>
-              <div className="card"><h3>The Studio drafts</h3><p>Script, narration, per-beat visuals, and a 1080×1920 render with motion — a post-ready Reel per topic.</p></div>
-              <div className="card"><h3>You approve, it ships</h3><p>Approve or reject from the board. Approved clips get slots and publish with receipts — never twice, capped by a daily budget you set.</p></div>
+              <div className="card"><h3>🧠 Strategy agent</h3><p>Reads trends, competitor outliers, your own analytics, and queues angles that have already proven they get attention — original scripts, never reposts.</p></div>
+              <div className="card"><h3>🎬 Content studio</h3><p>Scripts, AI voiceovers, captioned vertical video for Reels/Shorts/TikTok, and long-form YouTube outlines — delivered to your approval queue.</p></div>
+              <div className="card"><h3>🛒 Brand &amp; commerce</h3><p>Researches winning products, writes your brand bible, drafts a Shopify-style store, and generates creatives for your rebranded offer.</p></div>
+              <div className="card"><h3>✅ QA agent</h3><p>Flags policy risks, generic spam, broken hooks, and missing disclosures before anything ships. You only see clean output.</p></div>
+              <div className="card"><h3>💸 Monetization agent</h3><p>Tracks affiliate links, bonus eligibility, product funnel steps and wallet spend, so you know what is actually earning.</p></div>
+              <div className="card"><h3>👀 You stay in control</h3><p>One-click approve / edit / reject. Slack-style feed shows every agent's work. Connect your own channels — we never hold your logins.</p></div>
             </div>
             <div className="honest">
-              <b>What this is not:</b> a get-rich machine. Platforms throttle soulless automation, and we build for the opposite —
-              your judgment on every clip, your accounts, your audience. No income promises here or anywhere.
+              <b>Honest economics up front:</b> no one gets paid for spamming reposts anymore. Instagram/YouTube/TikTok
+              all demonetize straight copies. Agent-X clones the ANGLE — same hook structure, original content —
+              which is the only safe long-term approach. No income promises: results depend on your consistency,
+              your niche, and your edits. We give you the correct process.
+            </div>
+          </div>
+        </section>
+
+        <section id="money">
+          <div className="wrap">
+            <h2>Six ways you actually get paid</h2>
+            <p className="lead">Verified against 2026 platform rules and affiliate programs. Each one has its own course track with check-off steps.</p>
+            <div className="grid3">
+              {MONEY_PATHS.map((p) => (
+                <div className="card" key={p.title}>
+                  <h3><span style={{ fontSize: 28, marginRight: 8 }}>{p.emoji}</span>{p.title}</h3>
+                  <p>{p.body}</p>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
         <section id="tracks">
           <div className="wrap">
-            <h2>Start with one track</h2>
-            <p className="lead">Instagram opens first. The other tracks unlock as the system earns it — same engine, new surfaces.</p>
+            <h2>Start a track — each one is a step-by-step path to a paid outcome</h2>
+            <p className="lead">Every step is a checkbox with proof (screenshot / link / text). You cannot skip to "posting" before the foundations that actually make money are in place.</p>
             <div className="grid3">
               {TRACKS.map((t) => (
                 <div className="card" key={t.id}>
@@ -66,17 +95,18 @@ export default function Landing() {
 
         <section id="waitlist">
           <div className="wrap">
-            <h2>Built in public</h2>
+            <h2>Built in public, from Istanbul</h2>
             <p className="lead">
-              We run our own pages on this exact system. The waitlist gets the live case study — real board,
-              real numbers, wins and misses — before anything is sold. It will live at <a href="/proof" style={{ color: "var(--scheduled)" }}>/proof</a>.
+              We run our own pages and stores on this exact system. The waitlist gets the live case study —
+              real agent feed, real numbers, wins and misses — before anything is sold. Public build log lives
+              at <a href="/proof" style={{ color: "var(--scheduled)" }}>/proof</a>.
             </p>
             <Waitlist />
-            <p className="note">One email when the case study ships. No sequences, no spam.</p>
+            <p className="note">One email when the next money-path ships. No sequences, no spam.</p>
           </div>
         </section>
       </main>
-      <footer className="site"><div className="wrap">© {new Date().getFullYear()} BuildAlong · You own your accounts; we never hold your logins.</div></footer>
+      <footer className="site"><div className="wrap">© {new Date().getFullYear()} Agent-X · You own your accounts, your brand, and your revenue — we never hold your logins.</div></footer>
     </>
   );
 }

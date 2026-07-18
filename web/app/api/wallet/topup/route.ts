@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   const stripeKey = process.env.STRIPE_SECRET_KEY;
   if (!stripeKey) {
     // DEMO MODE: credit immediately (no real payment). Replace when Stripe is live.
-    const { data: w } = await admin.from("wallets").select("balance_usd").eq("user_id", user.id).maybeSingle();
+    const { data: w } = await admin.from("wallets").select("balance_usd,lifetime_topup").eq("user_id", user.id).maybeSingle();
     await admin.from("wallets").upsert({
       user_id: user.id,
       balance_usd: Number(w?.balance_usd || 0) + amount,

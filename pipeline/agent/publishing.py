@@ -77,7 +77,7 @@ def upload_media(video_path: str) -> str:
     if not config.HAS_SUPABASE:
         raise RuntimeError("Instagram needs a public video URL: configure Supabase Storage first")
     from supabase import create_client
-    sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+    sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
     name = f"{config.TENANT_ID}/{int(time.time())}_{os.path.basename(video_path)}"
     with open(video_path, "rb") as f:
         sb.storage.from_("media").upload(name, f.read(), {"content-type": "video/mp4"})

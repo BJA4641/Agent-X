@@ -15,11 +15,17 @@ _load_env()
 def get(name, default=None):
     return os.environ.get(name, default)
 
+def supabase_service_key():
+    """Support both SUPABASE_SERVICE_KEY (pipeline) and SUPABASE_SERVICE_ROLE_KEY
+    (Vercel/Supabase-dashboard convention). The pipeline prefers SERVICE_KEY but
+    falls back to SERVICE_ROLE_KEY so you don't have to duplicate the variable."""
+    return get("SUPABASE_SERVICE_KEY") or get("SUPABASE_SERVICE_ROLE_KEY")
+
 # capability flags (drive dry-run vs live everywhere)
 HAS_GEMINI    = bool(get("GEMINI_API_KEY") or get("GOOGLE_API_KEY"))
 HAS_ANTHROPIC = bool(get("ANTHROPIC_API_KEY"))
 HAS_ELEVEN    = bool(get("ELEVENLABS_API_KEY"))
-HAS_SUPABASE  = bool(get("SUPABASE_URL") and get("SUPABASE_SERVICE_KEY"))
+HAS_SUPABASE  = bool(get("SUPABASE_URL") and supabase_service_key())
 HAS_IG        = bool(get("IG_USER_ID") and get("IG_ACCESS_TOKEN"))
 HAS_YT        = bool(get("YT_TOKEN_JSON")) and os.path.exists(get("YT_TOKEN_JSON", ""))
 
@@ -30,7 +36,7 @@ PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "prompts")
 
 def _supabase():
     from supabase import create_client
-    return create_client(get("SUPABASE_URL"), get("SUPABASE_SERVICE_KEY"))
+    return create_client(get("SUPABASE_URL"), supabase_service_key())
 
 def kill_switch_on() -> bool:
     """KILL_SWITCH=1 in env, a STOP file next to the pipeline, or the remote
@@ -43,7 +49,7 @@ def kill_switch_on() -> bool:
     if HAS_SUPABASE:
         try:
             from supabase import create_client
-            sb = create_client(get("SUPABASE_URL"), get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(get("SUPABASE_URL"), supabase_service_key())
             res = sb.table("settings").select("value").eq("tenant_id", TENANT_ID).eq("key", "kill_switch").execute()
             if res.data and res.data[0]["value"].get("on"):
                 return True

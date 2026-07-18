@@ -36,7 +36,7 @@ def profile_for(user_id: str = None) -> dict:
     if config.HAS_SUPABASE and uid != "me":
         try:
             from supabase import create_client
-            sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
             r = sb.table("brand_profiles").select("*").eq("user_id", uid).limit(1).execute().data
             if r:
                 return _format_for_prompt(r[0])
@@ -157,7 +157,7 @@ Output ONLY the JSON object, nothing else."""
     if config.HAS_SUPABASE and uid != "me":
         try:
             from supabase import create_client
-            sb = create_client(config.get("SUPABASE_URL"), config.get("SUPABASE_SERVICE_KEY"))
+            sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
             sb.table("brand_profiles").upsert({"user_id": uid, **profile}).execute()
         except Exception as e:
             ledger.record("brand", ok=False, detail=f"db upsert: {e}")

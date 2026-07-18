@@ -11,7 +11,7 @@ export default async function StudioLayout({ children }: { children: React.React
   return (
     <>
       <header className="site"><div className="wrap">
-        <Link href="/" className="logo" style={{ textDecoration: "none" }}>build<b>along</b> <span className="tag" style={{ marginLeft: 8 }}>studio</span></Link>
+        <Link href="/" className="logo" style={{ textDecoration: "none" }}>Agent<b>-X</b> <span className="tag" style={{ marginLeft: 8 }}>studio</span></Link>
         <nav className="top"><span style={{ color: "var(--dim)", fontSize: 14 }}>{user.email}</span></nav>
       </div></header>
       <div className="wrap shell">
