@@ -12,10 +12,10 @@ export default async function DashLayout({ children }: { children: React.ReactNo
   if (!user) redirect("/login");
   const admin = isAdmin(user.email);
 
-  // Onboarding gate: if the profiles table hasn't been created yet (pre-v1.4 DB)
-  // we let them in rather than erroring. Once setup_v1.4.sql is run, new users
-  // who haven't picked a niche are sent to /onboarding.
-  let onboarded = true;
+  // Onboarding is now OPT-IN. Users land on dashboard first and can choose to
+  // set up their niche/brand from there. We still pass `onboarded` to the
+  // sidebar so the "Finish setup" banner shows until they configure.
+  let onboarded = false;
   try {
     const adminSb = supabaseAdmin();
     const { data: profile } = await adminSb
@@ -23,11 +23,10 @@ export default async function DashLayout({ children }: { children: React.ReactNo
       .select("onboarded")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (!profile?.onboarded) onboarded = false;
+    onboarded = !!(profile?.onboarded);
   } catch {
-    onboarded = true; // table doesn't exist yet; don't block
+    onboarded = false;
   }
-  if (!onboarded) redirect("/onboarding");
 
   return (
     <>
