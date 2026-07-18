@@ -70,7 +70,7 @@ def update(item_id, status=None, payload_patch=None, scheduled_at=None):
     if config.HAS_SUPABASE:
         cur = _sb().table("board_items").select("*").eq("id", item_id).execute().data[0]
         cur = apply(cur)
-        patch = {"status": cur["status"], "payload": cur["payload"], "updated_at": "now()"}
+        patch = {"status": cur["status"], "payload": cur["payload"], "updated_at": __import__("datetime").datetime.utcnow().isoformat()}
         if scheduled_at is not None: patch["scheduled_at"] = _iso(scheduled_at)
         _sb().table("board_items").update(patch).eq("id", item_id).execute()
         return cur

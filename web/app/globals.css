@@ -89,3 +89,25 @@ footer.site { border-top: 1px solid var(--line); padding: 32px 0; color: var(--d
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .progressbar div { transition: none; } }
 @media (max-width: 640px) { .hero { padding: 56px 0 24px; } form.inline { flex-direction: column; } }
+
+/* ---------- v1.3 app shell ---------- */
+.shell { display: flex; gap: 32px; align-items: flex-start; padding: 32px 24px 64px; }
+.shellmain { flex: 1; min-width: 0; }
+.sidebar { width: 208px; flex: none; position: sticky; top: 24px; display: flex; flex-direction: column; gap: 4px; }
+.sidegroup { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+.sidegroup h5 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); margin: 0 0 6px 10px; font-weight: 600; }
+.sideitem { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--dim); text-decoration: none; font-size: 14px; border: 1px solid transparent; }
+.sideitem:hover { color: var(--fg); background: var(--panel); }
+.sideitem.on { color: var(--fg); background: var(--panel); border-color: var(--line); }
+.sidetag { font-size: 10px; padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--dim); }
+.btn.tiny { padding: 6px 12px; font-size: 12px; white-space: nowrap; }
+.agents { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 6px; }
+.agentchip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 118px; }
+.agentchip b { font-size: 13px; }
+.agentchip span { font-size: 11.5px; color: var(--dim); font-family: var(--mono, monospace); }
+@media (max-width: 860px) {
+  .shell { flex-direction: column; gap: 20px; }
+  .sidebar { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .sidegroup { margin-top: 0; flex-direction: row; flex-wrap: wrap; }
+  .sidegroup h5 { display: none; }
+}

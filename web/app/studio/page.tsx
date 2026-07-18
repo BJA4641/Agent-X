@@ -16,7 +16,7 @@ export default async function Studio() {
   const sb = supabaseAdmin();
   const [{ data: items }, { data: ledger }, { data: killRow }, { data: subs }, usersRes] = await Promise.all([
     sb.from("board_items").select("id,status,topic,payload,created_at").eq("tenant_id", TENANT).order("created_at", { ascending: false }).limit(100),
-    sb.from("run_ledger").select("cost_usd").gte("created_at", new Date().toISOString().slice(0, 10)),
+    sb.from("run_ledger").select("step,cost_usd,ok,created_at").gte("created_at", new Date().toISOString().slice(0, 10)).limit(3000),
     sb.from("settings").select("key,value").eq("tenant_id", TENANT).in("key", ["kill_switch", "digest_latest"]),
     sb.from("task_progress").select("user_id,task_key,proof,updated_at").not("proof", "is", null).order("updated_at", { ascending: false }).limit(50),
     sb.auth.admin.listUsers({ perPage: 500 }),
@@ -35,18 +35,36 @@ export default async function Studio() {
     return { ...r, email: emailOf[r.user_id] || "unknown", title: stepTitle[r.task_key] || r.task_key, shot };
   }));
   const spent = (ledger || []).reduce((a, r) => a + Number(r.cost_usd), 0);
+  const agentStats: Record<string, { runs: number; fails: number; cost: number; last: string }> = {};
+  (ledger || []).forEach((r: any) => {
+    const a = (agentStats[r.step] ||= { runs: 0, fails: 0, cost: 0, last: r.created_at });
+    a.runs += 1; if (r.ok === false) a.fails += 1; a.cost += Number(r.cost_usd || 0);
+    if (r.created_at > a.last) a.last = r.created_at;
+  });
+  const AGENT_ORDER = ["strategy", "brain", "critique", "visuals", "voice", "captions", "produce", "publish", "community", "digest"];
+  const AGENT_NAMES: Record<string, string> = { strategy: "Strategist", brain: "Writer", critique: "Critic", visuals: "Art dept", voice: "Voice", captions: "Captions", produce: "Renderer", publish: "Publisher", community: "Community", digest: "Analyst" };
+  const agents = AGENT_ORDER.filter(k => agentStats[k]).map(k => ({ key: k, name: AGENT_NAMES[k] || k, ...agentStats[k] }));
   const killOn = !!killRow?.find((r: any) => r.key === "kill_switch")?.value?.on;
   const digest = killRow?.find((r: any) => r.key === "digest_latest")?.value;
 
   return (
     <>
-      <header className="site"><div className="wrap">
-        <Link href="/" className="logo" style={{ textDecoration: "none" }}>build<b>along</b> <span className="tag" style={{ marginLeft: 8 }}>studio</span></Link>
-        <nav className="top"><Link href="/dashboard">Tracks</Link><span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>spent today: ${spent.toFixed(2)}</span></nav>
-      </div></header>
-      <main className="wrap" style={{ padding: "40px 24px" }}>
-        <h2>Production board</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+          <h2>Production board</h2>
+          <span className="tag mono">spent today: ${spent.toFixed(2)}</span>
+        </div>
         <p className="lead">Approve moves a clip to the publish queue. Reject kills it. The stop button halts the worker within one tick.</p>
+        {agents.length > 0 && (
+          <div className="agents">
+            {agents.map(a => (
+              <div className="agentchip" key={a.key}>
+                <b>{a.name}</b>
+                <span>{a.runs} run{a.runs === 1 ? "" : "s"}{a.fails > 0 ? ` · ${a.fails} err` : ""}</span>
+                <span>{a.cost > 0 ? `$${a.cost.toFixed(2)}` : "free"} · {new Date(a.last).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ marginTop: 24 }}>
           {digest?.md && (
             <div className="card" style={{ marginBottom: 24 }}>
@@ -78,7 +96,6 @@ export default async function Studio() {
             )}
           </div>
         </div>
-      </main>
     </>
   );
 }

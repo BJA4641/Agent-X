@@ -4,19 +4,18 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import Sidebar from "@/components/Sidebar";
 
-export default async function DashLayout({ children }: { children: React.ReactNode }) {
+export default async function TrendsLayout({ children }: { children: React.ReactNode }) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) redirect("/login");
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) redirect("/login");
-  const admin = isAdmin(user.email);
   return (
     <>
       <header className="site"><div className="wrap">
-        <Link href="/" className="logo" style={{ textDecoration: "none" }}>build<b>along</b></Link>
-        <nav className="top">{admin && <Link href="/studio">Studio</Link>}<span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>{user.email}</span></nav>
+        <Link href="/" className="logo" style={{ textDecoration: "none" }}>build<b>along</b> <span className="tag" style={{ marginLeft: 8 }}>trends</span></Link>
+        <nav className="top"><span style={{ color: "var(--dim)", fontSize: 14 }}>{user.email}</span></nav>
       </div></header>
       <div className="wrap shell">
-        <Sidebar admin={admin} />
+        <Sidebar admin={isAdmin(user.email)} />
         <main className="shellmain">{children}</main>
       </div>
     </>

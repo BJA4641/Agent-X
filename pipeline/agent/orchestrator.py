@@ -7,8 +7,14 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "output")
 os.makedirs(OUT, exist_ok=True)
 
 def produce(item, stub=False):
-    """idea -> drafted (script + rendered video)."""
-    script = brain.write_script(item["topic"], item_id=item["id"])
+    """idea -> drafted (script + rendered video). Idempotent: a cached script is reused
+    on retry so a render crash never re-charges the writer."""
+    payload = item.get("payload") or {}
+    script = payload.get("script")
+    if not script:
+        script = brain.write_script(item["topic"], item_id=item["id"])
+        # persist immediately — if rendering dies, the paid script survives the crash
+        board.update(item["id"], payload_patch={"script": script})
     vid = os.path.join(OUT, f"{item['id'][:8]}.mp4")
     if stub:
         open(vid, "w").write("stub")
@@ -42,10 +48,21 @@ def tick(stub=False):
             t, bucket = t["topic"], t["bucket"]
             board.add(t, payload={"bucket": bucket})
             print(f"[strategy] queued: {t}")
-    # 2) produce drafts
+    # 2) produce drafts — one item's failure can NEVER sink the tick or loop the budget
     for item in board.list("idea")[: config.BATCH_SIZE]:
         print(f"[content] producing: {item['topic']}")
-        produce(item, stub=stub)
+        try:
+            produce(item, stub=stub)
+        except Exception as e:
+            attempts = (item.get("payload") or {}).get("attempts", 0) + 1
+            detail = f"attempt {attempts}: {str(e)[:300]}"
+            ledger.record("produce", ok=False, detail=detail, item_id=item["id"])
+            if attempts >= 3:
+                board.update(item["id"], status="failed", payload_patch={"attempts": attempts, "error": detail})
+                print(f"[content] FAILED after {attempts} attempts: {item['topic']} — {detail}")
+            else:
+                board.update(item["id"], payload_patch={"attempts": attempts})
+                print(f"[content] attempt {attempts} failed, will retry: {detail}")
     # 3) approved -> scheduled (next slot, 1/day starting now)
     for i, item in enumerate(board.list("approved")):
         board.update(item["id"], status="scheduled", scheduled_at=int(time.time()) + i * 86400)

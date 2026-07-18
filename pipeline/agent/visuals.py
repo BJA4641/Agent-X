@@ -1,6 +1,7 @@
 """visuals.py — one 1080x1920 background per beat.
 Gemini image model (live) or branded gradient (dry-run), caption on a scrim either way."""
 import base64, json, math, os, urllib.request
+import time
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from . import config, ledger
 
@@ -37,16 +38,22 @@ def pick_style(item_id, override: str = None) -> str:
     import hashlib
     return list(STYLES)[int(hashlib.sha256(str(item_id).encode()).hexdigest(), 16) % len(STYLES)]
 
+_gemini_cooldown_until = 0.0
+
 def beat_frame(text: str, image_prompt: str, out_path: str, seed: int = 0, item_id=None, style: str = None) -> str:
+    global _gemini_cooldown_until
     style = style or pick_style(item_id)
     bg = None
-    if config.HAS_GEMINI and ledger.budget_ok(EST_COST):
+    if config.HAS_GEMINI and ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until:
         try:
+            time.sleep(float(config.get("GEMINI_DELAY", "6.5")))  # stay under free-tier RPM
             bg = _gemini_image(f"{STYLES[style]['prompt']}. {image_prompt}")
             ledger.record("visuals", model=config.get("NANO_BANANA_MODEL", "gemini-image"),
                           cost_usd=EST_COST, item_id=item_id)
         except Exception as e:
             ledger.record("visuals", ok=False, detail=str(e), item_id=item_id)
+            if "429" in str(e):  # rate limited: stop hammering, cool off 10 min
+                _gemini_cooldown_until = time.time() + 600
     if bg is None:
         bg = _gradient(seed, style)
         ledger.record("visuals", model="gradient-fallback", cost_usd=0, item_id=item_id)

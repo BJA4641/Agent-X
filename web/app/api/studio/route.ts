@@ -7,8 +7,20 @@ const TENANT = process.env.TENANT_ID || "me";
 export async function POST(req: Request) {
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user || !isAdmin(user.email)) return NextResponse.json({ error: "Admins only." }, { status: 403 });
-  const { action, itemId, reason, hookIndex } = await req.json();
+  const body = await req.json();
+  const { action, itemId, reason, hookIndex } = body;
   const sb = supabaseAdmin();
+
+  if (action === "queue_topic") {
+    const { topic, source } = body;
+    if (!topic) return NextResponse.json({ error: "topic required" }, { status: 400 });
+    const { error } = await sb.from("board_items").insert({
+      tenant_id: TENANT, status: "idea", topic: String(topic).slice(0, 200),
+      payload: { bucket: "proven", source: source || null, queued_by: "trends-desk" },
+    });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
 
   if (action === "pick_hook") {
     const { data: cur } = await sb.from("board_items").select("payload").eq("id", itemId).single();
