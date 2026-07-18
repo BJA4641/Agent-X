@@ -16,12 +16,20 @@ export default function StudioBoard({ items, killOn }: { items: Item[]; killOn: 
   const [rejecting, setRejecting] = useState<string | null>(null);
   const REASONS = ["weak hook", "boring visuals", "off topic", "too generic", "wrong tone"];
 
-  function copyCaption(it: Item) {
-    const ig = it.payload?.captions?.instagram;
-    if (!ig) return;
-    const text = ig.caption + "\n\n" + (ig.hashtags || []).map((h: string) => "#" + h).join(" ");
+  function copyFor(it: Item, platform: "instagram" | "tiktok" | "youtube") {
+    const caps = it.payload?.captions || {};
+    let text = "";
+    if (platform === "instagram" && caps.instagram) {
+      text = caps.instagram.caption + "\n\n" + (caps.instagram.hashtags || []).map((h: string) => "#" + h).join(" ");
+    } else if (platform === "tiktok" && caps.tiktok) {
+      text = caps.tiktok.caption + "\n\n" + (caps.tiktok.hashtags || []).map((h: string) => "#" + h).join(" ");
+    } else if (platform === "youtube" && caps.youtube) {
+      text = "TITLE: " + (caps.youtube.title || "") + "\n\nDESCRIPTION:\n" + (caps.youtube.description || "")
+        + (caps.youtube.tags ? "\n\nTAGS: " + caps.youtube.tags.join(", ") : "");
+    }
+    if (!text) return;
     navigator.clipboard.writeText(text);
-    setBusy("copied-" + it.id);
+    setBusy("copied-" + platform + "-" + it.id);
     setTimeout(() => setBusy(null), 1200);
   }
 
@@ -76,9 +84,28 @@ export default function StudioBoard({ items, killOn }: { items: Item[]; killOn: 
                         {it.payload.captions.instagram.caption}
                         {"\n"}{(it.payload.captions.instagram.hashtags || []).map((h: string) => "#" + h).join(" ")}
                       </p>
-                      <button className="ghost" style={{ marginTop: 6, fontSize: 13 }} onClick={() => copyCaption(it)}>
-                        {busy === "copied-" + it.id ? "Copied ✓" : "Copy caption for manual post"}
-                      </button>
+                      {it.payload.captions.tiktok?.sound_note && (
+                        <p className="note" style={{ marginTop: 6 }}>TikTok sound: {it.payload.captions.tiktok.sound_note}</p>
+                      )}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                        <button className="ghost" style={{ fontSize: 13 }} onClick={() => copyFor(it, "instagram")}>
+                          {busy === "copied-instagram-" + it.id ? "Copied ✓" : "Copy IG"}
+                        </button>
+                        {it.payload.captions.tiktok && (
+                          <button className="ghost" style={{ fontSize: 13 }} onClick={() => copyFor(it, "tiktok")}>
+                            {busy === "copied-tiktok-" + it.id ? "Copied ✓" : "Copy TikTok"}
+                          </button>
+                        )}
+                        {it.payload.captions.youtube && (
+                          <button className="ghost" style={{ fontSize: 13 }} onClick={() => copyFor(it, "youtube")}>
+                            {busy === "copied-youtube-" + it.id ? "Copied ✓" : "Copy YT title+desc"}
+                          </button>
+                        )}
+                        {it.payload?.video_url && (
+                          <a className="ghost" style={{ fontSize: 13, textDecoration: "none", padding: "6px 12px", border: "1px solid var(--line)", borderRadius: 8 }}
+                             href={it.payload.video_url} download target="_blank" rel="noreferrer">Download video ↓</a>
+                        )}
+                      </div>
                     </div>
                   )}
                   {it.payload?.metrics && <p className="note">{JSON.stringify(it.payload.metrics)}</p>}

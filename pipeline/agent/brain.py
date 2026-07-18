@@ -105,8 +105,12 @@ def captions(script: dict, item_id=None) -> dict:
     value = beats[0]["text"] if beats else "A practical tool, in under a minute."
     caps = {"instagram": {"caption": f"{hook}\n{value}\nSave this for later.\n{script.get('cta', CTA_LINE)}",
                           "hashtags": ["aitools", "chatgpttips", "productivityhacks", "techtok", "learnai"]},
+            "tiktok": {"caption": f"{hook} — wait for the tool.",
+                       "hashtags": ["aitools", "techtok", "learnai", "productivity"],
+                       "sound_note": "search a trending calm tech/lofi sound in-app and layer it low"},
             "youtube": {"title": hook[:90],
-                        "description": f"{value} {script.get('cta', CTA_LINE)}"}}
+                        "description": f"{value} {script.get('cta', CTA_LINE)}",
+                        "tags": ["ai tools", "chatgpt", "productivity", "ai tutorial", "tech tips", "learn ai"]}}
     ledger.record("captions", model="template", cost_usd=0, item_id=item_id)
     return caps
 
