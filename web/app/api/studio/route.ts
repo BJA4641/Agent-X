@@ -52,5 +52,26 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, kill: action === "kill_on" });
   }
+  if (action === "set_budget") {
+    const usd = Number(body.usd);
+    if (!isFinite(usd) || usd < 0 || usd > 100)
+      return NextResponse.json({ error: "Budget must be between $0 and $100/day." }, { status: 400 });
+    const { error } = await sb.from("settings").upsert(
+      { tenant_id: TENANT, key: "daily_budget", value: { usd }, updated_at: new Date().toISOString() },
+      { onConflict: "tenant_id,key" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, usd });
+  }
+  if (action === "set_model") {
+    const provider = String(body.provider || "");
+    if (!["anthropic", "gemini", "openrouter", "groq"].includes(provider))
+      return NextResponse.json({ error: "Unknown provider." }, { status: 400 });
+    const model = String(body.model || "").slice(0, 80);
+    const { error } = await sb.from("settings").upsert(
+      { tenant_id: TENANT, key: "model", value: { provider, model }, updated_at: new Date().toISOString() },
+      { onConflict: "tenant_id,key" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, provider, model });
+  }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }

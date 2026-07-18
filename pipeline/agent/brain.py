@@ -1,7 +1,7 @@
 """brain.py — scriptwriting. Claude (live) or a bundled demo library (dry-run).
 Prompt loaded from prompts/script_v1.md; version stamped into the ledger."""
 import json, random
-from . import config, ledger, board
+from . import config, ledger, board, llm
 
 CTA_LINE = config.get("CTA_LINE", "Follow for one AI move a day.")
 EST_COST = 0.01  # rough per-script cost guard
@@ -26,23 +26,18 @@ _DEMO = [
 ]
 
 def write_script(topic: str, item_id=None) -> dict:
-    if config.HAS_ANTHROPIC and ledger.budget_ok(EST_COST):
+    if llm.ready() and ledger.budget_ok(EST_COST):
         prompt, version = config.load_prompt("script_v3")
         prompt = (prompt.replace("{topic}", topic).replace("{cta_line}", CTA_LINE)
                   .replace("{editor_notes}", editor_notes()).replace("{liked_hooks}", hook_taste()))
         try:
-            import anthropic
-            client = anthropic.Anthropic()
-            msg = client.messages.create(model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"),
-                                         max_tokens=800, messages=[{"role": "user", "content": prompt}])
-            text = "".join(b.text for b in msg.content if b.type == "text")
+            text, cost, mlabel = llm.chat(prompt, max_tokens=800)
             script = json.loads(text[text.find("{"): text.rfind("}") + 1])
             hooks = script.pop("hooks", None) or ([script.get("hook")] if script.get("hook") else [])
             script["hook"], script["hook_options"] = hooks[0], hooks[:3]
             assert script.get("hook") and script.get("beats")
-            cost = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1e6
-            ledger.record("brain", model=msg.model, prompt_version=version, cost_usd=cost, item_id=item_id)
-            return _revise_if_weak(client, script, topic, item_id)
+            ledger.record("brain", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
+            return _revise_if_weak(None, script, topic, item_id)
         except Exception as e:
             ledger.record("brain", prompt_version=version, ok=False, detail=str(e), item_id=item_id)
     script = dict(random.choice(_DEMO)); script["topic"] = topic
@@ -57,12 +52,9 @@ def _revise_if_weak(client, script, topic, item_id, threshold=7):
     try:
         cprompt, cver = config.load_prompt("critique_v1")
         cprompt = cprompt.replace("{script}", json.dumps(script))
-        msg = client.messages.create(model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"),
-                                     max_tokens=300, messages=[{"role": "user", "content": cprompt}])
-        text = "".join(b.text for b in msg.content if b.type == "text")
+        text, cost, mlabel = llm.chat(cprompt, max_tokens=300)
         verdict = json.loads(text[text.find("{"): text.rfind("}") + 1])
-        cost = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1e6
-        ledger.record("critique", model=msg.model, prompt_version=cver, cost_usd=cost,
+        ledger.record("critique", model=mlabel, prompt_version=cver, cost_usd=cost,
                       item_id=item_id, detail=f"score={verdict.get('score')}")
         if int(verdict.get("score", 10)) >= threshold:
             return script
@@ -70,13 +62,10 @@ def _revise_if_weak(client, script, topic, item_id, threshold=7):
         sprompt = (sprompt.replace("{topic}", topic).replace("{cta_line}", CTA_LINE)
                    .replace("{editor_notes}", editor_notes())
                    + f"\n\nPrevious draft was rejected. Editor's instruction: {verdict.get('fix_instruction')}\nPrevious draft: {json.dumps(script)}")
-        msg2 = client.messages.create(model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"),
-                                      max_tokens=800, messages=[{"role": "user", "content": sprompt}])
-        text2 = "".join(b.text for b in msg2.content if b.type == "text")
+        text2, cost2, mlabel2 = llm.chat(sprompt, max_tokens=800)
         revised = json.loads(text2[text2.find("{"): text2.rfind("}") + 1])
         assert revised.get("hook") and revised.get("beats")
-        cost2 = (msg2.usage.input_tokens * 3 + msg2.usage.output_tokens * 15) / 1e6
-        ledger.record("brain_revision", model=msg2.model, prompt_version=sver, cost_usd=cost2, item_id=item_id)
+        ledger.record("brain_revision", model=mlabel2, prompt_version=sver, cost_usd=cost2, item_id=item_id)
         return revised
     except Exception as e:
         ledger.record("critique", ok=False, detail=str(e), item_id=item_id)
@@ -85,18 +74,13 @@ def _revise_if_weak(client, script, topic, item_id, threshold=7):
 
 def captions(script: dict, item_id=None) -> dict:
     """Ready-to-paste captions per platform. Claude (live) or template (dry-run)."""
-    if config.HAS_ANTHROPIC and ledger.budget_ok(EST_COST):
+    if llm.ready() and ledger.budget_ok(EST_COST):
         try:
-            import anthropic
             prompt, version = config.load_prompt("caption_v1")
             prompt = prompt.replace("{script}", json.dumps(script))
-            msg = anthropic.Anthropic().messages.create(
-                model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"), max_tokens=500,
-                messages=[{"role": "user", "content": prompt}])
-            text = "".join(b.text for b in msg.content if b.type == "text")
+            text, cost, mlabel = llm.chat(prompt, max_tokens=500)
             caps = json.loads(text[text.find("{"): text.rfind("}") + 1])
-            cost = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1e6
-            ledger.record("captions", model=msg.model, prompt_version=version, cost_usd=cost, item_id=item_id)
+            ledger.record("captions", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
             return caps
         except Exception as e:
             ledger.record("captions", ok=False, detail=str(e), item_id=item_id)

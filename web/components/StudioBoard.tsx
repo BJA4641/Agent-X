@@ -71,6 +71,18 @@ export default function StudioBoard({ items, killOn }: { items: Item[]; killOn: 
                 <span style={{ flex: 1 }}>
                   <h4>{it.topic}</h4>
                   <p className="mono" style={{ fontSize: 11 }}>{it.id.slice(0, 8)} · {new Date(it.created_at).toLocaleString()}</p>
+                  {it.status === "idea" && (
+                    <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                      {it.payload?.bucket && <span className="tag">{it.payload.bucket}</span>}
+                      {it.payload?.queued_by && <span className="tag">via {it.payload.queued_by}</span>}
+                      {it.payload?.attempts && <span className="tag" style={{ color: "#e5484d" }}>render attempt {it.payload.attempts}/3</span>}
+                      {it.payload?.source && <a href={it.payload.source} target="_blank" rel="noreferrer" style={{ color: "var(--scheduled)", fontSize: 13 }}>source ↗</a>}
+                      <p className="note" style={{ width: "100%", margin: "4px 0 0" }}>An idea is just a topic on the belt — nothing is written yet. The writer drafts it next tick, the art dept renders it, and it comes back here as <b>drafted</b> with video + captions for your approval.</p>
+                    </div>
+                  )}
+                  {it.status === "failed" && it.payload?.error && (
+                    <p className="note mono" style={{ color: "#e5484d", marginTop: 6, whiteSpace: "pre-wrap" }}>{it.payload.error}</p>
+                  )}
                   {it.payload?.video_url && (
                     <video src={it.payload.video_url} controls preload="metadata"
                            style={{ width: 180, borderRadius: 8, marginTop: 10, border: "1px solid var(--line)" }} />

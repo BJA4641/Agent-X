@@ -17,8 +17,14 @@ def assemble(frames: list, audio_path: str, out_path: str, per_beat: float = Non
         seg = os.path.join(work, f"{base}_seg{i}.mp4")
         vf = (f"scale=1296:2304,zoompan=z='min(zoom+0.0012,1.12)':d={int(per*30)}:s=1080x1920:fps=30,"
               f"fade=t=in:st=0:d=0.3,setsar=1")
-        _run(["ffmpeg", "-y", "-loop", "1", "-t", f"{per:.2f}", "-i", f,
-              "-vf", vf, "-t", f"{per:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-an", seg])
+        try:
+            _run(["ffmpeg", "-y", "-loop", "1", "-t", f"{per:.2f}", "-i", f,
+                  "-vf", vf, "-t", f"{per:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-an", seg])
+        except Exception:
+            # motion failed on this host (tiny containers / old ffmpeg) -> clean static segment
+            _run(["ffmpeg", "-y", "-loop", "1", "-t", f"{per:.2f}", "-i", f,
+                  "-vf", "scale=1080:1920,setsar=1,fps=30", "-t", f"{per:.2f}",
+                  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-an", seg])
         segs.append(seg)
 
     # 2) lossless concat
@@ -52,7 +58,9 @@ def assemble(frames: list, audio_path: str, out_path: str, per_beat: float = Non
 def _run(cmd):
     r = subprocess.run(cmd, capture_output=True)
     if r.returncode != 0:
-        raise RuntimeError(f"ffmpeg failed: {r.stderr.decode()[-400:]}")
+        err = r.stderr.decode(errors="ignore")
+        lines = [l for l in err.splitlines() if l.strip() and not l.startswith(("frame=", "size="))]
+        raise RuntimeError("ffmpeg failed: " + " | ".join(lines[-6:])[-500:])
 
 def _audio_seconds(path: str) -> float:
     try:

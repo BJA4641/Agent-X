@@ -1,6 +1,6 @@
 """strategy.py — plans next topics from performance. Claude (live) or rotation (dry-run)."""
 import json, re, urllib.request
-from . import config, ledger, board
+from . import config, ledger, board, llm
 
 FEEDS = [
     "https://news.google.com/rss/search?q=AI+tools+when:7d&hl=en-US&gl=US&ceid=US:en",
@@ -65,21 +65,16 @@ def plan(n: int = None) -> list:
     ranked = sorted(reported, key=lambda i: -_views(i))
     winners = [f"{i['topic']} ({_views(i)} views)" for i in ranked[:3]]
     losers = [f"{i['topic']} ({_views(i)} views)" for i in ranked[-3:]] if len(ranked) > 3 else []
-    if config.HAS_ANTHROPIC and ledger.budget_ok(0.01):
+    if llm.ready() and ledger.budget_ok(0.01):
         prompt, version = config.load_prompt("strategy_v3")
         prompt = (prompt.replace("{n}", str(n)).replace("{winners}", "; ".join(winners) or "none yet")
                   .replace("{losers}", "; ".join(losers) or "none yet").replace("{trends}", "; ".join(trends()) or "none available").replace("{proven}", "; ".join(competitors()) or "none configured")
                   .replace("{recent}", "; ".join(recent)))
         try:
-            import anthropic
-            msg = anthropic.Anthropic().messages.create(
-                model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"), max_tokens=400,
-                messages=[{"role": "user", "content": prompt}])
-            text = "".join(b.text for b in msg.content if b.type == "text")
+            text, cost, mlabel = llm.chat(prompt, max_tokens=400)
             raw = json.loads(text[text.find("{"): text.rfind("}") + 1])["topics"][:n]
             topics = [t if isinstance(t, dict) else {"topic": t, "bucket": "proven"} for t in raw]
-            cost = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1e6
-            ledger.record("strategy", model=msg.model, prompt_version=version, cost_usd=cost)
+            ledger.record("strategy", model=mlabel, prompt_version=version, cost_usd=cost)
             return topics
         except Exception as e:
             ledger.record("strategy", ok=False, detail=str(e))

@@ -27,7 +27,7 @@ export default async function TrackPage({ params }: { params: { track: string } 
       {course ? (
         <CourseView course={course} initial={progress} locked={locked} />
       ) : (
-        <Steps steps={track.steps} initialDone={Object.keys(progress).filter((k) => progress[k].done)} />
+        <Steps steps={track.steps} initialDone={Object.keys(progress).filter((k) => progress[k].done && track.steps.some((s) => s.key === k))} />
       )}
     </>
   );

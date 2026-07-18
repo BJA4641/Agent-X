@@ -59,8 +59,24 @@ def spent_since(days=7) -> float:
                 continue
     return total
 
+_budget_cache = {"at": 0.0, "usd": None}
+
+def daily_budget() -> float:
+    """Budget set from the Studio settings page (DB), falling back to the env var."""
+    import time
+    if time.time() - _budget_cache["at"] > 60:
+        val = None
+        if config.HAS_SUPABASE:
+            try:
+                r = _sb().table("settings").select("value").eq("tenant_id", config.TENANT_ID).eq("key", "daily_budget").execute().data
+                if r: val = float((r[0]["value"] or {}).get("usd"))
+            except Exception:
+                val = None
+        _budget_cache.update(at=time.time(), usd=val if val is not None else config.DAILY_BUDGET_USD)
+    return _budget_cache["usd"]
+
 def budget_ok(next_cost: float) -> bool:
-    return (spent_today() + next_cost) <= config.DAILY_BUDGET_USD
+    return (spent_today() + next_cost) <= daily_budget()
 
 def _sb():
     from supabase import create_client

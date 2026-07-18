@@ -1,7 +1,7 @@
 """digest.py — the strategy agent reports to its boss. Weekly numbers + one
 recommendation. Saved to settings (Studio renders it); emailed if RESEND key exists."""
 import json, time, datetime
-from . import config, ledger, board
+from . import config, ledger, board, llm
 
 def _views(item):
     m = item["payload"].get("metrics", {})
@@ -44,17 +44,14 @@ def _ts(item):
     return 0
 
 def compose(data: dict) -> str:
-    if config.HAS_ANTHROPIC and ledger.budget_ok(0.008):
+    if llm.ready() and ledger.budget_ok(0.008):
         try:
-            import anthropic
             prompt, version = config.load_prompt("digest_v1")
             prompt = prompt.replace("{data}", json.dumps(data))
-            msg = anthropic.Anthropic().messages.create(
-                model=config.get("CLAUDE_MODEL", "claude-sonnet-4-5"), max_tokens=400,
-                messages=[{"role": "user", "content": prompt}])
-            text = "".join(b.text for b in msg.content if b.type == "text").strip()
-            cost = (msg.usage.input_tokens * 3 + msg.usage.output_tokens * 15) / 1e6
-            ledger.record("digest", model=msg.model, prompt_version=version, cost_usd=cost)
+            text, _llm_cost, _llm_model = llm.chat(prompt, max_tokens=400)
+            text = text.strip()
+            cost = _llm_cost
+            ledger.record("digest", model=_llm_model, prompt_version=version, cost_usd=cost)
             return text
         except Exception as e:
             ledger.record("digest", ok=False, detail=str(e))

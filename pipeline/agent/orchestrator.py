@@ -55,7 +55,7 @@ def tick(stub=False):
             produce(item, stub=stub)
         except Exception as e:
             attempts = (item.get("payload") or {}).get("attempts", 0) + 1
-            detail = f"attempt {attempts}: {str(e)[:300]}"
+            detail = f"attempt {attempts}: {str(e)[:500]}"
             ledger.record("produce", ok=False, detail=detail, item_id=item["id"])
             if attempts >= 3:
                 board.update(item["id"], status="failed", payload_patch={"attempts": attempts, "error": detail})
