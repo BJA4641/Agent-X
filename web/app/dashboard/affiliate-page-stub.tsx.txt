@@ -1,0 +1,15 @@
+// web/app/dashboard/affiliate/page.tsx
+// Placeholder affiliate-link manager page
+export default function AffiliatePage() {
+  return (
+    <div>
+      <h1>Affiliate links</h1>
+      <p className="lead">Manage the products and tools you link to in your content. AI will auto-place the right link for each video when it makes sense.</p>
+      <div className="card" style={{ marginTop: 20 }}>
+        <h3>Coming next</h3>
+        <p className="note">Connect your Amazon Associates, Lemon Squeezy, ShareASale, and custom affiliate programs. Track clicks per video alongside view analytics.</p>
+        <p className="note">For now: add affiliate links to your <code>CTA_LINE</code> and mention them in your captions. Place one clear CTA per video.</p>
+      </div>
+    </div>
+  );
+}
