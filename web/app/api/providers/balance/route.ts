@@ -150,7 +150,7 @@ async function checkRailway(): Promise<ProviderStatus> {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ query: `{ me { id projects { id name } } }` }),
     });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return {
       id: "railway", name: "Railway (worker hosting)",
       key_present: true, active: false, status: "ok",
