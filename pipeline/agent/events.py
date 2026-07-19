@@ -4,7 +4,7 @@ on the website shows agents talking/working in real time.
 
 - emit(agent, message, status='info', action='note', item_id=None, cost_usd=0)
 - heartbeat()   : called once on worker boot ("Strategy is online.")
-- idle_chatter(context): honest real-state status when the queue is empty (no cost).
+- idle_chatter(): called every tick with an empty queue to look alive.
 - Also inserts a small amount of seed chatter on first boot so the feed
   is never empty.
 """
@@ -25,8 +25,6 @@ AGENTS = {
     "community": {"emoji": "💬", "role": "Community"},
     "digest":    {"emoji": "📬", "role": "Digest"},
     "budget":    {"emoji": "💰", "role": "Budget"},
-    "scout":     {"emoji": "🔭", "role": "Trend scout"},
-    "planner":   {"emoji": "🗓️", "role": "Calendar"},
 }
 
 _seed_done = False
@@ -123,31 +121,16 @@ _IDLE_CHATTER = [
 _LAST_IDLE = 0
 
 
-def idle_chatter(context=None, force=False):
-    """v1.6: honest idle status — ZERO invented dialogue, ZERO token cost.
-    Prints the real state of the desk (queue depth, spend vs budget, when the
-    scout last ran) so the Workspace feed stays alive between jobs without
-    burning money on theater."""
-    import time as _t
-    if not force and _t.time() - _IDLE_LAST.get("ts", 0) < 600:
+def idle_chatter(force=False):
+    """One random idle line every ~2 minutes so the feed never goes stale."""
+    global _LAST_IDLE
+    now = time.time()
+    if not force and (now - _LAST_IDLE) < 120:
         return
-    _IDLE_LAST["ts"] = _t.time()
-    c = context or {}
-    try:
-        parts = ["queue — drafted:%s scheduled:%s published:%s" % (
-            c.get("drafted", 0), c.get("scheduled", 0), c.get("published", 0))]
-        if c.get("budget"):
-            parts.append("spend $%.2f/$%.2f" % (c.get("spent") or 0.0, c["budget"]))
-        sc = c.get("scout_at") or {}
-        ts = sc.get("ts") if isinstance(sc, dict) else None
-        if ts:
-            parts.append("scout ran %dm ago" % int((_t.time() - float(ts)) // 60))
-        emit("system", "Idle — nothing to produce. " + " · ".join(parts) +
-             ". Queue a topic in Workspace to wake the desk.", "info", "idle_status")
-    except Exception:
-        emit("system", "Idle — queue empty. Waiting for topics.", "info", "idle_status")
+    _LAST_IDLE = now
+    a, m, s = random.choice(_IDLE_CHATTER)
+    emit(a, m, s, "idle")
 
-_IDLE_LAST = {}
 
 def error(agent, message, item_id=None):
     emit(agent, message, "error", "error", item_id=item_id)

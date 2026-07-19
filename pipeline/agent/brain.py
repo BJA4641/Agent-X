@@ -25,14 +25,11 @@ _DEMO = [
      "cta": CTA_LINE},
 ]
 
-def write_script(topic: str, item_id=None, context: str = None) -> dict:
+def write_script(topic: str, item_id=None) -> dict:
     if llm.ready() and ledger.budget_ok(EST_COST):
         prompt, version = config.load_prompt("script_v3")
         prompt = (prompt.replace("{topic}", topic).replace("{cta_line}", CTA_LINE)
                   .replace("{editor_notes}", editor_notes()).replace("{liked_hooks}", hook_taste()))
-        if context:
-            prompt += ("\n\nCONTEXT FROM THE SCOUT/PROJECT (use for specificity; NEVER invent stats):\n"
-                       + str(context)[:600])
         try:
             text, cost, mlabel = llm.chat(prompt, max_tokens=800)
             script = json.loads(text[text.find("{"): text.rfind("}") + 1])

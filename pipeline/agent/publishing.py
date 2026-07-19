@@ -60,12 +60,7 @@ def _post_youtube(video_path: str, caption: str) -> str:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
     from google.oauth2.credentials import Credentials
-    raw = config.get("YT_TOKEN_JSON", "yt_token.json")
-    if raw and raw.strip().startswith("{"):
-        # Railway-friendly: the env var holds the token JSON itself, not a file path
-        creds = Credentials.from_authorized_user_info(json.loads(raw))
-    else:
-        creds = Credentials.from_authorized_user_file(raw)
+    creds = Credentials.from_authorized_user_file(config.get("YT_TOKEN_JSON", "yt_token.json"))
     yt = build("youtube", "v3", credentials=creds)
     body = {"snippet": {"title": caption[:95], "description": caption, "categoryId": "27"},
             "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False}}

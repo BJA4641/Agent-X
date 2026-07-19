@@ -12,7 +12,6 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
       { href: "/dashboard", label: "Home" },
       { href: "/dashboard/projects", label: "Projects" },
       { href: "/dashboard/performance", label: "Performance" },
-      { href: "/dashboard/projects", label: "Projects", tag: "new" },
     ]},
     { label: "Create", items: [
       { href: "/studio", label: "Studio · production", tag: admin ? "admin" : undefined },
@@ -29,7 +28,6 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
     { label: "Sell & earn", items: [
       { href: "/dashboard/store", label: "Ecommerce · rebrand" },
       { href: "/dashboard/digital", label: "Digital products" },
-      { href: "/dashboard/marketplace", label: "Agent marketplace", tag: "new" },
     ]},
     { label: "Account", items: [
       { href: "/dashboard/wallet", label: "Wallet & billing" },
