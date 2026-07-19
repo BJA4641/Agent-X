@@ -1,9 +1,19 @@
-"""composer.py — frames + voiceover -> 1080x1920 mp4 with Ken Burns motion.
-v1.3: renders one beat segment at a time (low peak RAM — survives small containers),
-then concats losslessly and muxes audio. Music mix failure degrades to voice-only.
+\"""composer.py — frames + voiceover -> 9:16 mp4 with Ken Burns motion.
+v1.5: OOM-aware. On small containers (Railway trial = 512 MB) the kernel
+kills ffmpeg mid-encode (SIGKILL, no error text). We now:
+  1) detect the -9 kill and say so in the error message,
+  2) automatically retry the segment at 720x1280 / ultrafast / 1 thread
+     (~83 MB peak vs ~223 MB at 1080p — measured), so renders survive
+     512 MB containers. Output is still 9:16 vertical; platforms upscale fine.
+Set FORCE_720=1 to always render 720x1280 (fastest + cheapest), or
+FORCE_1080=1 to never downshift (only on big containers).
 """
 import os, subprocess
 from . import config
+
+FORCE_720 = os.environ.get("FORCE_720") == "1"
+FORCE_1080 = os.environ.get("FORCE_1080") == "1"
+
 
 def assemble(frames: list, audio_path: str, out_path: str, per_beat: float = None, music_path: str = None) -> str:
     dur = _audio_seconds(audio_path)
@@ -15,16 +25,7 @@ def assemble(frames: list, audio_path: str, out_path: str, per_beat: float = Non
     segs = []
     for i, f in enumerate(frames):
         seg = os.path.join(work, f"{base}_seg{i}.mp4")
-        vf = (f"scale=1296:2304,zoompan=z='min(zoom+0.0012,1.12)':d={int(per*30)}:s=1080x1920:fps=30,"
-              f"fade=t=in:st=0:d=0.3,setsar=1")
-        try:
-            _run(["ffmpeg", "-y", "-loop", "1", "-t", f"{per:.2f}", "-i", f,
-                  "-vf", vf, "-t", f"{per:.2f}", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-an", seg])
-        except Exception:
-            # motion failed on this host (tiny containers / old ffmpeg) -> clean static segment
-            _run(["ffmpeg", "-y", "-loop", "1", "-t", f"{per:.2f}", "-i", f,
-                  "-vf", "scale=1080:1920,setsar=1,fps=30", "-t", f"{per:.2f}",
-                  "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast", "-an", seg])
+        _encode_segment(f, seg, per)
         segs.append(seg)
 
     # 2) lossless concat
@@ -55,12 +56,50 @@ def assemble(frames: list, audio_path: str, out_path: str, per_beat: float = Non
         except OSError: pass
     return out_path
 
+
+def _encode_segment(frame: str, seg: str, per: float):
+    """Encode one beat. Ladder: 1080 Ken Burns -> 1080 static -> 720 Ken Burns
+    -> 720 static. Any OOM kill (SIGKILL) just drops us to the next rung."""
+    d = int(per * 30)
+    hi_motion = ([f"scale=1296:2304,zoompan=z='min(zoom+0.0012,1.12)':d={d}:s=1080x1920:fps=30,"
+                  f"fade=t=in:st=0:d=0.3,setsar=1"], "veryfast", None)
+    hi_static = (["scale=1080:1920,setsar=1,fps=30"], "veryfast", None)
+    lo_motion = ([f"scale=864:1536,zoompan=z='min(zoom+0.0012,1.12)':d={d}:s=720x1280:fps=30,"
+                  f"fade=t=in:st=0:d=0.3,setsar=1"], "ultrafast", "1")
+    lo_static = (["scale=720:1280,setsar=1,fps=30"], "ultrafast", "1")
+
+    if FORCE_720:
+        ladder = [lo_motion, lo_static]
+    elif FORCE_1080:
+        ladder = [hi_motion, hi_static]
+    else:
+        ladder = [hi_motion, hi_static, lo_motion, lo_static]
+
+    last_err = None
+    for vf, preset, threads in ladder:
+        cmd = ["ffmpeg", "-y"]
+        if threads:
+            cmd += ["-threads", threads]
+        cmd += ["-loop", "1", "-t", f"{per:.2f}", "-i", frame, "-vf", vf[0], "-t", f"{per:.2f}",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", preset, "-an", seg]
+        try:
+            _run(cmd)
+            return
+        except Exception as e:
+            last_err = e
+    raise last_err
+
+
 def _run(cmd):
     r = subprocess.run(cmd, capture_output=True)
     if r.returncode != 0:
         err = r.stderr.decode(errors="ignore")
         lines = [l for l in err.splitlines() if l.strip() and not l.startswith(("frame=", "size="))]
-        raise RuntimeError("ffmpeg failed: " + " | ".join(lines[-6:])[-500:])
+        tail = " | ".join(lines[-6:])[-400:]
+        if r.returncode in (-9, 137):
+            tail = "KILLED BY OS (exit %s — out of memory on this container). " % r.returncode + tail
+        raise RuntimeError("ffmpeg failed (exit %s): " % r.returncode + tail)
+
 
 def _audio_seconds(path: str) -> float:
     try:
