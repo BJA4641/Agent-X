@@ -11,20 +11,29 @@ on the website shows agents talking/working in real time.
 import os, time, random
 from . import config
 
-# Agent color/status map mirrors web/components/RightPanel.tsx + workspace page
+# Agent registry — mirrors UI (RightPanel, workspace, project console).
+# 18 agents total covering: research, brand, content, editing, QA, grading,
+# publishing, marketing, analytics, community, finance.
 AGENTS = {
-    "system":    {"emoji": "🤖", "role": "System"},
-    "strategy":  {"emoji": "🧠", "role": "Planner"},
-    "brain":     {"emoji": "✍️", "role": "Script writer"},
-    "visuals":   {"emoji": "🎨", "role": "Visuals"},
-    "voice":     {"emoji": "🎙️", "role": "Voice"},
-    "composer":  {"emoji": "🎬", "role": "Editor"},
-    "qa":        {"emoji": "🔍", "role": "QA"},
-    "publisher": {"emoji": "📤", "role": "Publisher"},
-    "analyst":   {"emoji": "📊", "role": "Analytics"},
-    "community": {"emoji": "💬", "role": "Community"},
-    "digest":    {"emoji": "📬", "role": "Digest"},
-    "budget":    {"emoji": "💰", "role": "Budget"},
+    "system":      {"emoji": "⚙️", "role": "System"},
+    "scout":       {"emoji": "🔭", "role": "Trend Scout"},
+    "research":    {"emoji": "🔎", "role": "Researcher"},
+    "architect":   {"emoji": "🏛️", "role": "Architect"},
+    "strategist":  {"emoji": "📋", "role": "Strategist"},
+    "planner":     {"emoji": "📅", "role": "Planner"},
+    "strategy":    {"emoji": "🧠", "role": "Planner"},  # alias
+    "brain":       {"emoji": "✍️", "role": "Script Writer"},
+    "visuals":     {"emoji": "🎨", "role": "Visuals"},
+    "voice":       {"emoji": "🎙️", "role": "Voice"},
+    "composer":    {"emoji": "🎬", "role": "Editor"},
+    "qa":          {"emoji": "🔍", "role": "QA"},
+    "grader":      {"emoji": "🎯", "role": "Grader"},
+    "seo":         {"emoji": "🔖", "role": "SEO"},
+    "publisher":   {"emoji": "📤", "role": "Publisher"},
+    "analyst":     {"emoji": "📊", "role": "Analytics"},
+    "community":   {"emoji": "💬", "role": "Community"},
+    "digest":      {"emoji": "📬", "role": "Digest"},
+    "budget":      {"emoji": "💰", "role": "Budget"},
 }
 
 _seed_done = False

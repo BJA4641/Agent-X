@@ -79,9 +79,15 @@ def assemble(frames: list, audio_path: str, out_path: str,
     # 4) Burn in ASS captions + mux audio
     vf_chain = f"scale=1080:1920,setsar=1,fps=30"
     if ass_path and os.path.exists(ass_path):
-        # Escape path for ffmpeg filter (colons/backslashes)
-        escaped = ass_path.replace("\\", "\\\\").replace(":", "\\:")
-        vf_chain += f",ass='{escaped}'"
+        # Copy .ass to a simple local filename (avoids quoting/escaping bugs with long/hash paths)
+        import shutil
+        simple_ass = os.path.join(work, "subs.ass")
+        try:
+            shutil.copyfile(ass_path, simple_ass)
+            # Use POSIX-safe path: no escaping needed for simple "subs.ass"
+            vf_chain += f",ass='{simple_ass}'"
+        except Exception as e:
+            print(f"[composer] ASS burn skipped: {e}")
     if final_audio:
         _run(["ffmpeg", "-y", "-i", silent, "-i", final_audio,
               "-vf", vf_chain,

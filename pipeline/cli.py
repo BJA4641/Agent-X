@@ -56,6 +56,14 @@ def main():
             orchestrator.boot()
         except Exception as e:
             print("[boot] heartbeat failed (non-fatal):", e)
+        print("=" * 60)
+        print("Agent-X v4.3 pipeline ONLINE")
+        print("  18 agents loaded: scout🔭 research🔎 architect🏛️ strategist📋 planner📅 brain✍️")
+        print("                   visuals🎨 voice🎙️ composer🎬 qa🔍 grader🎯 seo🔖 publisher📤")
+        print("                   analyst📊 community💬 digest📬 budget💰 system⚙️")
+        print("  Quality gate: 8/10 across hook/visuals/pacing/audio/caption/CTA")
+        print("  Budget cap: $DAILY_BUDGET_USD/day  (KILL_SWITCH=1 to pause)")
+        print("=" * 60)
         print("[loop] starting tick loop every", iv, "seconds")
         while True:
             try:
