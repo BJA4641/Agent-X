@@ -17,15 +17,29 @@ def _sb():
     return _cfg.supabase()
 
 
+def _infer_provider(model: str) -> str:
+    m = (model or "").lower()
+    if "claude" in m or m.startswith("anthropic"): return "anthropic"
+    if "gemini" in m or m.startswith("google"): return "gemini"
+    if "groq" in m or "llama" in m: return "groq"
+    if "gpt" in m or "openai" in m: return "openai"
+    if "kimi" in m or "openrouter" in m or "/" in m: return "openrouter"
+    return "unknown"
+
+
 def record(step: str, *, model: str = "", prompt_version: str = "",
            cost_usd: float = 0.0, ok: bool = True, detail: str = "",
-           item_id: str = None, job_id: str = None, account_id=None):
+           item_id: str = None, job_id: str = None, account_id=None,
+           provider_label: str = ""):
     """Append one ledger row. Never raises."""
+    provider = provider_label or _infer_provider(model)
     row = {
         "tenant_id": _cfg.TENANT_ID,
         "item_id": str(item_id) if item_id else None,
         "step": step, "model": model or "", "prompt_version": prompt_version or "",
+        "provider_label": provider,
         "cost_usd": round(float(cost_usd or 0), 5),
+        "cost_cents": int(round(float(cost_usd or 0) * 100)),
         "ok": bool(ok), "detail": (detail or "")[:400],
         "created_at": datetime.datetime.utcnow().isoformat(),
     }

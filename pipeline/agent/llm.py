@@ -51,9 +51,30 @@ def ready() -> bool:
     return any(_has_key(p) for p in DEFAULT_MODEL)
 
 def chat(prompt: str, max_tokens: int = 800):
-    """-> (text, cost_usd, model_label). Tries chosen provider, then falls through the rest."""
+    """-> (text, cost_usd, model_label). Tries chosen provider, then falls through the rest.
+
+    Auto-fallback is driven by the 'model' settings row's auto_fallback flag. When OFF,
+    only the chosen provider is tried (useful when you want to force-debug a specific
+    model). When ON (default), it rotates through all working providers so production
+    never stops because of one dead wallet/key.
+    """
     chosen, model = selection()
-    order = [chosen] + [p for p in ["anthropic", "gemini", "groq", "openrouter"] if p != chosen]
+    # Read auto_fallback flag — default ON.
+    auto_fb = True
+    try:
+        if config.HAS_SUPABASE:
+            from supabase import create_client
+            sb2 = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
+            r2 = sb2.table("settings").select("value").eq("tenant_id", config.TENANT_ID).eq("key", "model").execute().data
+            if r2 and isinstance(r2[0].get("value"), dict):
+                auto_fb = r2[0]["value"].get("auto_fallback", True) is not False
+    except Exception:
+        auto_fb = True
+
+    if auto_fb:
+        order = [chosen] + [p for p in ["anthropic", "gemini", "groq", "openrouter"] if p != chosen]
+    else:
+        order = [chosen]
     last = None
     for prov in order:
         if not _has_key(prov):
