@@ -2,11 +2,123 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import ReactMarkdown from "react-markdown";
 
 type Doc = { id: string; doc_type: string; content: string; updated_at: string; agent: string; version: number };
 type Post = { id: string; post_type: string; title: string; hook?: string; script?: string; caption: string; hashtags: string[];
              status: string; duration_seconds: number; created_at: string; metadata?: { pillar?: string } };
+
+// Tiny markdown renderer — no external deps, supports: # headings, **bold**, *italic*,
+// `code`, lists (- and 1.), tables | pipes, [links](url), horizontal rules, and paragraphs.
+const linkRe = /\[([^\]]+)\]\(([^)]+)\)/;
+const codeRe = /`([^`]+)`/;
+const boldRe = /\*\*([^*]+)\*\*/;
+
+function SimpleMarkdown({ text }: { text: string }) {
+  if (!text) return null;
+  const lines = text.split(/\r?\n/);
+  const out: JSX.Element[] = [];
+  let list: JSX.Element[] | null = null;
+  let listType: "ul" | "ol" | null = null;
+  let table: string[][] = [];
+  const flushList = () => {
+    if (list && listType) {
+      const Tag = listType;
+      out.push(<Tag key={"l-"+out.length} style={{ paddingLeft: 22, margin: "8px 0" }}>{list}</Tag>);
+      list = null; listType = null;
+    }
+  };
+  const flushTable = () => {
+    if (table.length >= 2) {
+      const [header, , ...rows] = table;
+      out.push(
+        <table key={"t-"+out.length} style={{ borderCollapse: "collapse", width: "100%", margin: "10px 0", fontSize: 13 }}>
+          <thead><tr>{header.map((h,i) => <th key={i} style={{ border:"1px solid var(--line)", padding:"6px 10px", textAlign:"left", background:"var(--bg)" }}>{inline(h)}</th>)}</tr></thead>
+          <tbody>{rows.map((r,ri) => <tr key={ri}>{r.map((c,i) => <td key={i} style={{ border:"1px solid var(--line)", padding:"6px 10px" }}>{inline(c)}</td>)}</tr>)}</tbody>
+        </table>
+      );
+    }
+    table = [];
+  };
+  function inline(s: string): React.ReactNode {
+    // links [text](url) first
+    const parts: React.ReactNode[] = [];
+    let rest = s, key=0;
+    while (rest) {
+      let m = rest.match(linkRe);
+      if (m && m.index !== undefined) {
+        if (m.index > 0) parts.push(<span key={key++}>{processBoldCode(rest.slice(0, m.index))}</span>);
+        parts.push(<a key={key++} href={m[2]} target="_blank" rel="noreferrer" style={{ color: "var(--scheduled)" }}>{processBoldCode(m[1])}</a>);
+        rest = rest.slice(m.index + m[0].length); continue;
+      }
+      parts.push(<span key={key++}>{processBoldCode(rest)}</span>);
+      break;
+    }
+    return parts;
+  }
+  function processBoldCode(s: string): React.ReactNode {
+    const nodes: React.ReactNode[] = [];
+    let rest = s, k=0;
+    while (rest) {
+      const b = rest.match(boldRe);
+      const c = rest.match(codeRe);
+      const bi = b?.index ?? Infinity, ci = c?.index ?? Infinity;
+      if (bi < ci && b) {
+        if (bi > 0) nodes.push(rest.slice(0,bi));
+        nodes.push(<strong key={"b-"+(k++)} style={{ color: "var(--scheduled)" }}>{b[1]}</strong>);
+        rest = rest.slice(bi + b[0].length);
+      } else if (c) {
+        if ((c.index ?? 0) > 0) nodes.push(rest.slice(0,c.index));
+        nodes.push(<code key={"c-"+(k++)} style={{ background:"var(--bg)", padding:"1px 6px", borderRadius:4, fontSize:12 }}>{c[1]}</code>);
+        rest = rest.slice((c.index ?? 0) + c[0].length);
+      } else {
+        nodes.push(rest); break;
+      }
+    }
+    return nodes;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // table rows
+    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+      flushList();
+      const cells = line.trim().slice(1,-1).split("|").map(c => c.trim());
+      if (cells.every(c => /^[-:]+$/.test(c))) { table.push(cells); continue; } // separator
+      table.push(cells); continue;
+    } else if (table.length) { flushTable(); }
+
+    if (!line.trim()) { flushList(); continue; }
+    // headings
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    if (h) {
+      flushList();
+      const lvl = h[1].length;
+      const size = lvl === 1 ? 22 : lvl === 2 ? 18 : lvl === 3 ? 15 : 14;
+      const color = lvl <= 2 ? "var(--scheduled)" : undefined;
+      out.push(<div key={out.length} style={{ fontSize:size, fontWeight:700, marginTop:18, marginBottom:8, color }}>{inline(h[2])}</div>);
+      continue;
+    }
+    if (line.trim() === "---") { flushList(); out.push(<hr key={out.length} style={{ border:"none", borderTop:"1px solid var(--line)", margin:"12px 0" }} />); continue; }
+    // list items
+    const ulm = line.match(/^\s*[-*]\s+(.*)$/);
+    const olm = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ulm) {
+      if (listType !== "ul") { flushList(); list = []; listType = "ul"; }
+      list!.push(<li key={list!.length} style={{ margin:"3px 0" }}>{inline(ulm[1])}</li>);
+      continue;
+    }
+    if (olm) {
+      if (listType !== "ol") { flushList(); list = []; listType = "ol"; }
+      list!.push(<li key={list!.length} style={{ margin:"3px 0" }}>{inline(olm[1])}</li>);
+      continue;
+    }
+    flushList();
+    // paragraph
+    out.push(<p key={out.length} style={{ margin:"6px 0" }}>{inline(line)}</p>);
+  }
+  flushList(); flushTable();
+  return <>{out}</>;
+}
 
 const TABS: { key: string; label: string; icon: string; doc?: string }[] = [
   { key: "overview",    label: "Overview",    icon: "📋" },
@@ -96,7 +208,7 @@ export default function AccountDetailPage() {
       {docContent && (
         <div className="card" style={{ maxWidth: 800 }}>
           <div className="markdown" style={{ fontSize: 14, lineHeight: 1.7 }}>
-            <ReactMarkdown>{docContent}</ReactMarkdown>
+            <SimpleMarkdown text={docContent} />
           </div>
           <p className="note" style={{ fontSize: 11, marginTop: 16 }}>
             Written by <b>{docs[activeDoc!]?.agent}</b> · v{docs[activeDoc!]?.version} · updated {new Date(docs[activeDoc!]?.updated_at || "").toLocaleString()}
