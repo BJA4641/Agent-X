@@ -8,7 +8,7 @@ VOICE RULES (violate = reject):
 - Open with a pattern interrupt. NEVER open with "hey guys", "let's talk about", "today i'm going to".
 - Sound like a friend who just found something crazy — not a YouTuber doing a tutorial.
 - Use "you" 3x more than "I".
-- End with a CLEAR verb CTA ("follow", "save this", "comment LINK").
+- End with a CLEAR single-verb CTA ("follow", "save this", "comment LINK").
 
 HOOK (first spoken line):
 - MAX 8 words. Must do ONE of these:
@@ -27,39 +27,62 @@ STRUCTURE:
 
 FOR EACH BEAT YOU MUST OUTPUT:
 {
-  "beat_goal":     string,   // one line: what this beat accomplishes
-  "voiceover":     string,   // <=12 words spoken. Full stop at the end.
-  "on_screen_text":string,   // MAX 3 WORDS. Kinetic caption highlight word chosen by AI. This is what gets BIG on screen.
-  "visual_prompt": string,   // CINEMATIC description of what's ON SCREEN — vertical 9:16, no text, no watermark. Be specific about SHOT:
-                             //   • camera: "extreme close-up of phone screen", "over-shoulder laptop shot", "isometric 3d app icon", "hand holding phone", "UI screenshot mockup", "bokeh desktop"
-                             //   • lighting: "golden hour", "dark neon glow", "bright studio pop"
-                             //   • subject: "glowing AI chat window", "cursor clicking send button", "notification popping up"
-                             //   • style: match the account's visual_rules (cinematic, editorial-pop, tech-noir, clay-3d, etc.)
-  "visual_source": "screen_rec"|"broll"|"ui_mockup"|"poster"|"isometric",
-  "camera":        "static"|"slow_push"|"whip_pan"|"zoom_punch"|"slide_l"|"slide_r"|"tilt_up"|"hold",
-  "transition_in": "cut"|"flash_white"|"zoom_punch"|"whip"|"slide_l"|"slide_r"|"fade",
-  "transition_out":"cut"|"flash_white"|"zoom_punch"|"whip"|"slide_l"|"slide_r"|"fade",
-  "sfx":           "none"|"whoosh"|"pop"|"tick"|"riser"|"cash"|"click"|"glitch"|"boom",
-  "duration_ms":   int       // 800-4500 per beat; sum 28000-38000 for the whole video
+  "beat_goal":      string,   // what this beat accomplishes (one line)
+  "voiceover":      string,   // <=12 words spoken. Full stop at the end.
+  "on_screen_text": string,   // MAX 3 WORDS. The word/phrase that gets BIG on screen (kinetic highlight).
+  "visual_prompt":  string,   // CINEMATIC description — vertical 9:16, no text, no watermark. Be SPECIFIC about shot:
+                              //   • camera: "extreme close-up of phone screen", "over-shoulder laptop shot", "isometric 3d app icon", "hand holding phone", "UI screenshot mockup", "bokeh desktop"
+                              //   • lighting: "golden hour", "dark neon glow", "bright studio pop"
+                              //   • subject: "glowing AI chat window", "cursor clicking send", "notification popping up"
+                              //   • style: match visual_rules below
+  "visual_source":  "screen_rec"|"broll"|"ui_mockup"|"poster"|"isometric",
+  "camera":         "static"|"slow_push"|"whip_pan"|"zoom_punch"|"slide_l"|"slide_r"|"tilt_up"|"hold",
+  "transition_in":  "cut"|"flash_white"|"zoom_punch"|"whip"|"slide_l"|"slide_r"|"fade",
+  "transition_out": "cut"|"flash_white"|"zoom_punch"|"whip"|"slide_l"|"slide_r"|"fade",
+  "sfx":            "none"|"whoosh"|"pop"|"tick"|"riser"|"cash"|"click"|"glitch"|"boom",
+  "duration_ms":    int       // 800-4500 per beat; sum 28000-38000
 }
 
-Return STRICT JSON only:
+Return STRICT JSON only — NO commentary outside the JSON:
 {
-  "hooks":        [string, string, string],   // 3 alternative hooks (<=8 words) — different patterns
-  "title":        string,                     // internal title for planning
-  "hashtags":     [string x10],               // 10 hashtags without # — 3 big, 4 medium, 3 niche
-  "caption":      string,                     // Instagram/TikTok caption (lowercase, 2-3 lines, one emoji per line, CTA on last line)
-  "beats":        [beat, beat, ... beat]      // 6-7 beats including hook (first) and CTA (last)
+  "hooks":    [string, string, string],   // 3 alternative hooks (<=8 words), different patterns each
+  "title":    string,                     // internal title
+  "hashtags": [string x10],               // 10 hashtags without # — 3 big, 4 medium, 3 niche
+  "caption":  string,                     // Instagram/TikTok caption — lowercase, 2-3 lines, 1 emoji per line, single CTA last line
+  "beats":    [beat, beat, ... beat]      // 6-7 beats including hook (first) and CTA (last)
 }
 
-ACCOUNT TONE & BRAND TO OBEY:
+=== ACCOUNT BRAND — OBEY THESE ===
+Business plan:
+{business_plan}
+
+Brand guidelines:
+{brand_guidelines}
+
 Tone guide:
 {tone_guide}
 
 Visual rules:
 {visual_rules}
 
-Content rules (obey pillars, hook patterns, hashtags):
+Content rules (pillars, hook patterns, hashtags, forbidden):
 {content_rules}
+
+=== FOUNDER NOTES / MEMORY (take these as direct orders) ===
+{memory_block}
+
+=== PAST GRADE FEEDBACK (fix these flaws — NEVER repeat them) ===
+{grade_feedback}
+
+=== PAST REJECTIONS FROM EDITOR (avoid these patterns) ===
+{editor_notes}
+
+=== HOOKS THAT PERFORMED WELL FOR THIS ACCOUNT ===
+{liked_hooks}
+
+=== CURRENT VIRAL TREND PATTERNS (clone the ANGLE / TONE / PACING / ENERGY — never copy verbatim, never repost) ===
+{trends_block}
+
+CTA line to use at the end (verbatim on the end card): "{cta_line}"
 
 Topic: {topic}

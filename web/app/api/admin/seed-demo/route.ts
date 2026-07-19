@@ -202,19 +202,26 @@ export async function POST(req: Request) {
       projectsCreated++;
     }
 
+    let firstAccountInProject = true;
     for (const acc_def of ACCOUNTS[slug]) {
       const { data: existingAcc } = await admin.from("project_accounts")
         .select("id").eq("project_id", pid).eq("handle", acc_def.handle).maybeSingle();
-      if (existingAcc?.id) continue;
-      await admin.from("project_accounts").insert({
+      if (existingAcc?.id) { firstAccountInProject = false; continue; }
+      // FIRST account of the ai_tools project starts ACTIVE; everything else starts PAUSED
+      // so the user can start with 1 account as requested.
+      const isFirst = slug === "ai_tools" && firstAccountInProject && projectsCreated === 0;
+      const { error: insErr } = await admin.from("project_accounts").insert({
         project_id: pid, user_id: user.id,
         name: acc_def.name, handle: acc_def.handle,
         platforms: acc_def.platforms, niche: slug,
-        status: "needs_setup", avatar_emoji: acc_def.emoji,
+        status: isFirst ? "needs_setup" : "paused",
+        avatar_emoji: acc_def.emoji,
         daily_budget_usd: acc_def.budget, posts_per_day: 1,
+        paused: !isFirst,
         platforms_config: { angle: acc_def.angle },
       });
-      accountsCreated++;
+      if (!insErr) accountsCreated++;
+      firstAccountInProject = false;
     }
   }
 
@@ -223,6 +230,6 @@ export async function POST(req: Request) {
     niches: only.length,
     projects_created: projectsCreated,
     accounts_created: accountsCreated,
-    next_step: `Architect will write brand docs for ${accountsCreated} accounts on the next ticks (~60s each, one account per tick).`
+    next_step: `Seeded ${projectsCreated} projects / ${accountsCreated} accounts. ONLY AI Tool Daily is active — all other 104 accounts are paused (as requested). Architect + Strategist + Grader run on AI Tool Daily first.`,
   });
 }
