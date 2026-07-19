@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.1"
+VERSION = "5.2"
 
 
 def main():
@@ -61,6 +61,8 @@ def main():
     print(f"  heartbeat:   every 30s → worker_health")
     print(f"  kpi snapshot: every 1h → kpi_snapshots")
     print(f"  human desk:  every 20s → escalations")
+    print(f"  brand studio: auto-generates Brand Bible for new accounts")
+    print(f"  monetize:    affiliate/sponsor disclosure injection enabled")
     print(f"  handlers:    {len(worker.handlers)} jobs")
     print("=" * 60)
 

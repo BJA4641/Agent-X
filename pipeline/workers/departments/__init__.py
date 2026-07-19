@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from . import finance, portfolio, research, editorial, creative, postprod
 from . import distribution, analytics, cqo, risk, knowledge
-from . import ops, human_desk, experiments
+from . import ops, human_desk, experiments, brand_studio, monetization
 
 
 def register_all(worker: "Worker"):
@@ -14,12 +14,15 @@ def register_all(worker: "Worker"):
     finance.register(worker)
     cqo.register(worker)
     risk.register(worker)
+    # Brand (must run before editorial so bible is ready)
+    brand_studio.register(worker)
     # Production pipeline
     portfolio.register(worker)
     research.register(worker)
     editorial.register(worker)
     creative.register(worker)
     postprod.register(worker)
+    monetization.register(worker)
     distribution.register(worker)
     analytics.register(worker)
     knowledge.register(worker)

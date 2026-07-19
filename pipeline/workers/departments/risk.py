@@ -45,8 +45,9 @@ def scan_content(w: Worker, job: Job, ctx: AgentContext):
 
     bus.agent("risk", "✅ risk scan clean — claim/spam check passed", "success",
               "risk_ok", job_id=job.id)
-    # Chain to publish
-    job_of(w, "distribution.publish", {
-        **job.payload,
-    }, parent=job, priority=job.priority)
+    # Chain to monetization (which itself chains to publish)
+    next_step = job.payload.get("_next_step", "monetization.inject")
+    job_of(w, next_step, {**job.payload}, parent=job,
+           account_id=job.account_id, project_id=job.project_id,
+           priority=job.priority)
     w.queue.complete(job, {"ok": True})

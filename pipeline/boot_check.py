@@ -49,6 +49,8 @@ MODULES = [
     "workers.departments.ops",
     "workers.departments.human_desk",
     "workers.departments.experiments",
+    "workers.departments.brand_studio",
+    "workers.departments.monetization",
 ]
 
 

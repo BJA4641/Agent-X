@@ -59,8 +59,8 @@ def polish(w: Worker, job: Job, ctx: AgentContext):
         except Exception:
             pass
 
-    # Hand to risk scan, then publish
-    bus.agent("qa", "🔍 handing off to Risk → Publish", "info", "post_done",
+    # Hand off: Risk scan → Monetization → Publish
+    bus.agent("qa", "🔍 handing off to Risk → Monetize → Publish", "info", "post_done",
               job_id=job.id, item_id=item_id)
     job_of(w, "risk.scan_content", {
         "item_id": item_id,
@@ -69,6 +69,7 @@ def polish(w: Worker, job: Job, ctx: AgentContext):
         "script": job.payload.get("script", {}),
         "captions": job.payload.get("captions", {}),
         "seo": job.payload.get("seo", {}),
+        "_next_step": "monetization.inject",
     }, parent=job, account_id=job.account_id, project_id=job.project_id,
        priority=job.priority)
     w.queue.complete(job, {"ok": True, "size_bytes": size})

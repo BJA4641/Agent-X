@@ -73,6 +73,20 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
     bus.agent("coo", f"in-flight for @{acct.get('handle','?')}: {inflight}/{MAX_INFLIGHT_PER_ACCOUNT}, daily target {target}",
               "info", "inflight", job_id=job.id)
 
+    # Phase 3: if this account lacks a brand bible, generate one FIRST before producing.
+    if not acct.get("brand_bible"):
+        bus.agent("architect", f"🏛️ no brand bible for {acct.get('name','?')} — queuing generation",
+                  "info", "brand_queued", job_id=job.id)
+        from ..common import job_of as _jof
+        _jof(w, "brand_studio.generate", {
+            "niche": acct.get("niche", ""),
+        }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
+           priority=Priority.HIGH)
+        _schedule_next_tick(w, job)
+        w.queue.complete(job, {"ok": True, "active_account": acct.get("name"),
+                               "inflight": inflight, "generating_brand_bible": True})
+        return
+
     if inflight < MAX_INFLIGHT_PER_ACCOUNT:
         # Spawn ideation -> Editorial pipeline for this account
         job_of(w, "editorial.ideate", {

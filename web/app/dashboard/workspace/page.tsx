@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import HumanDesk from "@/components/HumanDesk";
 
 type Evt = { id?: number; agent: string; action: string; message: string; status: string; cost_usd?: number; created_at: string };
 
@@ -119,6 +120,8 @@ export default function WorkspacePage() {
         </span>
       </div>
       <p className="lead">Live feed of every agent working around the clock. Give them orders below — they queue topics, write scripts, generate visuals, edit video, and hand drafts back for your approval.</p>
+
+      <HumanDesk />
 
       <div style={{display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginTop:20}}>
         <div className="card" style={{margin:0}}>
