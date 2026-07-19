@@ -6,5 +6,7 @@ COPY pipeline/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY prompts/ ../prompts/
 COPY pipeline/ .
-# One tick every 30 min. Set env vars in the host dashboard; KILL_SWITCH=1 stops everything.
-CMD ["python", "cli.py", "loop", "--interval", "1800"]
+# One tick every 60 seconds. Idle ticks are cheap (1 DB read + a tiny idle-chat insert).
+# Real content work (LLM + render) is gated by DAILY_BUDGET_USD and the empty-queue check,
+# so a fast loop DOES NOT mean fast spending. Set KILL_SWITCH=1 to pause everything.
+CMD ["python", "cli.py", "loop", "--interval", "60"]
