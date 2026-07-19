@@ -78,7 +78,9 @@ def produce(item, stub=False):
 
         for i, beat in enumerate(beats, start=1):
             f = os.path.join(OUT, str(iid[:8]) + "_b" + str(i-1) + ".jpg")
-            visuals.beat_frame(beat.get("text", ""), beat.get("image_prompt", ""), f,
+            beat_text = beat.get("voiceover") or beat.get("text") or ""
+            beat_prompt = beat.get("visual_prompt") or beat.get("image_prompt") or ""
+            visuals.beat_frame(beat_text, beat_prompt, f,
                                seed=i-1, item_id=iid, style=style,
                                beat_idx=i, total_beats=total_beats,
                                hook_word=hook_word, cta_text=cta)
