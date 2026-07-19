@@ -64,6 +64,16 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         w.queue.complete(job, {"ok": True, "no_accounts": True})
         return
 
+    # BUG FIX v5.3: double-check the account is actually active (not paused,
+    # project not paused). first_active_account should already filter, but be safe.
+    from ..common import is_account_active
+    if not is_account_active(sb, acct["id"]):
+        bus.agent("ceo", f"account {acct.get('name','?')} is paused (or project paused) — skipping",
+                  "info", "tick_paused", job_id=job.id)
+        _schedule_next_tick(w, job)
+        w.queue.complete(job, {"ok": True, "paused": True})
+        return
+
     bus.agent("ceo", f"👔 tick — active account: {acct.get('name','?')} (@{acct.get('handle','?')})",
               "info", "tick_account", job_id=job.id, account_id=acct["id"])
 

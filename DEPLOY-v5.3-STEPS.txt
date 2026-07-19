@@ -1,0 +1,88 @@
+================================================================
+Agent-X v5.3 — Bugfix + Polish Release
+================================================================
+
+WHAT THIS FIXES (from your screenshots):
+  1. SQL ERROR "functions in index expression must be marked IMMUTABLE" — fixed.
+     v5.3 replaces the bad partial index with a plain index. v5.2_PRODUCTION
+     is REPLACED by v5.3 — run v5.3_PRODUCTION.sql FIRST, even if you started v5.2.
+  2. "Stop work paused but all ideas rejected / didn't resume later" — fixed.
+     Pausing now CANCELS IN-FLIGHT JOBS (sets them to 'blocked') but leaves
+     board_items in place (does NOT reject them). Resuming clears prior
+     rejected/failed board items and stuck jobs so production starts fresh.
+  3. "AI ideas when cats project was active, AI was paused" — fixed.
+     v5.3 editorial._pick_topics is NICHE-AWARE: it loads the account niche,
+     picks strategy/trends/evergreens that MATCH the niche, and for non-AI
+     accounts (cats/fitness/finance), DROPS generic AI topics.
+  4. "Spend not updating live / exceeded budget" — fixed.
+     a) /api/wallet now reports PIPELINE spend from run_ledger (real LLM costs),
+        not just demo wallet_transactions.
+     b) Legacy orchestrator.tick() now has a HARD BUDGET GUARD so even if
+        someone runs `python cli.py loop` by mistake, it cannot overspend.
+     c) Every v5 creative job (write_script, render, ideate) checks budget
+        BEFORE making paid LLM calls, and reschedules instead of burning money.
+  5. "Exceeded allowed budget" — v5.3 legacy + v5 paths both hard-cap at daily_budget.
+  6. "AI chat background black, can't read" — theme-fix.ts injected to
+     normalize near-black (#1a1a1a) chat bubbles to semi-transparent white
+     so white text is always readable.
+  7. "Where is visual content for planned posts?" — new /b/[aid] business
+     plan page shows brand docs + every post with video player (if rendered)
+     and hook preview. Posts tab in account console will also show videos.
+  8. "Brand tone and brand identity are identical" — added a yellow note on
+     the business plan page flagging this, and architect/brand_studio will
+     rewrite them as separate docs on next generation pass.
+  9. "Other projects business/tone/etc should be accessible" — new
+     /api/business/[aid] endpoint + /b/[aid] page works for ANY project's
+     account (ownership verified) so you can see every brand's docs.
+ 10. "Where is the business plan for each project?" — every account now has
+     a Business Plan page at /b/<account_id> linked from the account header.
+
+SQL (RUN FIRST — fixes the index error):
+  - db/v5.3_PRODUCTION.sql
+    * drops the bad `jobs_scheduled` partial index that caused the IMMUTABLE error
+    * recreates as a plain index (no STABLE function in WHERE clause)
+    * adds ALL column-if-not-exists for jobs/agent_events/memory/lessons/etc
+      so even a partially-migrated DB ends up at v5.3
+    * creates v_account_brief view for UI convenience
+    * clears stuck jobs and half-rendered board_items from previous runs
+    * sets schema_version to v5.3
+    * No PL/pgSQL. No RAISE. No DO blocks with mutable functions. Safe.
+
+DEPLOY STEPS:
+  1) Run db/v5.3_PRODUCTION.sql in Supabase SQL Editor.
+     Confirm with: SELECT value FROM settings WHERE key='schema_version';
+     Should show {"v":"5.3",...}.
+  2) Unzip Agent-X-v5.3-UPGRADE.zip into your repo, overwriting.
+  3) git commit && git push. Vercel + Railway auto-deploy.
+  4) In Railway, make sure the worker CMD is `python cli.py worker` (v5).
+     Legacy `python cli.py loop` now has a hard budget guard and won't
+     overspend even if started accidentally.
+  5) After deploy, open any account page and click "Resume this account".
+     The brand_studio will regenerate the 13 brand docs (Brand Identity and
+     Tone Guide as separate docs), then editorial will pick niche-matched
+     topics. Check /b/<account_id> to see the full brand bible.
+
+NEW FILES IN THIS ZIP:
+  pipeline/                  (full overwrite)
+  web/app/api/ceo/           (CEO scorecard API)
+  web/app/api/human/         (human desk API)
+  web/app/api/workers/       (worker liveness API)
+  web/app/api/business/[aid] (NEW — brand bible per account)
+  web/app/api/wallet/        (fixed: real pipeline spend)
+  web/app/api/projects/[pid]/accounts/[aid]/route.ts  (pause/resume fixed)
+  web/app/dashboard/ceo/     (CEO scorecard page)
+  web/app/b/[aid]/           (NEW — public brand plan page)
+  web/app/dashboard/workspace/page.tsx (HumanDesk)
+  web/components/Sidebar.tsx (+ CEO link)
+  web/components/HumanDesk.tsx (inline approvals)
+  web/lib/theme-fix.ts       (fixes black-on-black chat bubbles)
+  db/v5.3_PRODUCTION.sql     (run this!)
+
+VERIFY AFTER DEPLOY:
+  - Railway logs show "Agent-X v5.3 pipeline ONLINE"
+  - Wallet "Spent today" matches real LLM spend (not just demo topups)
+  - Clicking "Stop work" does NOT reject ideas — queue shows them paused
+  - Clicking "Resume" on the Cats account produces cat-related ideas, not AI
+  - Budget cannot be exceeded (pre-flight in every paid step)
+  - Chat bubbles on /chat are readable (not black-on-black)
+  - Visiting /b/<account_id> shows all 13 brand docs once Architect finishes

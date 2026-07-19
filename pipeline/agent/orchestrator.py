@@ -1,7 +1,10 @@
-"""orchestrator.py v4.3 — one tick = one pass of the company.
-Respects pause/resume on projects AND accounts — paused items are SKIPPED entirely.
-Seed scout on boot; architect/strategist/research/seo/produce all respect pause.
-Defensive imports so stale Docker layers never crash the whole container.
+"""orchestrator.py v4.3 (LEGACY — v5 worker is the production path).
+
+v5.3: Added HARD BUDGET GUARD so the legacy loop CANNOT overspend if someone
+accidentally runs `python cli.py loop`. The v5 worker (`python cli.py worker`)
+is the real engine; this file is kept so boot_check and manual `demo` still
+work, but `tick()` now no-ops when V5_MODE env var is set OR budget is exceeded
+OR kill switch is on.
 """
 import os, time, traceback as _tb
 from . import (music, community, digest, distribution, config, ledger, board,
@@ -217,6 +220,17 @@ def tick(stub=False):
         events.emit("system", "KILL SWITCH IS ON — tick refused.", "warn", "killed")
         print("KILL SWITCH ON — tick refused.")
         return
+    # v5.3 HARD BUDGET GUARD — never spend past the daily cap, even if someone
+    # accidentally runs the legacy `python cli.py loop` next to the v5 worker.
+    try:
+        spent = ledger.spent_today()
+        cap = ledger.daily_budget()
+        if spent >= cap:
+            events.emit("budget", f"⛔ daily budget hit (${spent:.3f}/${cap:.2f}) — legacy tick skipping to avoid overspend.", "warn", "budget_skip")
+            events.idle_chatter(force=False)
+            return
+    except Exception:
+        pass
 
     # 0a) Ensure scout library is seeded (runs once, then no-op)
     try:

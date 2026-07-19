@@ -34,6 +34,21 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
         w.fail_job(job, "creative.write_script: no topic", fatal=True)
         return
 
+    # v5.3 BUG FIX: preflight check BEFORE spending on script LLM call
+    from ..common import kill_switch, hard_budget_ok, remaining_budget
+    if kill_switch():
+        bus.agent("brain", "⏸ kill switch on — write held", "warn", "script_held",
+                  job_id=job.id, item_id=item_id)
+        w.queue.complete(job, {"ok": False, "paused": True})
+        return
+    if not hard_budget_ok(next_cost_usd=0.05):
+        bus.agent("cfo", f"⏸ budget too low for script (${remaining_budget():.3f} left) — delaying",
+                  "warn", "script_budget", job_id=job.id)
+        # Reschedule in 1 hour instead of failing
+        w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
+                                  "error": f"budget delay: ${remaining_budget():.3f} left"})
+        return
+
     bus.agent("brain", f"✍️ writing draft {rewrite+1}: \"{topic[:70]}\"", "info",
               "script_start", job_id=job.id, item_id=item_id)
 
@@ -89,6 +104,21 @@ def render(w: Worker, job: Job, ctx: AgentContext):
     account_id = job.account_id
     project_id = job.project_id
     topic = script.get("title") or job.payload.get("topic") or "content"
+
+    # v5.3 BUDGET CHECK before render (render itself is cheap — uses Gemini for
+    # visuals which is free-tier, but LLM steps + any paid voice cost money)
+    from ..common import kill_switch, hard_budget_ok, remaining_budget
+    if kill_switch():
+        bus.agent("composer", "⏸ kill switch on — render held", "warn", "render_held",
+                  job_id=job.id, item_id=item_id)
+        w.queue.complete(job, {"ok": False, "paused": True})
+        return
+    if not hard_budget_ok(next_cost_usd=0.01):
+        bus.agent("cfo", f"⏸ budget too low for render (${remaining_budget():.3f} left) — delaying 1h",
+                  "warn", "render_budget", job_id=job.id)
+        w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
+                                  "error": f"render budget delay: ${remaining_budget():.3f} left"})
+        return
 
     bus.agent("composer", f"🎬 rendering — style: {style}", "info", "render_start",
               job_id=job.id, item_id=item_id)
