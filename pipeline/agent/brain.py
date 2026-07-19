@@ -1,4 +1,4 @@
-"""brain.py v4.1 — scriptwriting with full context: brand docs + memory + trends + grader loop.
+"""brain.py v5.4 — scriptwriting with full context: brand docs + memory + trends + grader loop.
 Returns a full DIRECTOR'S SHOT LIST:
   {hook, hooks[], beats:[{voiceover, on_screen_text, visual_prompt, visual_source,
                           camera, transition_in, transition_out, sfx, duration_ms}],
@@ -17,25 +17,21 @@ except Exception as _e:
 CTA_LINE = config.get("CTA_LINE", "Follow for one move a day.")
 EST_COST = 0.025
 
+# v5.4 FIX: _DEMO_SCRIPT used to be hardcoded AI content (free ai tool nobody talks about)
+# which fired whenever LLM failed → produced AI posts with #ai #tech on pet accounts.
+# Now it uses niche-neutral placeholders; real niche is injected by _fallback_for_niche().
 _DEMO_SCRIPT = {
     "hook": "stop scrolling.",
-    "hooks": ["stop scrolling.", "delete this app.", "this is illegal."],
-    "title": "free ai tool nobody talks about",
-    "hashtags": ["ai","tech","tools","chatgpt","productivity","aitools","techtok","learnai","aitips","aiupdates"],
-    "caption": "save this for later · one AI move a day 💡",
+    "hooks": ["stop scrolling.", "wait till you see this.", "nobody talks about this."],
+    "title": "you need to see this",
+    "hashtags": ["viral", "fyp", "foryou", "foryoupage", "trending", "viralvideo", "reels", "shorts"],
+    "caption": "save this for later 💡",
     "beats": [
-      {"voiceover":"Stop scrolling.","on_screen_text":"STOP","visual_prompt":"high-contrast red pattern-interrupt poster, bold two-word typography, vertical 9:16",
-       "visual_source":"poster","camera":"hold","transition_in":"cut","transition_out":"zoom_punch","sfx":"boom","duration_ms":1200},
-      {"voiceover":"Your browser has a free AI you never opened.","on_screen_text":"FREE AI","visual_prompt":"extreme close-up of Chrome address bar, glowing AI button, dark tech-noir neon cyan, vertical 9:16",
-       "visual_source":"ui_mockup","camera":"slow_push","transition_in":"zoom_punch","transition_out":"whip","sfx":"whoosh","duration_ms":4200},
-      {"voiceover":"It summarizes any page without sending data out.","on_screen_text":"PRIVATE","visual_prompt":"laptop on clean desk, summary cards floating from browser, soft studio light, vertical 9:16",
-       "visual_source":"broll","camera":"slide_r","transition_in":"whip","transition_out":"flash_white","sfx":"pop","duration_ms":4500},
-      {"voiceover":"Writers fix tone in one click.","on_screen_text":"1 CLICK","visual_prompt":"hands typing in warm lamp light, text morphing on screen, cinematic depth of field, vertical 9:16",
-       "visual_source":"broll","camera":"slow_push","transition_in":"flash_white","transition_out":"cut","sfx":"click","duration_ms":4200},
-      {"voiceover":"And it works offline on a plane.","on_screen_text":"✈ OFFLINE","visual_prompt":"airplane window seat at night, laptop glow on tray, cinematic bokeh, vertical 9:16",
-       "visual_source":"broll","camera":"tilt_up","transition_in":"cut","transition_out":"fade","sfx":"none","duration_ms":3800},
-      {"voiceover":"Follow for one AI move a day.","on_screen_text":"FOLLOW","visual_prompt":"dark rounded card with FOLLOW button, gradient background, brand end-card, vertical 9:16",
-       "visual_source":"poster","camera":"hold","transition_in":"fade","transition_out":"cut","sfx":"riser","duration_ms":2800},
+      {"voiceover":"Stop scrolling.","on_screen_text":"STOP","visual_prompt":"high-contrast bold pattern-interrupt poster, vertical 9:16, brand colors","visual_source":"poster","camera":"hold","transition_in":"cut","transition_out":"zoom_punch","sfx":"boom","duration_ms":1200},
+      {"voiceover":"Here is something most people miss.","on_screen_text":"MOST MISS THIS","visual_prompt":"relevant scene for the topic, cinematic lighting, vertical 9:16","visual_source":"broll","camera":"slow_push","transition_in":"zoom_punch","transition_out":"whip","sfx":"whoosh","duration_ms":4200},
+      {"voiceover":"It takes 30 seconds and saves hours.","on_screen_text":"30 SEC","visual_prompt":"clean aesthetic b-roll matching topic, warm light, vertical 9:16","visual_source":"broll","camera":"slide_r","transition_in":"whip","transition_out":"flash_white","sfx":"pop","duration_ms":4500},
+      {"voiceover":"Try it today.","on_screen_text":"TRY IT","visual_prompt":"hands in action, on-screen demo, vertical 9:16","visual_source":"broll","camera":"slow_push","transition_in":"flash_white","transition_out":"cut","sfx":"click","duration_ms":4200},
+      {"voiceover":"Follow for more.","on_screen_text":"FOLLOW","visual_prompt":"clean end card with follow button, vertical 9:16","visual_source":"poster","camera":"hold","transition_in":"fade","transition_out":"cut","sfx":"riser","duration_ms":2800},
     ],
     "cta": CTA_LINE,
 }
@@ -46,10 +42,13 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None) -> 
     Rewrites up to grader.MAX_ATTEMPTS times if score < MIN_GRADE."""
     prompt_tpl, version = config.load_prompt("script_v3")
     brand = _load_brand_context(account_id)
+    # v5.4: look up niche once so all fallbacks (hashtags/visuals/captions)
+    #       are niche-correct — never again #ai on a cat post.
+    account_niche = _niche_for_account(account_id)
     mem = memory.context_block(account_id, project_id)
     try:
         from . import scout
-        trends = scout.recent_trends(5)
+        trends = scout.recent_trends(5, niche=account_niche)
     except Exception:
         trends = "pattern_interrupt hooks · 6-7 beats · tight cuts · upbeat bed"
     grade_feedback = memory.load_grade_feedback(account_id, project_id)
@@ -97,7 +96,7 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None) -> 
         script = json.loads(json.dumps(_DEMO_SCRIPT))
         script["title"] = topic[:60]
 
-    script = _normalize_script(script, topic)
+    script = _normalize_script(script, topic, account_id=account_id, account_niche=account_niche)
 
     # === GRADER LOOP ===
     attempts = 0
@@ -114,7 +113,7 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None) -> 
                                               account_id=account_id, project_id=project_id,
                                               brand_context=brand)
         try:
-            rewritten = _normalize_script(rewritten, topic)
+            rewritten = _normalize_script(rewritten, topic, account_id=account_id, account_niche=account_niche)
             # Sanity: only accept rewrite if it has beats
             if rewritten.get("beats") and len(rewritten["beats"]) >= 4:
                 script = rewritten
@@ -172,20 +171,24 @@ def _load_brand_context(account_id=None) -> dict:
         return empty
 
 
-def _normalize_script(raw: dict, topic: str) -> dict:
+# v5.4 FIX: signature now accepts account_id so hashtag/caption/visual defaults
+#          can be niche-aware (no more #ai on pet posts).
+def _normalize_script(raw: dict, topic: str, account_id=None, account_niche: str = "") -> dict:
     """Ensure every beat has all required fields."""
     if not isinstance(raw.get("beats"), list):
         raw["beats"] = []
+    niche = (account_niche or _niche_for_account(account_id) or "").lower()
     new_beats = []
     for i, b in enumerate(raw["beats"]):
         if isinstance(b, str):
             b = {"voiceover": b}
         voice = b.get("voiceover") or b.get("text") or ""
         on_screen = b.get("on_screen_text") or _power_word(voice)
+        visual_prompt = b.get("visual_prompt") or b.get("image_prompt") or _visual_prompt_for_niche(niche, i)
         new_beats.append({
             "voiceover": voice,
             "on_screen_text": str(on_screen)[:40],
-            "visual_prompt": b.get("visual_prompt") or b.get("image_prompt") or "cinematic vertical 9:16 b-roll, dark tech-noir",
+            "visual_prompt": visual_prompt,
             "visual_source": b.get("visual_source") or ("poster" if i==0 else "broll"),
             "camera": b.get("camera") or "slow_push",
             "transition_in": b.get("transition_in") or ("cut" if i==0 else "zoom_punch"),
@@ -208,10 +211,10 @@ def _normalize_script(raw: dict, topic: str) -> dict:
         raw["cta"] = CTA_LINE
     if not raw.get("title"):
         raw["title"] = topic[:80]
-    if not raw.get("hashtags") or not isinstance(raw["hashtags"], list):
-        raw["hashtags"] = ["ai","tech","tools","productivity","aitools","techtok","learnai","aitips","aiupdates","viral"]
+    if not raw.get("hashtags") or not isinstance(raw["hashtags"], list) or len(raw["hashtags"]) < 3:
+        raw["hashtags"] = _hashtags_for_niche(niche)
     if not raw.get("caption"):
-        raw["caption"] = "save this · one move a day"
+        raw["caption"] = _caption_for_niche(niche)
     if new_beats:
         new_beats[0]["visual_source"] = "poster"
         new_beats[0]["on_screen_text"] = _power_word(raw["hook"])
@@ -228,13 +231,15 @@ def _normalize_script(raw: dict, topic: str) -> dict:
 
 
 def captions(script: dict, item_id=None) -> dict:
-    """Per-platform captions from the script's caption/hashtags."""
+    """Per-platform captions from the script's caption/hashtags. Niche-aware fallback."""
     cap = script.get("caption","save this for later")
-    tags = script.get("hashtags") or ["ai","tech","tools"]
+    niche = _niche_for_account(None, topic=script.get("title",""))
+    tags = script.get("hashtags") or _hashtags_for_niche(niche)
     hook = script.get("hook","")
+    sound_note = _sound_for_niche(niche)
     return {
       "instagram": {"caption": f"{cap}\n\n{hook}", "hashtags": tags},
-      "tiktok":    {"caption": f"{hook} — {cap}",  "hashtags": tags[:8], "sound_note": "trending upbeat lofi/tech"},
+      "tiktok":    {"caption": f"{hook} — {cap}",  "hashtags": tags[:8], "sound_note": sound_note},
       "youtube":   {"title": hook[:90], "description": f"{cap}\n\n{script.get('cta','')}",
                     "tags": tags[:10]},
     }
@@ -279,3 +284,129 @@ def _power_word(text: str) -> str:
         if sc > best_score:
             best_score, best = sc, w
     return best or (words[0] if words else "WATCH")
+
+
+# ============================================================
+# v5.4 NICHE-LEVEL FALLBACKS — no more #ai on pet posts
+# ============================================================
+
+_NICHE_HASHTAGS = {
+    "pets":       ["petsoftiktok", "catsoftiktok", "dogsoftiktok", "petlovers", "cutepets", "cats", "dogs", "rescuepet", "adoptdontshop", "petrescue", "kitten", "puppy", "fyp", "viral", "trending"],
+    "cats":       ["catsoftiktok", "cats", "cutecats", "catlovers", "kitten", "meow", "catlife", "rescuecat", "fyp", "viral", "catlover", "kitty", "chonky", "blackcat", "orangecat"],
+    "dogs":       ["dogsoftiktok", "dogs", "doglovers", "puppy", "doglife", "rescuedog", "goodboy", "fyp", "viral", "puppies", "doglover", "goldenretriever", "puppytok", "dailydog"],
+    "fitness":    ["fitness", "gymtok", "workout", "gym", "fittok", "fitnessmotivation", "gymmotivation", "homeworkout", "fyp", "viral", "bodybuilding", "weightloss", "fit", "training", "gains"],
+    "finance":    ["personalfinance", "financetok", "moneytok", "sidehustle", "financialfreedom", "investing", "budgeting", "savemoney", "makemoneyonline", "fyp", "viral", "moneytips", "passiveincome", "sidehustleideas", "wealth"],
+    "cooking":    ["cooking", "foodtok", "recipe", "easyrecipe", "foodie", "homecooking", "quickrecipes", "foodlover", "cookingtiktok", "fyp", "viral", "asmrfood", "mealprep", "yummy", "budgetmeals"],
+    "ai":         ["ai", "tech", "tools", "chatgpt", "productivity", "aitools", "techtok", "learnai", "aitips", "aiupdates", "viral", "fyp", "artificialintelligence", "aitech", "generativeai"],
+    "tech":       ["tech", "techtok", "gadgets", "technology", "productivity", "techtips", "smartphone", "fyp", "viral", "innovation", "technews", "apps", "cooltech", "lifehack", "howto"],
+    "beauty":     ["beauty", "makeup", "skincare", "beautytok", "makeuptutorial", "glowup", "skincareroutine", "makeuplook", "fyp", "viral", "beautyhacks", "makeuphacks", "skincaretips", "hairtok", "grwm"],
+    "gaming":     ["gaming", "gametok", "videogames", "gamer", "gamingclips", "funnygaming", "xbox", "playstation", "pcgaming", "fyp", "viral", "gamermemes", "streamer", "esports", "gameplay"],
+    "travel":     ["travel", "traveltok", "wanderlust", "travelbucketlist", "travelhacks", "cheapflights", "vacation", "fyp", "viral", "solotravel", "travelvlog", "hiddengem", "visit", "explore", "travellife"],
+}
+
+_SOUND_FOR_NICHE = {
+    "pets":    "trending cute upbeat sound",
+    "cats":    "trending cute/funny cat sound",
+    "dogs":    "trending upbeat dog sound",
+    "fitness": "trending hard-hitting gym beat",
+    "finance": "trending upbeat lofi/hustle bed",
+    "cooking": "trending cozy upbeat ASMR-friendly bed",
+    "ai":      "trending upbeat lofi/tech",
+    "tech":    "trending upbeat electronic",
+    "beauty":  "trending pop/bedroom pop",
+    "gaming":  "trending hip-hop / gaming edit sound",
+    "travel":  "trending chill upbeat / tropical house",
+}
+
+_VISUAL_FOR_NICHE = {
+    "pets":   ["cute pet close-up, soft natural light, vertical 9:16, heartwarming", "pet in funny or heartwarming moment, shallow depth of field, vertical 9:16", "cozy home scene with pet, warm tones, vertical 9:16"],
+    "cats":   ["close-up of cat face with big eyes, soft window light, vertical 9:16", "cat doing funny thing, cozy home, warm light, vertical 9:16", "kitten playing with toy, high-speed, cute, vertical 9:16"],
+    "dogs":   ["happy dog outdoors, golden hour, vertical 9:16", "dog playing fetch, sun-flare, action shot, vertical 9:16", "puppy close-up, big eyes, soft bokeh, vertical 9:16"],
+    "fitness":["gym action shot, dramatic lighting, sweat, vertical 9:16", "before/after split, motivational, vertical 9:16", "home workout on mat, natural light, vertical 9:16"],
+    "finance":["clean desk with laptop and coffee, morning light, vertical 9:16", "phone showing bank app / numbers, close-up, vertical 9:16", "person writing budget in notebook, vertical 9:16"],
+    "cooking":["sizzling pan close-up, steam, warm kitchen light, vertical 9:16", "hands chopping veggies fast, ASMR-friendly, vertical 9:16", "finished plated dish, top-down hero shot, vertical 9:16"],
+    "ai":     ["dark tech-noir neon cyan, laptop close-up, vertical 9:16", "AI interface floating in air, cinematic, vertical 9:16", "code on screen reflected in glasses, vertical 9:16"],
+    "tech":   ["gadget unboxing, clean desk, soft light, vertical 9:16", "phone screen close-up, app demo, vertical 9:16", "multiple screens, moody tech lighting, vertical 9:16"],
+    "beauty": ["makeup flat lay, ring light, pastel tones, vertical 9:16", "close-up face with makeup in progress, vertical 9:16", "skincare products arranged aesthetically, vertical 9:16"],
+}
+
+
+def _niche_for_account(account_id) -> str:
+    """Look up the project_accounts.niche field. Never returns None."""
+    if not account_id or not config.HAS_SUPABASE:
+        return ""
+    try:
+        from supabase import create_client
+        sb = create_client(config.get("SUPABASE_URL"), config.supabase_service_key())
+        r = sb.table("project_accounts").select("niche").eq("id", str(account_id)).limit(1).execute().data
+        if r and r[0].get("niche"):
+            n = str(r[0]["niche"]).lower().strip()
+            # Normalize e.g. "pet rescue" -> "pets", "cat" -> "cats"
+            for key in ("cats","cat","kitten","kitty"):
+                if key in n: return "cats"
+            for key in ("dogs","dog","puppy"):
+                if key in n: return "dogs"
+            for key in ("pet","animal","rescue"):
+                if key in n: return "pets"
+            for key in ("fitness","gym","workout"):
+                if key in n: return "fitness"
+            for key in ("financ","money","side hustle","wealth"):
+                if key in n: return "finance"
+            for key in ("cook","food","recipe","kitchen"):
+                if key in n: return "cooking"
+            for key in ("ai ","artificial intelligence","chatgpt"):
+                if key in n: return "ai"
+            for key in ("tech","gadget"):
+                if key in n: return "tech"
+            for key in ("beauty","makeup","skincare"):
+                if key in n: return "beauty"
+            for key in ("gaming","game"):
+                if key in n: return "gaming"
+            for key in ("travel","trip"):
+                if key in n: return "travel"
+            return n.split()[0]
+    except Exception:
+        pass
+    return ""
+
+
+def _hashtags_for_niche(niche: str) -> list:
+    if not niche:
+        return ["fyp", "foryou", "foryoupage", "viral", "trending", "viralvideo", "reels", "shorts"]
+    return _NICHE_HASHTAGS.get(niche, ["fyp", "foryou", "viral", "trending", niche.replace(" ",""), niche+"tok", "shorts", "reels"])
+
+
+def _caption_for_niche(niche: str) -> str:
+    base = {
+        "pets":   "save this for later 🐾 follow for more",
+        "cats":   "save this for later 🐱 follow for more",
+        "dogs":   "save this for later 🐶 follow for more",
+        "fitness":"save this for later 💪 follow for more",
+        "finance":"save this for later 💰 follow for more",
+        "cooking":"save this for later 🍳 follow for more",
+        "ai":     "save this for later · one AI move a day 💡",
+        "tech":   "save this for later 🔧 follow for more",
+        "beauty": "save this for later ✨ follow for more",
+        "gaming": "save this for later 🎮 follow for more",
+        "travel": "save this for later ✈️ follow for more",
+    }
+    return base.get(niche, "save this for later 💡 follow for more")
+
+
+def _sound_for_niche(niche: str) -> str:
+    return _SOUND_FOR_NICHE.get(niche, "trending upbeat sound")
+
+
+def _visual_prompt_for_niche(niche: str, beat_idx: int) -> str:
+    """Return a niche-appropriate fallback visual prompt when LLM doesn't give one."""
+    if niche and niche in _VISUAL_FOR_NICHE:
+        return _VISUAL_FOR_NICHE[niche][beat_idx % len(_VISUAL_FOR_NICHE[niche])]
+    # Generic but on-brief (NOT "dark tech-noir" which assumes tech)
+    generic = [
+        "high-contrast bold pattern-interrupt poster, vertical 9:16, brand colors",
+        "relevant scene for the topic, cinematic lighting, vertical 9:16",
+        "clean aesthetic b-roll matching topic, warm light, vertical 9:16",
+        "hands in action, on-screen demo, vertical 9:16",
+        "clean end card with follow button, vertical 9:16",
+    ]
+    return generic[beat_idx % len(generic)]

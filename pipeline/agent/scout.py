@@ -126,29 +126,29 @@ def ensure_seeded() -> int:
     return 0
 
 
-def recent_trends(limit: int = 5) -> str:
+def recent_trends(limit: int = 5, niche: str = "") -> str:
     """Return a formatted bullet-block of hot patterns/titles for prompt injection.
+
+    v5.4: if niche is passed, we filter recent hot topics to that niche so a cat
+    account doesn't get injected with AI trends. Curated patterns are always
+    niche-agnostic (they're structural, not content-specific).
 
     Always returns something (curated patterns as fallback) so the brain/strategist
     never prompts with empty trend context.
     """
     out_lines = ["CURRENT VIRAL PATTERNS (clone the ANGLE/STRUCTURE — never the actual words, never repost):"]
-    # Curated viral patterns (always included, sorted by heat)
     ordered = sorted(_VIRAL_PATTERNS, key=lambda p: -p.get("heat", 0))
-    shown = 0
     for p in ordered[:limit]:
         out_lines.append(
             f"- Pattern: {p['angle']} | Hooks: {p['hooks'][:80]} "
             f"| Tone: {p['tone']} | Pacing: {p['beats']} beats @ {p['pacing_bpm']}bpm | Audio: {p['audio']}"
         )
-        shown += 1
 
-    # Append 2-3 fresh real-trend titles if available (client-side sorted so we
-    # never rely on Supabase's .order() which has been flaky)
     try:
-        fresh = _fetch_recent_titles(limit=3)
+        fresh = _fetch_recent_titles(limit=4, niche=niche)
         if fresh:
-            out_lines.append("\nRECENT HOT TOPICS in this niche (pull from these angles):")
+            niche_note = f" in the {niche} niche" if niche else ""
+            out_lines.append(f"\nRECENT HOT TOPICS{niche_note} (pull from these angles):")
             for t in fresh:
                 out_lines.append(f"- {t[:100]}")
     except Exception:
@@ -157,20 +157,31 @@ def recent_trends(limit: int = 5) -> str:
     return "\n".join(out_lines)
 
 
-def _fetch_recent_titles(limit: int = 3) -> list:
-    """Pull recent trend titles from Supabase, sorted client-side by heat (desc)."""
+def _fetch_recent_titles(limit: int = 3, niche: str = "") -> list:
+    """Pull recent trend titles from Supabase, sorted client-side by heat (desc).
+    v5.4: filters by niche when provided."""
     out = []
     if config.HAS_SUPABASE:
         try:
             cutoff = _iso(time.time() - 24 * 3600)
-            # NOTE: we do NOT use .order("heat", desc=True) — the Supabase-py client
-            # has flaky support on some versions. Pull rows then sort in Python.
-            res = (_sb().table("trend_items")
-                   .select("title,heat,scraped_at")
-                   .neq("platform", "pattern")
-                   .gte("scraped_at", cutoff)
-                   .limit(100).execute())
+            q = (_sb().table("trend_items")
+                 .select("title,heat,niche,scraped_at")
+                 .neq("platform", "pattern")
+                 .gte("scraped_at", cutoff)
+                 .limit(200))
+            res = q.execute()
             rows = [r for r in (res.data or []) if r.get("title")]
+            if niche:
+                n_keywords = set(niche.lower().split())
+                # Prefer exact niche match, fall back to any
+                matched = [r for r in rows if r.get("niche") and niche.lower() in str(r.get("niche","")).lower()]
+                # Also match keyword in title
+                matched += [r for r in rows if any(kw in str(r.get("title","")).lower() for kw in n_keywords if len(kw) > 3)]
+                seen = set(); deduped = []
+                for r in matched + rows:
+                    if r["title"] not in seen:
+                        seen.add(r["title"]); deduped.append(r)
+                rows = deduped
             rows.sort(key=lambda r: -(r.get("heat") or 0))
             out = [r["title"] for r in rows[:limit]]
         except Exception:

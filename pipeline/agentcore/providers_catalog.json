@@ -1,0 +1,129 @@
+{
+  "_doc": "Agent-X v5.4 AI Provider Catalog. One source of truth for every model agents can call. F = free tier available. router_key = env var holding the API key.",
+  "text": {
+    "_label": "Chat / Script / Strategy (LLM)",
+    "_default_tier": {
+      "cheap": ["gemini-2.5-flash", "gpt-4o-mini", "claude-3-5-haiku", "deepseek-chat", "llama-3.3-70b-groq"],
+      "standard": ["claude-sonnet-4-5", "gpt-4o", "gemini-2.5-pro", "claude-3-5-sonnet", "mistral-large"],
+      "premium": ["claude-opus-4", "gpt-5", "o3", "deepseek-reasoner"]
+    },
+    "models": [
+      {"id": "claude-sonnet-4-5", "name": "Claude Sonnet 4.5 (Anthropic)", "provider": "anthropic", "tier": "standard", "paid": true, "price_in": 3, "price_out": 15, "key_env": "ANTHROPIC_API_KEY", "endpoint": "anthropic"},
+      {"id": "claude-opus-4", "name": "Claude Opus 4 (Anthropic)", "provider": "anthropic", "tier": "premium", "paid": true, "price_in": 15, "price_out": 75, "key_env": "ANTHROPIC_API_KEY", "endpoint": "anthropic"},
+      {"id": "claude-3-5-haiku", "name": "Claude Haiku 3.5 (Anthropic)", "provider": "anthropic", "tier": "cheap", "paid": true, "price_in": 0.8, "price_out": 4, "key_env": "ANTHROPIC_API_KEY", "endpoint": "anthropic"},
+      {"id": "gpt-4o", "name": "GPT-4o (OpenAI)", "provider": "openai", "tier": "standard", "paid": true, "price_in": 2.5, "price_out": 10, "key_env": "OPENAI_API_KEY", "endpoint": "openai"},
+      {"id": "gpt-4o-mini", "name": "GPT-4o-mini (OpenAI)", "provider": "openai", "tier": "cheap", "paid": true, "price_in": 0.15, "price_out": 0.6, "key_env": "OPENAI_API_KEY", "endpoint": "openai"},
+      {"id": "o3", "name": "o3 (OpenAI reasoning)", "provider": "openai", "tier": "premium", "paid": true, "price_in": 2, "price_out": 8, "key_env": "OPENAI_API_KEY", "endpoint": "openai_responses"},
+      {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro (Google)", "provider": "google", "tier": "standard", "paid": false, "key_env": "GEMINI_API_KEY", "endpoint": "gemini", "free_tier": true},
+      {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash (Google)", "provider": "google", "tier": "cheap", "paid": false, "key_env": "GEMINI_API_KEY", "endpoint": "gemini", "free_tier": true},
+      {"id": "gemini-3-pro", "name": "Gemini 3 Pro (Google)", "provider": "google", "tier": "standard", "paid": true, "key_env": "GEMINI_API_KEY", "endpoint": "gemini"},
+      {"id": "deepseek-chat", "name": "DeepSeek V3 (DeepSeek)", "provider": "deepseek", "tier": "cheap", "paid": true, "price_in": 0.27, "price_out": 1.1, "key_env": "DEEPSEEK_API_KEY", "endpoint": "deepseek"},
+      {"id": "deepseek-reasoner", "name": "DeepSeek R1 (DeepSeek)", "provider": "deepseek", "tier": "premium", "paid": true, "price_in": 0.55, "price_out": 2.19, "key_env": "DEEPSEEK_API_KEY", "endpoint": "deepseek"},
+      {"id": "grok-4", "name": "Grok 4 (xAI)", "provider": "xai", "tier": "standard", "paid": true, "price_in": 3, "price_out": 15, "key_env": "XAI_API_KEY", "endpoint": "openai_compat", "base_url": "https://api.x.ai/v1"},
+      {"id": "command-r-plus", "name": "Command R+ (Cohere)", "provider": "cohere", "tier": "standard", "paid": true, "price_in": 2.5, "price_out": 10, "key_env": "COHERE_API_KEY", "endpoint": "cohere"},
+      {"id": "mistral-large", "name": "Mistral Large 2 (Mistral)", "provider": "mistral", "tier": "standard", "paid": true, "price_in": 2, "price_out": 6, "key_env": "MISTRAL_API_KEY", "endpoint": "openai_compat", "base_url": "https://api.mistral.ai/v1"},
+      {"id": "llama-3.3-70b-groq", "name": "Llama 3.3 70B (Groq, FREE)", "provider": "groq", "tier": "cheap", "paid": false, "key_env": "GROQ_API_KEY", "endpoint": "groq", "free_tier": true},
+      {"id": "llama-4-maverick", "name": "Llama 4 Maverick (Together)", "provider": "together", "tier": "standard", "paid": true, "price_in": 0.2, "price_out": 0.8, "key_env": "TOGETHER_API_KEY", "endpoint": "openai_compat", "base_url": "https://api.together.xyz/v1"},
+      {"id": "kimi-k2", "name": "Kimi K2 (Moonshot via OpenRouter, FREE)", "provider": "openrouter", "tier": "cheap", "paid": false, "key_env": "OPENROUTER_API_KEY", "endpoint": "openrouter", "free_tier": true},
+      {"id": "qwen-3-72b", "name": "Qwen3 72B (Alibaba/Together)", "provider": "together", "tier": "cheap", "paid": true, "price_in": 0.5, "price_out": 0.8, "key_env": "TOGETHER_API_KEY", "endpoint": "openai_compat", "base_url": "https://api.together.xyz/v1"},
+      {"id": "firefunction-v2", "name": "Firefunction V2 (Fireworks)", "provider": "fireworks", "tier": "cheap", "paid": true, "price_in": 0.2, "price_out": 0.8, "key_env": "FIREWORKS_API_KEY", "endpoint": "openai_compat", "base_url": "https://api.fireworks.ai/inference/v1"}
+    ]
+  },
+
+  "text_to_image": {
+    "_label": "Text → Image (hook frames, thumbnails, B-roll stills)",
+    "_default": ["gpt-image-1.5", "gemini-2.5-flash-image", "flux-pro-fal", "flux-schnell-fal", "pollinations-free"],
+    "models": [
+      {"id": "gpt-image-2", "name": "GPT Image 2 (OpenAI) — Arena #1", "provider": "openai", "paid": true, "est_usd": 0.04, "key_env": "OPENAI_API_KEY", "endpoint": "openai_images", "arena_rank": 1, "best_for": "photorealism, text in image"},
+      {"id": "gpt-image-1.5", "name": "GPT Image 1.5 (OpenAI)", "provider": "openai", "paid": true, "est_usd": 0.04, "key_env": "OPENAI_API_KEY", "endpoint": "openai_images", "arena_rank": 1},
+      {"id": "gemini-3-pro-image", "name": "Gemini 3 Pro Image (Google)", "provider": "google", "paid": true, "est_usd": 0.02, "key_env": "GEMINI_API_KEY", "endpoint": "gemini_image", "arena_rank": 2},
+      {"id": "gemini-2.5-flash-image", "name": "Gemini 2.5 Flash Image (Google, FREE)", "provider": "google", "paid": false, "est_usd": 0.0, "key_env": "GEMINI_API_KEY", "endpoint": "gemini_image", "free_tier": true, "arena_rank": 5, "default": true},
+      {"id": "flux-2-max-bfl", "name": "FLUX.2 Max (Black Forest Labs)", "provider": "bfl", "paid": true, "est_usd": 0.05, "key_env": "BFL_API_KEY", "endpoint": "bfl", "arena_rank": 3},
+      {"id": "flux-2-pro-bfl", "name": "FLUX.2 Pro (Black Forest Labs)", "provider": "bfl", "paid": true, "est_usd": 0.04, "key_env": "BFL_API_KEY", "endpoint": "bfl", "arena_rank": 6},
+      {"id": "flux-pro-fal", "name": "FLUX.1 Pro (fal.ai)", "provider": "fal", "paid": true, "est_usd": 0.05, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/flux-pro/v1.1"},
+      {"id": "flux-dev-fal", "name": "FLUX.1 Dev (fal.ai)", "provider": "fal", "paid": true, "est_usd": 0.025, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/flux/dev"},
+      {"id": "flux-schnell-fal", "name": "FLUX.1 Schnell (fal.ai, fast/cheap)", "provider": "fal", "paid": true, "est_usd": 0.003, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/flux/schnell"},
+      {"id": "ideogram-v3", "name": "Ideogram 3.0 (best text in image)", "provider": "ideogram", "paid": true, "est_usd": 0.08, "key_env": "IDEOGRAM_API_KEY", "endpoint": "ideogram"},
+      {"id": "recraft-v3", "name": "Recraft V3 (vector/illustration)", "provider": "recraft", "paid": true, "est_usd": 0.04, "key_env": "RECRAFT_API_KEY", "endpoint": "recraft"},
+      {"id": "stability-ultra", "name": "Stable Diffusion 3.5 Ultra (Stability AI)", "provider": "stability", "paid": true, "est_usd": 0.04, "key_env": "STABILITY_API_KEY", "endpoint": "stability"},
+      {"id": "dalle-3", "name": "DALL-E 3 (OpenAI)", "provider": "openai", "paid": true, "est_usd": 0.04, "key_env": "OPENAI_API_KEY", "endpoint": "openai_images_dalle3"},
+      {"id": "midjourney-goapi", "name": "Midjourney v8.1 (via GoAPI)", "provider": "goapi", "paid": true, "est_usd": 0.10, "key_env": "GOAPI_KEY", "endpoint": "goapi_midjourney"},
+      {"id": "pollinations-free", "name": "Pollinations.ai (FREE, no key)", "provider": "pollinations", "paid": false, "est_usd": 0.0, "key_env": null, "endpoint": "pollinations", "free_tier": true, "fallback_only": true},
+      {"id": "hunyuan-3-tencent", "name": "Hunyuan Image 3.0 (Tencent, via fal)", "provider": "fal", "paid": true, "est_usd": 0.03, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/hunyuan-image"}
+    ]
+  },
+
+  "image_edit": {
+    "_label": "Image → Image (inpaint / outpaint / edit)",
+    "_default": ["gpt-image-edit", "flux-kontext-fal", "flux-fill-fal", "stability-inpaint"],
+    "models": [
+      {"id": "gpt-image-edit", "name": "GPT Image Edit (OpenAI)", "provider": "openai", "paid": true, "est_usd": 0.06, "key_env": "OPENAI_API_KEY", "endpoint": "openai_image_edit"},
+      {"id": "flux-kontext-fal", "name": "FLUX.1 Kontext (fal.ai) — best general edit", "provider": "fal", "paid": true, "est_usd": 0.05, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/flux-kontext"},
+      {"id": "flux-fill-fal", "name": "FLUX.1 Fill [inpaint/outpaint] (fal.ai)", "provider": "fal", "paid": true, "est_usd": 0.04, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/flux-fill-pro"},
+      {"id": "stability-inpaint", "name": "SD3 Inpaint (Stability)", "provider": "stability", "paid": true, "est_usd": 0.03, "key_env": "STABILITY_API_KEY", "endpoint": "stability_inpaint"},
+      {"id": "ideogram-remix", "name": "Ideogram Remix v3", "provider": "ideogram", "paid": true, "est_usd": 0.08, "key_env": "IDEOGRAM_API_KEY", "endpoint": "ideogram_remix"},
+      {"id": "gemini-image-edit", "name": "Gemini Image Edit (Google, FREE)", "provider": "google", "paid": false, "est_usd": 0.0, "key_env": "GEMINI_API_KEY", "endpoint": "gemini_image_edit", "free_tier": true}
+    ]
+  },
+
+  "text_to_video": {
+    "_label": "Text → Video (full reels from script)",
+    "_default": ["veo3-fal", "kling-v2-fal", "hailuo-fal", "ltx-fal"],
+    "models": [
+      {"id": "veo3-fal", "name": "Veo 3 (Google, via fal) — #1 quality", "provider": "fal", "paid": true, "est_usd": 0.50, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/veo3", "seconds": 8, "cost_per_sec": 0.06},
+      {"id": "veo3-fast-fal", "name": "Veo 3 Fast (Google, via fal)", "provider": "fal", "paid": true, "est_usd": 0.25, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/veo3-fast", "seconds": 8, "cost_per_sec": 0.03},
+      {"id": "kling-v2-fal", "name": "Kling 2.0 (Kuaishou, via fal)", "provider": "fal", "paid": true, "est_usd": 0.18, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/kling-video/v2/standard/text-to-video", "seconds": 10, "cost_per_sec": 0.018},
+      {"id": "runway-gen3-fal", "name": "Runway Gen-3 Alpha (via fal)", "provider": "fal", "paid": true, "est_usd": 0.45, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/runway-gen3/turbo", "seconds": 10, "cost_per_sec": 0.05},
+      {"id": "sora-openai", "name": "Sora (OpenAI)", "provider": "openai", "paid": true, "est_usd": 0.50, "key_env": "OPENAI_API_KEY", "endpoint": "sora", "seconds": 10, "cost_per_sec": 0.05},
+      {"id": "pika-v3", "name": "Pika 2.0 (via Replicate/fal)", "provider": "fal", "paid": true, "est_usd": 0.15, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/pika"},
+      {"id": "minimax-hailuo-fal", "name": "Minimax Hailuo (via fal) — cheap/good", "provider": "fal", "paid": true, "est_usd": 0.07, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/minimax-video/hailuo", "seconds": 6, "cost_per_sec": 0.012},
+      {"id": "luma-dream-fal", "name": "Luma Dream Machine (via fal)", "provider": "fal", "paid": true, "est_usd": 0.15, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/luma-dream-machine", "seconds": 9},
+      {"id": "vidu-q1-fal", "name": "Vidu Q1 (Shengshu, via fal)", "provider": "fal", "paid": true, "est_usd": 0.12, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/vidu/q1"},
+      {"id": "hunyuan-video-fal", "name": "Hunyuan Video (Tencent, via fal)", "provider": "fal", "paid": true, "est_usd": 0.18, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/hunyuan-video"},
+      {"id": "ltx-fal", "name": "Lightricks LTX Video (fal, fast)", "provider": "fal", "paid": true, "est_usd": 0.05, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/ltx-video", "seconds": 5},
+      {"id": "cogvideox-fal", "name": "CogVideoX (Tsinghua, Replicate free/open-source)", "provider": "replicate", "paid": true, "est_usd": 0.06, "key_env": "REPLICATE_API_TOKEN", "endpoint": "replicate", "replicate_model": "chenxwh/cogvideox", "fallback_only": true}
+    ]
+  },
+
+  "image_to_video": {
+    "_label": "Image → Video (animate a still into a clip)",
+    "_default": ["kling-i2v-fal", "veo3-i2v-fal", "runway-i2v-fal", "luma-i2v-fal", "minimax-i2v-fal"],
+    "models": [
+      {"id": "veo3-i2v-fal", "name": "Veo 3 I2V (Google, via fal)", "provider": "fal", "paid": true, "est_usd": 0.45, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/veo3/image-to-video", "seconds": 8},
+      {"id": "kling-i2v-fal", "name": "Kling 2.0 I2V (via fal)", "provider": "fal", "paid": true, "est_usd": 0.18, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/kling-video/v2/standard/image-to-video", "seconds": 10},
+      {"id": "runway-i2v-fal", "name": "Runway Gen-3 I2V (via fal)", "provider": "fal", "paid": true, "est_usd": 0.45, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/runway-gen3/turbo/image-to-video", "seconds": 10},
+      {"id": "luma-i2v-fal", "name": "Luma Dream Machine I2V (fal)", "provider": "fal", "paid": true, "est_usd": 0.15, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/luma-dream-machine/image-to-video", "seconds": 9},
+      {"id": "pika-i2v-fal", "name": "Pika 2.0 I2V (fal)", "provider": "fal", "paid": true, "est_usd": 0.15, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/pika/image-to-video"},
+      {"id": "minimax-i2v-fal", "name": "Minimax Hailuo I2V (fal) — cheap", "provider": "fal", "paid": true, "est_usd": 0.07, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/minimax-video/image-to-video", "seconds": 6},
+      {"id": "hailuo-i2v-fal", "name": "Hailuo I2V v2 (fal, newest)", "provider": "fal", "paid": true, "est_usd": 0.08, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/hailuo/i2v", "seconds": 6},
+      {"id": "vidu-i2v-fal", "name": "Vidu Q1 I2V (fal)", "provider": "fal", "paid": true, "est_usd": 0.12, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/vidu/q1/image-to-video"},
+      {"id": "ltx-i2v-fal", "name": "Lightricks LTX I2V (fal, fast)", "provider": "fal", "paid": true, "est_usd": 0.05, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/ltx-video/image-to-video", "seconds": 5}
+    ]
+  },
+
+  "voice": {
+    "_label": "Voice / TTS (narration)",
+    "_default": ["eleven-v2", "eleven-turbo", "gemini-tts-free", "openai-tts"],
+    "models": [
+      {"id": "eleven-v2", "name": "ElevenLabs v2 Multilingual", "provider": "eleven", "paid": true, "est_usd": 0.006, "key_env": "ELEVENLABS_API_KEY", "endpoint": "eleven"},
+      {"id": "eleven-turbo", "name": "ElevenLabs Turbo v2.5", "provider": "eleven", "paid": true, "est_usd": 0.003, "key_env": "ELEVENLABS_API_KEY", "endpoint": "eleven"},
+      {"id": "openai-tts", "name": "OpenAI TTS (gpt-4o-mini-tts)", "provider": "openai", "paid": true, "est_usd": 0.002, "key_env": "OPENAI_API_KEY", "endpoint": "openai_tts"},
+      {"id": "gemini-tts-free", "name": "Gemini TTS (Google, FREE)", "provider": "google", "paid": false, "est_usd": 0.0, "key_env": "GEMINI_API_KEY", "endpoint": "gemini_tts", "free_tier": true},
+      {"id": "deepgram-tts", "name": "DeepGram Aura", "provider": "deepgram", "paid": true, "est_usd": 0.001, "key_env": "DEEPGRAM_API_KEY", "endpoint": "deepgram_tts"},
+      {"id": "cartesia-tts", "name": "Cartesia Sonic", "provider": "cartesia", "paid": true, "est_usd": 0.001, "key_env": "CARTESIA_API_KEY", "endpoint": "cartesia_tts"},
+      {"id": "playht-tts", "name": "PlayHT v4", "provider": "playht", "paid": true, "est_usd": 0.004, "key_env": "PLAYHT_API_KEY", "endpoint": "playht_tts"}
+    ]
+  },
+
+  "video_edit": {
+    "_label": "Video → Video (captions, B-roll, trimming, upscale)",
+    "_default": ["auto-captions-local", "runway-captions", "fal-upscale"],
+    "models": [
+      {"id": "auto-captions-local", "name": "Captions (local ffmpeg + ASS) — FREE", "provider": "local", "paid": false, "est_usd": 0.0, "key_env": null, "endpoint": "local_captions", "free_tier": true, "default": true},
+      {"id": "fal-captions", "name": "Fal.ai auto-captions (premium)", "provider": "fal", "paid": true, "est_usd": 0.02, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/cogvideox-caption"},
+      {"id": "fal-upscale", "name": "Video upscaler (fal.ai Topaz-style)", "provider": "fal", "paid": true, "est_usd": 0.10, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/topaz-video-upscale"},
+      {"id": "runway-captions", "name": "Runway Gen-3 caption burn-in (via fal)", "provider": "fal", "paid": true, "est_usd": 0.15, "key_env": "FAL_KEY", "endpoint": "fal", "fal_model": "fal-ai/runway/captions"},
+      {"id": "descript-captions", "name": "Descript captions (premium word-by-word)", "provider": "descript", "paid": true, "est_usd": 0.05, "key_env": "DESCRIPT_API_KEY", "endpoint": "descript"}
+    ]
+  }
+}
