@@ -1,46 +1,67 @@
-"""workers/runner.py — entry point for the v5 worker pool.
+"""workers/runner.py — v5.1 entry point for the Phase 3-optimized worker pool.
 
-Boots the runtime, registers all department handlers onto a single Worker
-and runs forever. This is what the new Docker CMD will point at.
+Boots the runtime, registers all department handlers (Phase 2+3) on a single
+Worker, seeds self-scheduling bootstrap jobs (heartbeat, snapshot, human_desk,
+portfolio tick, first scout run), and runs forever.
 
-We deliberately use ONE worker process for Phase 2 MVP to match the user's
-mandate "start with ONE active account, stop burning money" — a single
-worker processing one job at a time keeps spend predictable and logs
-legible. We'll split into multiple Railway services in Phase 3.
+Phase 3 optimizations:
+  * ops.heartbeat  every 30s → worker_health table (dashboard shows liveness).
+  * ops.snapshot   every 1h  → kpi_snapshots for CEO scorecard.
+  * human_desk.sync every 20s → surfaces escalations for founder review.
+  * Auto-throttle via cfo.preflight (reschedules low-priority work when
+    budget >90% spent instead of failing outright).
+  * Experiment engine wired (hooks A/B tested, lessons fed back to memory).
+  * Single process, single active account — keeps spend predictable.
 """
 from __future__ import annotations
 import os, sys, time, traceback
 
-# Ensure pipeline/ is on sys.path (matches cli.py)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agentcore.runtime import get_runtime
-from agentcore import Worker, Job, EventType, Priority, kill_switch_on
+from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
+
+VERSION = "5.1"
 
 
 def main():
     rt = get_runtime()
-    # One worker handles all job types in Phase 2 MVP
-    worker = Worker(rt.queue, name="agentx-v5", poll_interval=3.0)
+    worker = Worker(rt.queue, name="agentx-v5", poll_interval=2.5)
     worker.set_deps(**rt.deps)
     register_all(worker)
 
-    # Seed the boot job — this kicks off the tick loop (portfolio.tick will
-    # self-schedule via _schedule_next_tick, so the system survives restarts).
-    rt.queue.enqueue(Job(
-        job_type="portfolio.boot",
-        payload={"booted_at": time.time(), "version": "5.0"},
-        priority=Priority.HIGH,
-        idempotency_key=f"boot:{int(time.time()//60)}",
-    ))
+    # ---- Bootstrap self-scheduling jobs (idempotent keys prevent dupes after restart) ----
+    now = time.time()
+    boot_jobs = [
+        Job(job_type="portfolio.boot",
+            payload={"booted_at": now, "version": VERSION},
+            priority=Priority.HIGH,
+            idempotency_key=f"boot:{int(now//60)}"),
+        Job(job_type="ops.heartbeat",
+            payload={"started_at": now, "version": VERSION},
+            priority=Priority.LOW,
+            idempotency_key=f"hb:{worker.id}:{int(now//30)}"),
+        Job(job_type="ops.snapshot",
+            payload={}, priority=Priority.LOW,
+            idempotency_key=f"snap:{int(now//3600)}"),
+        Job(job_type="human_desk.sync",
+            payload={}, priority=Priority.LOW,
+            idempotency_key=f"desksync:{int(now//20)}"),
+    ]
+    for j in boot_jobs:
+        rt.queue.enqueue(j)
 
     print("=" * 60)
-    print("Agent-X v5 pipeline ONLINE (blueprint-driven worker)")
-    print(f"  tenant:    {rt.deps.get('tenant_id', os.environ.get('TENANT_ID','me'))}")
-    print(f"  budget:    ${rt.deps.get('daily_budget', os.environ.get('DAILY_BUDGET_USD','1.50'))}")
-    print(f"  kill:      {'ON (PAUSED)' if kill_switch_on() else 'off'}")
-    print(f"  handlers:  {list(worker.handlers.keys())}")
+    print(f"Agent-X v{VERSION} pipeline ONLINE (Phase 3 optimized)")
+    print(f"  tenant:      {os.environ.get('TENANT_ID','me')}")
+    print(f"  budget:      ${DAILY_BUDGET_USD}")
+    print(f"  kill:        {'ON (PAUSED)' if kill_switch_on() else 'off'}")
+    print(f"  autothrottle: ON (reserves 10% of budget, delays low-priority work)")
+    print(f"  heartbeat:   every 30s → worker_health")
+    print(f"  kpi snapshot: every 1h → kpi_snapshots")
+    print(f"  human desk:  every 20s → escalations")
+    print(f"  handlers:    {len(worker.handlers)} jobs")
     print("=" * 60)
 
     try:

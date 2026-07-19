@@ -73,8 +73,18 @@ class Worker:
             # If handler didn't fail and didn't wait_human, complete
             if job.status == JobStatus.IN_PROGRESS:
                 self.queue.complete(job, job.result or {"ok": True})
+                try:
+                    from workers.departments.ops import _bump_counters
+                    _bump_counters(True)
+                except Exception:
+                    pass
         except HumanEscalation as esc:
             self.queue.wait_human(job, esc)
+            try:
+                from workers.departments.ops import _bump_counters
+                _bump_counters(False)
+            except Exception:
+                pass
         except Exception as e:
             tb = traceback.format_exc()
             self.bus.agent(job.job_type.split(".")[0], f"error: {str(e)[:200]}", "error",
@@ -82,6 +92,11 @@ class Worker:
             print(tb)
             self.queue.fail(job, f"{type(e).__name__}: {e}",
                             fatal=type(e).__name__ == "FatalError")
+            try:
+                from workers.departments.ops import _bump_counters
+                _bump_counters(False)
+            except Exception:
+                pass
 
     # ---------- Helpers for handlers ----------
     def spawn(self, job_type: str, payload: dict, **kwargs) -> Job:

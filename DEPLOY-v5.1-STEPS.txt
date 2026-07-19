@@ -1,0 +1,128 @@
+================================================================
+Agent-X v5.1 — PHASE 3 OPTIMIZATION DEPLOY STEPS
+================================================================
+
+Step 1 — SQL (do this FIRST — it fixes the v5.0 'raise notice' error)
+----------------------------------------------------------------------
+In Supabase → SQL Editor, open and RUN:
+    db/v5.1_PRODUCTION.sql
+
+This file is a SUPERSET of v5.0. It creates/updates:
+  jobs, agent_events (v2), memory, lessons, experiments, escalations,
+  worker_health, kpi_snapshots (NEW tables)
+  + widens board_items/run_ledger/project_accounts columns/schema
+  + sets default settings (kill_switch off, budget $1.50, autothrottle on)
+  + writes a schema_version marker in settings
+
+NO PL/pgSQL blocks, NO `raise notice`, NO `do $$ ... raise` — 100% plain
+DDL so it runs in any Supabase SQL editor.
+
+Confirm it worked: run
+    select value from settings where key='schema_version';
+You should see: {"v": 5.1, "applied_at_epoch": ...}
+
+Step 2 — UPLOAD the code
+-------------------------
+Download the zip: Agent-X-v5.1-UPGRADE.zip
+Unzip. REPLACE these into your repo (git commit + push to main):
+  pipeline/                 (full overwrite)
+  web/app/api/ceo/          (NEW — CEO scorecard API)
+  web/app/api/human/        (NEW — human desk API)
+  web/app/api/workers/      (NEW — worker liveness API)
+  web/app/dashboard/ceo/    (NEW — CEO scorecard page)
+  web/components/Sidebar.tsx (adds "👔 CEO scorecard" to admin sidebar)
+  db/v5.1_PRODUCTION.sql
+
+Step 3 — Railway redeploys automatically from git push.
+Step 4 — Watch Railway logs. You should see:
+    ============================================================
+    Agent-X v5.1 pipeline ONLINE (Phase 3 optimized)
+      tenant:      me
+      budget:      $1.50
+      kill:        off
+      autothrottle: ON (reserves 10% of budget, delays low-priority work)
+      heartbeat:   every 30s -> worker_health
+      kpi snapshot: every 1h -> kpi_snapshots
+      human desk:  every 20s -> escalations
+      handlers:    24 jobs
+    ============================================================
+
+Step 5 — Check the new CEO scorecard
+-------------------------------------
+Log into your website → Admin sidebar → "👔 CEO scorecard"
+(/dashboard/ceo). It auto-refreshes every 15s and shows:
+  - Spend today with color bar (green/yellow/red as budget fills)
+  - Published 24h / Views 24h / Open escalations
+  - Worker heartbeat status (live/red dot, job counts)
+  - Job queue (queued/claimed/in-progress/wait_human/done/failed today)
+  - Content board (idea/drafted/approved/scheduled/published/rejected/...)
+
+Step 6 — Rollback
+-----------------
+- Set Railway start command back to: `python cli.py loop --interval 60`
+  (legacy v4 loop), OR `python cli.py worker` (v5.0 baseline without
+  the Phase 3 auto-throttle/health/snapshot/human-desk features).
+- SQL does NOT need rollback — all new tables are additive.
+
+================================================================
+WHAT'S NEW IN v5.1 (Phase 3 — production optimization)
+================================================================
+
+1. AUTO-THROTTLE (fixes "burn entire budget by noon")
+   - When >90% of daily budget is spent, low-priority jobs are
+     delayed 30-120 minutes instead of being killed outright.
+   - Keeps posts trickling out through the whole day instead of a
+     burst-and-silence pattern.
+   - ON by default. Toggle via settings.autothrottle row.
+
+2. WORKER HEARTBEATS + CEO DASHBOARD
+   - Worker writes a heartbeat to worker_health every 30s with
+     completed/failed/in-progress counts.
+   - New /dashboard/ceo page shows everything live (refreshes 15s).
+   - You can see at a glance if the worker is alive, how many jobs
+     are in each state, and how budget is tracking.
+
+3. HUMAN DESK (escalations queue)
+   - When an agent raises HumanEscalation (sponsorships, ban-risk,
+     big decisions), a row lands in escalations table.
+   - /api/human lists open escalations; POST resolves them and
+     the originating job is re-queued.
+   - Founder approval UI wired up end-to-end (future v5.1.x adds
+     the inline resolution widget to the workspace page).
+
+4. EXPERIMENTS ENGINE (self-improvement start)
+   - experiments table tracks A/B hook variants.
+   - experiments.create_hook_test creates a 24h experiment.
+   - experiments.decide picks a winner after 24h and records a
+     typed lesson (confidence-weighted) into the lessons table.
+   - Later in Phase 3.x this feeds the prompt-evolution loop.
+
+5. KPI SNAPSHOTS
+   - ops.snapshot writes hourly spend/publish/views/inflight rows
+     to kpi_snapshots so we can build trend charts in v5.2.
+
+6. RAILWAY DEPLOY RESILIENCE
+   - Every "self-scheduling" job uses idempotency keys so Railway
+     restarts / redeploys / cold starts don't create duplicate
+     heartbeats/snapshots/syncs.
+   - Worker tracks completed/failed counters and reports them in
+     the heartbeat.
+
+================================================================
+v5.1 job types (24 total):
+================================================================
+  Portfolio:   portfolio.boot, portfolio.tick
+  Finance:     cfo.preflight, cfo.daily_report, cfo.killswitch_check
+  Quality:     cqo.grade_script
+  Risk:        risk.scan_content
+  Research:    research.scout_run
+  Editorial:   editorial.ideate, editorial.plan_one
+  Creative:    creative.write_script, creative.render
+  Post-Prod:   post.polish
+  Distribution:distribution.publish, distribution.cross_promote
+  Analytics:   analytics.collect_metrics, analytics.post_mortem
+  Knowledge:   knowledge.summarize_day
+  Ops (new):   ops.heartbeat, ops.snapshot
+  Human desk:  human_desk.sync, human_desk.rescan
+  Innovation:  experiments.create_hook_test, experiments.decide
+================================================================

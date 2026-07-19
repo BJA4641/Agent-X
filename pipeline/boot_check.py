@@ -46,6 +46,9 @@ MODULES = [
     "workers.departments.distribution",
     "workers.departments.analytics",
     "workers.departments.knowledge",
+    "workers.departments.ops",
+    "workers.departments.human_desk",
+    "workers.departments.experiments",
 ]
 
 

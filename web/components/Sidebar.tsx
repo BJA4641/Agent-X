@@ -37,6 +37,7 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
   ];
   if (admin) {
     groups.push({ label: "Admin", items: [
+      { href: "/dashboard/ceo", label: "👔 CEO scorecard", tag: "v5" },
       { href: "/dashboard/console", label: "Developer console" },
     ]});
   }
