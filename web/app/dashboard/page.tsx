@@ -66,7 +66,7 @@ export default async function Dashboard() {
             ecommerce or affiliate only, you can skip this.
           </p>
           <p style={{ display: "flex", gap: 12, alignItems: "center", margin: 0 }}>
-            <Link href="/onboarding" className="cta" style={{ display: "inline-block" }}>
+            <Link href="/dashboard/onboarding" className="cta" style={{ display: "inline-block" }}>
               Set up content niche →
             </Link>
             <Link href="/dashboard/store" style={{ color: "var(--dim)" }}>I'll start with ecommerce instead</Link>
