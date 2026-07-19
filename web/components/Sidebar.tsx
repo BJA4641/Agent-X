@@ -37,8 +37,10 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
   ];
   if (admin) {
     groups.push({ label: "Admin", items: [
-      { href: "/dashboard/ceo", label: "👔 CEO scorecard", tag: "v5" },
+      { href: "/dashboard/ceo-v2", label: "👔 CEO Console", tag: "v5.5" },
+      { href: "/dashboard/ceo", label: "📈 CEO scorecard", tag: "v5" },
       { href: "/dashboard/console", label: "Developer console" },
+      { href: "/dashboard/models", label: "AI models" },
     ]});
   }
   const on = (href: string) => path === href || (href !== "/dashboard" && path.startsWith(href));

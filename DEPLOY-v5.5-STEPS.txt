@@ -1,0 +1,100 @@
+==========================================================
+ Agent-X v5.5 — AUTONOMOUS CEO / ROI ENGINE / CAPITAL ALLOCATION
+ Deploy steps
+ ==========================================================
+
+ WHAT CHANGED (this is a fundamental upgrade, not a bugfix)
+ ----------------------------------------------------------
+ Agent-X is NO LONGER "make as many posts as possible."
+
+ It is now an autonomous media company. Every dollar of AI spend goes
+ through a CEO decision gate that asks:
+   - Expected ROI?
+   - Probability of success?
+   - Is there a cheaper alternative?
+   - Can an existing asset be reused?
+   - Should this be delayed or denied?
+   - Should another brand get this budget instead?
+
+ NEW MODULES
+ 1.  pipeline/workers/departments/ceo.py   (Autonomous CEO engine)
+ 2.  pipeline/agentcore/aisuite.py + providers_catalog.json  (v5.4 carried over)
+ 3.  Web dashboard: /dashboard/ceo-v2     (CEO Console — real-time audit trail)
+ 4.  5 new tables: exec_decisions, roi_snapshots, asset_library,
+     capital_allocation, ceo_recommendations
+ 5.  CEO gates on creative.write_script (more jobs gated as we wire them)
+ 6.  Asset reuse library — proven scripts/hooks/visuals/voiceovers stored
+     and reused before generating fresh (cuts spend ~30-60%)
+ 7.  Dynamic capital allocation: winning accounts get scaled to mix/premium
+     tiers with bigger budgets; losing accounts auto-pause after N days
+ 8.  Daily CEO tick: snapshots ROI, re-allocates budget, writes 3-7 human
+     recommendations to ceo_recommendations (visible in CEO Console)
+
+ DEFAULT BEHAVIOR (safe, production-ready out of the box)
+ --------------------------------------------------------
+ - min_roi_threshold = 1.5x (requires $1.50 expected return per $1 spent)
+ - Cold-start accounts capped at $0.25/day with free/cheap models only
+ - Pause losers after 3 straight days of ROI < 0.3x
+ - Reuse before generate = ON (searches asset_library first)
+ - Free-tier preferred when quality is close = ON
+ - Scale winners (ROI > 3x) automatically = ON
+ - Hard global budget still enforced as emergency brake
+
+ ==========================================================
+ STEP 1 — SUPABASE (REQUIRED, DO THIS FIRST)
+ ==========================================================
+ 1. Open Supabase SQL Editor → New Query.
+ 2. Paste and run  db/v5.5_PRODUCTION.sql  (creates the 5 tables, adds
+    ledger columns, writes ceo_config settings row).
+ 3. Verify:
+       SELECT value FROM settings WHERE key='schema_version';
+       -> {"v": "5.5", ...}
+
+ ==========================================================
+ STEP 2 — DEPLOY CODE
+ ==========================================================
+ 1. Push the v5.5 upgrade zip contents to GitHub.
+ 2. Vercel auto-deploys web (will pick up /dashboard/ceo-v2).
+ 3. Railway auto-deploys worker (CMD = python cli.py worker).
+ 4. Watch Railway logs — you should see:
+       Agent-X v5.5 pipeline ONLINE — CEO ENGINE ACTIVE
+       CEO mode:    every spend requires CEO approval (ROI-gated)
+       asset reuse: ON (searches library before generating)
+       CEO review:  once/day → capital allocation + recommendations
+
+ ==========================================================
+ STEP 3 — SET MINIMUM KEYS (see API-KEYS-TODO.txt)
+ ==========================================================
+ Minimum viable: GEMINI_API_KEY (you have) + ANTHROPIC_API_KEY (you have)
+ Add FAL_KEY (fal.ai, $5 free credit — unlocks video + FLUX images).
+
+ ==========================================================
+ STEP 4 — VERIFY
+ ==========================================================
+ 1. Open /dashboard/ceo-v2  → should show the new CEO Console
+ 2. Wait 2 minutes for first CEO daily_tick job to run
+ 3. You should see:
+    - Capital allocation rows for each active account
+    - Exec decisions populating as agents attempt to write scripts
+    - Reuse savings ($) going up
+ 4. Resume ONE account (Pet Rescue). The CEO will:
+    - Cap it at $0.25 for its first day (cold start)
+    - Approve cheap scripts only
+    - Search asset library before generating
+    - After a day of production data, ROI will start appearing
+
+ ==========================================================
+ TROUBLESHOOTING
+ ==========================================================
+ - "CEO engine error — delaying non-free action": this is fail-safe
+   behavior. Check Railway logs for the Python traceback; cheap/free
+   actions still run.
+ - No ROI data showing: roi_snapshots populates when CEO daily_tick
+   runs (once on boot, then daily). You can manually enqueue it via:
+       insert into jobs (id,job_type,payload,status,priority,scheduled_for,created_at)
+       values ('manual-ceo','ceo.daily_tick','{}'::jsonb,'queued',100,
+               extract(epoch from now()),extract(epoch from now()));
+ - Every decision is audited in exec_decisions. Query:
+       SELECT decision, count(*), sum(estimated_cost_usd)
+       FROM exec_decisions WHERE created_at > now() - interval '1 day'
+       GROUP BY decision;
