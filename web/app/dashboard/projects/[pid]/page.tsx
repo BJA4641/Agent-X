@@ -101,11 +101,17 @@ export default function ProjectDetailPage() {
             {project?.niche?.replace(/_/g," ")} · {accounts.length} accounts · {activeCount} active
           </p>
         </div>
-        <button
-          onClick={toggleProjectPaused}
-          style={{ background: project?.paused ? "#10b981" : "#ef4444", border: "none" }}>
-          {project?.paused ? "▶ Resume entire project" : "⏸ Pause entire project"}
-        </button>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Link href={`/dashboard/projects/${pid}/console`}
+                style={{background:"var(--scheduled)",color:"#000",border:"none",padding:"10px 16px",borderRadius:8,fontWeight:600,cursor:"pointer",textDecoration:"none",fontSize:13}}>
+            🎛️ AI Console
+          </Link>
+          <button
+            onClick={toggleProjectPaused}
+            style={{ background: project?.paused ? "#10b981" : "#ef4444", border: "none" }}>
+            {project?.paused ? "▶ Resume project" : "⏸ Pause project"}
+          </button>
+        </div>
       </div>
 
       {project?.paused && (
