@@ -7,8 +7,17 @@ FEEDS = [
     "https://news.google.com/rss/search?q=ChatGPT+OR+Gemini+OR+Claude+feature+when:7d&hl=en-US&gl=US&ceid=US:en",
 ]
 
-def trends(limit=12) -> list:
-    """Fresh niche headlines via public RSS — zero keys, zero cost. Safe empty list on failure."""
+def trends(limit=12, niche=None) -> list:
+    """Fresh niche headlines. Prefers LIVE scouted data (Reddit/News/HN/YT via
+    scout.py) when the Trend Scout has run in the last 24h; falls back to the
+    original RSS pull. Zero keys, zero cost, safe empty list on failure."""
+    try:
+        from . import scout
+        hot = scout.cached_trends(limit=limit, niche=niche)
+        if len(hot) >= 3:
+            return hot
+    except Exception:
+        pass
     out = []
     for url in FEEDS:
         try:
@@ -58,7 +67,7 @@ _ROTATION = [
     "Turn any PDF into a study coach with AI",
 ]
 
-def plan(n: int = None) -> list:
+def plan(n: int = None, niche: str = None) -> list:
     n = n or config.BATCH_SIZE
     recent = [i["topic"] for i in board.list()][-20:]
     reported = [i for i in board.list("reported")]
@@ -68,8 +77,11 @@ def plan(n: int = None) -> list:
     if llm.ready() and ledger.budget_ok(0.01):
         prompt, version = config.load_prompt("strategy_v3")
         prompt = (prompt.replace("{n}", str(n)).replace("{winners}", "; ".join(winners) or "none yet")
-                  .replace("{losers}", "; ".join(losers) or "none yet").replace("{trends}", "; ".join(trends()) or "none available").replace("{proven}", "; ".join(competitors()) or "none configured")
+                  .replace("{losers}", "; ".join(losers) or "none yet").replace("{trends}", "; ".join(trends(niche=niche)) or "none available").replace("{proven}", "; ".join(competitors()) or "none configured")
                   .replace("{recent}", "; ".join(recent)))
+        if niche:
+            prompt += ("\nNICHE FOCUS: every idea must serve the '" + str(niche)
+                       + "' audience specifically — no generic angles, no AI-tools default.")
         try:
             text, cost, mlabel = llm.chat(prompt, max_tokens=400)
             raw = json.loads(text[text.find("{"): text.rfind("}") + 1])["topics"][:n]

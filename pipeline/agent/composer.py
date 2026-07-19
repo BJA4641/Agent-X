@@ -1,4 +1,4 @@
-\"""composer.py — frames + voiceover -> 9:16 mp4 with Ken Burns motion.
+"""composer.py — frames + voiceover -> 9:16 mp4 with Ken Burns motion.
 v1.5: OOM-aware. On small containers (Railway trial = 512 MB) the kernel
 kills ffmpeg mid-encode (SIGKILL, no error text). We now:
   1) detect the -9 kill and say so in the error message,

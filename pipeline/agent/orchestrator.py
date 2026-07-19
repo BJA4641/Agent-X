@@ -1,15 +1,58 @@
 """orchestrator.py — one tick = one pass of the whole company.
 Respects kill switch and budget; pauses at YOUR approval gate.
-Now emits visible agent_events at every step so the Workspace feed
-shows agents talking/working in real time.
+v1.5: QA is REAL now — qa.review() runs on every fresh script BEFORE we pay
+for a render; a rejected script gets one revision pass with the editor's fix
+note, and the verdict (score + note) is stored on the item so the Studio can
+show it. The Trend Scout runs every ~30 min and fills the trends desk.
+Every step still emits honest agent_events for the Workspace feed.
 """
 import os, time
 from . import (music, community, digest, distribution, config, ledger, board,
                brain, voice, visuals, composer, publishing, analytics, strategy,
-               events)
+               events, qa, scout, projects)
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "output")
 os.makedirs(OUT, exist_ok=True)
+
+
+def _qa_gate(script, topic, iid):
+    """Run the real editor-in-chief on a fresh script. One revision round max.
+    Returns (script, verdict). Never raises — a QA crash passes the draft to
+    the human gate with an honest 'QA errored' event."""
+    platforms = ["instagram"] + (["youtube"] if config.HAS_YT else [])
+    try:
+        events.emit("qa", "Reviewing script — retention curve, claims, CTA, brand fit…",
+                    "info", "qa_start", item_id=iid)
+        verdict = qa.review(script, {}, None, platforms, item_id=iid)
+        if verdict.get("approved"):
+            sc = verdict.get("score")
+            events.emit("qa", "Script APPROVED" + ((" — score " + str(sc) + "/10.") if sc else "."),
+                        "success", "qa_ok", item_id=iid)
+            return script, verdict
+
+        fix = str(verdict.get("fix_instruction") or verdict.get("reason") or "tighten the hook")[:180]
+        events.debate("qa", "Script REJECTED: " + fix, item_id=iid)
+        if verdict.get("escalated"):
+            return script, verdict  # human gate will see the flag
+
+        events.emit("brain", "Rewriting per QA note: " + fix, "warn", "revise", item_id=iid)
+        revised = brain.write_script(
+            topic + "\n\nEDITOR'S MANDATORY REVISION NOTE (fix this): " + fix, item_id=iid)
+        if revised.get("hook") and revised.get("beats"):
+            script = revised
+        verdict2 = qa.review(script, {}, None, platforms, item_id=iid, rounds_so_far=1)
+        if verdict2.get("approved"):
+            events.emit("qa", "Revision APPROVED — score "
+                        + str(verdict2.get("score", "?")) + "/10.", "success", "qa_ok", item_id=iid)
+        else:
+            events.debate("qa", "Still not perfect after revision — flagging for your human review: "
+                          + str(verdict2.get("reason") or verdict2.get("fix_instruction") or "")[:150],
+                          item_id=iid)
+        return script, verdict2
+    except Exception as e:
+        events.emit("qa", "QA errored (" + str(e)[:80] + ") — draft goes to your human gate unscored.",
+                    "warn", "qa_err", item_id=iid)
+        return script, {"approved": True, "auto_passed_due_to_error": True}
 
 
 def produce(item, stub=False):
@@ -19,21 +62,32 @@ def produce(item, stub=False):
     iid = item["id"]
     payload = item.get("payload") or {}
     script = payload.get("script")
+    qa_verdict = payload.get("qa")
 
     if not script:
         events.emit("brain", "Writing script for: '" + topic[:70] + "'", "info", "script_start", item_id=iid)
-        script = brain.write_script(topic, item_id=iid)
+        ctxbits = []
+        if payload.get("niche"):
+            ctxbits.append("Project niche: " + str(payload["niche"]))
+        if payload.get("project"):
+            ctxbits.append("Brand/project: " + str(payload["project"]))
+        if payload.get("source") and str(payload["source"]).startswith("http"):
+            ctxbits.append("Trend source URL (angle only, don't quote it): " + str(payload["source"]))
+        script = brain.write_script(topic, item_id=iid, context=("\n".join(ctxbits) or None))
         hook = (script.get("hook") or "")[:90]
         n_beats = len(script.get("beats") or [])
         events.emit("brain", "Hook: '" + hook + "' — " + str(n_beats) + " beats.",
                     "success", "script_done", item_id=iid)
-        # persist immediately — if rendering dies, the paid script survives the crash
-        board.update(iid, payload_patch={"script": script})
 
-        events.emit("qa", "Checking script for retention curves, false claims, CTA clarity…",
-                    "info", "qa_script", item_id=iid)
-        events.emit("qa", "Script passed QA — hooks land in <3s, no overclaims, CTA specific.",
-                    "success", "qa_script_ok", item_id=iid)
+        # REAL QA gate — before we spend a render on it
+        script, verdict = _qa_gate(script, topic, iid)
+        qa_verdict = {"approved": bool(verdict.get("approved")),
+                      "score": verdict.get("score"),
+                      "note": (verdict.get("fix_instruction") or verdict.get("reason") or None),
+                      "auto_passed": bool(verdict.get("auto_passed_due_to_error"))}
+
+        # persist immediately — if rendering dies, the paid script survives the crash
+        board.update(iid, payload_patch={"script": script, "qa": qa_verdict})
 
     vid = os.path.join(OUT, str(iid[:8]) + ".mp4")
     if stub:
@@ -66,12 +120,12 @@ def produce(item, stub=False):
         events.emit("composer", "Assembling video — syncing frames + voice + music bed…",
                     "info", "edit_start", item_id=iid)
         composer.assemble(frames, audio, vid, music_path=bed)
-        events.emit("composer", "Video assembled — 9:16 vertical, captions burned in.",
+        events.emit("composer", "Video assembled — 9:16 vertical.",
                     "success", "edit_done", item_id=iid)
 
     captions = brain.captions(script, item_id=iid)
     repurp = distribution.repurpose(script, topic, item_id=iid)
-    patch = {"script": script, "video_path": vid,
+    patch = {"script": script, "video_path": vid, "qa": qa_verdict,
              "style": (None if stub else style), "captions": captions, "repurpose": repurp}
 
     if config.HAS_SUPABASE and not stub:
@@ -96,31 +150,59 @@ def tick(stub=False):
         print("KILL SWITCH ON — tick refused.")
         return
 
+    # 0) trend scout — free, throttled to ~1 pass / 30 min, never sinks the tick
+    try:
+        scout.maybe_run()
+    except Exception as e:
+        events.emit("scout", "Scout pass crashed (non-fatal): " + str(e)[:120], "warn", "scout_err")
+
     # 1) plan if the idea queue is low
     ideas = board.list("idea")
     if len(ideas) == 0 and len(board.list("drafted")) < config.BATCH_SIZE:
-        events.emit("strategy", "Idea queue is low — planning new angles from winners, trends & competitors…",
-                    "info", "planning")
-        try:
-            planned = strategy.plan()
-            for t in planned:
-                topic = t["topic"]
-                bucket = t.get("bucket", "proven")
-                board.add(topic, payload={"bucket": bucket})
-                events.emit("strategy", "Queued idea [" + str(bucket) + "]: " + topic[:80],
-                            "success", "idea_queued")
-        except Exception as e:
-            events.error("strategy", "Planning failed: " + str(e)[:200])
+        # v1.6: plan PER ACTIVE PROJECT — one account, several niches at once.
+        # Budget still rules: strategy.plan() checks ledger.budget_ok internally,
+        # so extra projects never blow past your daily cap.
+        for proj in projects.active_projects():
+            pname = str(proj.get("name") or "default")
+            niche = proj.get("niche")
+            events.emit("strategy", "Queue low — planning for project '" + pname + "'"
+                        + ((" · " + niche) if niche else "") + " from winners, trends & competitors…",
+                        "info", "planning")
+            try:
+                planned = strategy.plan(niche=niche)
+                for t in planned:
+                    topic = t["topic"]
+                    bucket = t.get("bucket", "proven")
+                    board.add(topic, payload={"bucket": bucket, "project_id": proj.get("id"),
+                                              "project": pname, "niche": niche})
+                    events.emit("strategy", "Queued [" + pname + " · " + str(bucket) + "]: " + topic[:80],
+                                "success", "idea_queued")
+            except Exception as e:
+                events.error("strategy", "Planning failed for '" + pname + "': " + str(e)[:200])
 
     # 2) produce drafts — one item's failure never sinks the tick or budget
     idea_items = board.list("idea")[: config.BATCH_SIZE]
     if not idea_items:
-        events.idle_chatter()
+        events.idle_chatter({
+            "drafted": len(board.list("drafted")),
+            "scheduled": len(board.list("scheduled")),
+            "published": len(board.list("published")),
+            "spent": ledger.spent_today(), "budget": ledger.daily_budget(),
+            "scout_at": config.get_setting("scout_last_ts"),
+        })
     for item in idea_items:
         events.emit("brain", "Picking up: " + item["topic"][:75],
                     "info", "pickup", item_id=item["id"])
         try:
             produce(item, stub=stub)
+            try:  # v1.6: stamp the TRUE cost of this draft onto the item
+                c = ledger.item_cost(item["id"])
+                if c:
+                    board.update(item["id"], payload_patch={"cost_usd": round(c, 4)})
+                    events.emit("budget", "Draft cost: $" + f"{c:.4f}" + " — " + item["topic"][:55],
+                                "info", "item_cost", item_id=item["id"], cost_usd=0)
+            except Exception:
+                pass
         except Exception as e:
             attempts = (item.get("payload") or {}).get("attempts", 0) + 1
             detail = "attempt " + str(attempts) + ": " + str(e)[:400]
@@ -216,6 +298,21 @@ def tick(stub=False):
             events.emit("digest", str(summary)[:200], "info", "digest")
     except Exception as e:
         events.error("digest", "Digest failed: " + str(e)[:200])
+
+    # v1.6 opt-in: WEEKLY_PLANNER=1 lets the planner fill next week's calendar
+    # once every ~7 days (real cost: it queues up to a week of ideas — off by default).
+    if os.environ.get("WEEKLY_PLANNER") == "1":
+        try:
+            from . import planner
+            last = (config.get_setting("planner_last_ts") or {}).get("ts", 0)
+            if time.time() - float(last or 0) > 6.5 * 86400:
+                events.emit("planner", "Weekly planner engaged — drafting next week's calendar…",
+                            "info", "plan_week")
+                planner.build_week_plan(config.TENANT_ID)
+                config.set_setting("planner_last_ts", {"ts": time.time()})
+                events.emit("planner", "Week planned — review the queue in Studio.", "success", "plan_week_done")
+        except Exception as e:
+            events.error("planner", "Weekly planning failed: " + str(e)[:200])
 
     spent = ledger.spent_today()
     budg = ledger.daily_budget()

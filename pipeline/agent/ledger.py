@@ -59,6 +59,29 @@ def spent_since(days=7) -> float:
                 continue
     return total
 
+
+def item_cost(item_id) -> float:
+    """v1.6: true total spend on one board item (all steps). Powers the
+    cost-per-video stamp so you always see what a draft actually cost."""
+    if not item_id:
+        return 0.0
+    if config.HAS_SUPABASE:
+        try:
+            res = _sb().table("run_ledger").select("cost_usd").eq("item_id", item_id).execute()
+            return sum(float(r["cost_usd"] or 0) for r in res.data)
+        except Exception:
+            pass
+    total = 0.0
+    if os.path.exists(PATH):
+        for line in open(PATH):
+            try:
+                r = json.loads(line)
+                if r.get("item_id") == item_id:
+                    total += float(r.get("cost_usd") or 0)
+            except Exception:
+                continue
+    return total
+
 _budget_cache = {"at": 0.0, "usd": None}
 
 def daily_budget() -> float:
