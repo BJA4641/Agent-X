@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import ChannelConnections from "@/components/ChannelConnections";
+import McpPanel from "@/components/McpPanel";
 
 export default async function SettingsPage() {
   const sb = supabaseServer();
@@ -22,6 +23,8 @@ export default async function SettingsPage() {
         the caption/video for manual upload.
       </p>
       <ChannelConnections />
+
+      <McpPanel />
     </div>
   );
 }
