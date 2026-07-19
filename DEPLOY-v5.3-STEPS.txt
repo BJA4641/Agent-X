@@ -1,88 +1,98 @@
-================================================================
-Agent-X v5.3 — Bugfix + Polish Release
-================================================================
+==========================================================
+ Agent-X v5.3 DEPLOY STEPS (UPDATED)
+ ==========================================================
 
-WHAT THIS FIXES (from your screenshots):
-  1. SQL ERROR "functions in index expression must be marked IMMUTABLE" — fixed.
-     v5.3 replaces the bad partial index with a plain index. v5.2_PRODUCTION
-     is REPLACED by v5.3 — run v5.3_PRODUCTION.sql FIRST, even if you started v5.2.
-  2. "Stop work paused but all ideas rejected / didn't resume later" — fixed.
-     Pausing now CANCELS IN-FLIGHT JOBS (sets them to 'blocked') but leaves
-     board_items in place (does NOT reject them). Resuming clears prior
-     rejected/failed board items and stuck jobs so production starts fresh.
-  3. "AI ideas when cats project was active, AI was paused" — fixed.
-     v5.3 editorial._pick_topics is NICHE-AWARE: it loads the account niche,
-     picks strategy/trends/evergreens that MATCH the niche, and for non-AI
-     accounts (cats/fitness/finance), DROPS generic AI topics.
-  4. "Spend not updating live / exceeded budget" — fixed.
-     a) /api/wallet now reports PIPELINE spend from run_ledger (real LLM costs),
-        not just demo wallet_transactions.
-     b) Legacy orchestrator.tick() now has a HARD BUDGET GUARD so even if
-        someone runs `python cli.py loop` by mistake, it cannot overspend.
-     c) Every v5 creative job (write_script, render, ideate) checks budget
-        BEFORE making paid LLM calls, and reschedules instead of burning money.
-  5. "Exceeded allowed budget" — v5.3 legacy + v5 paths both hard-cap at daily_budget.
-  6. "AI chat background black, can't read" — theme-fix.ts injected to
-     normalize near-black (#1a1a1a) chat bubbles to semi-transparent white
-     so white text is always readable.
-  7. "Where is visual content for planned posts?" — new /b/[aid] business
-     plan page shows brand docs + every post with video player (if rendered)
-     and hook preview. Posts tab in account console will also show videos.
-  8. "Brand tone and brand identity are identical" — added a yellow note on
-     the business plan page flagging this, and architect/brand_studio will
-     rewrite them as separate docs on next generation pass.
-  9. "Other projects business/tone/etc should be accessible" — new
-     /api/business/[aid] endpoint + /b/[aid] page works for ANY project's
-     account (ownership verified) so you can see every brand's docs.
- 10. "Where is the business plan for each project?" — every account now has
-     a Business Plan page at /b/<account_id> linked from the account header.
+ This upgrade fixes 9 reported bugs and adds 2 new features:
 
-SQL (RUN FIRST — fixes the index error):
-  - db/v5.3_PRODUCTION.sql
-    * drops the bad `jobs_scheduled` partial index that caused the IMMUTABLE error
-    * recreates as a plain index (no STABLE function in WHERE clause)
-    * adds ALL column-if-not-exists for jobs/agent_events/memory/lessons/etc
-      so even a partially-migrated DB ends up at v5.3
-    * creates v_account_brief view for UI convenience
-    * clears stuck jobs and half-rendered board_items from previous runs
-    * sets schema_version to v5.3
-    * No PL/pgSQL. No RAISE. No DO blocks with mutable functions. Safe.
+ FIXES:
+  1. Pause/Resume: "Stop work" no longer auto-rejects all ideas. In-flight
+     jobs are marked 'blocked' (resumable); ideas stay put.
+  2. Niche awareness: cat projects get cat topics, finance gets finance,
+     etc. Generic AI evergreens are skipped for non-AI niches.
+  3. Live spend: /api/wallet now reads run_ledger (real pipeline spend),
+     not demo topups.
+  4. Budget hard cap: legacy orchestrator.tick() + worker jobs pre-check
+     budget before starting; killswitch + autothrottle enforced.
+  5. Black chat bubbles: theme-fix.ts injected in <head> so white text on
+     near-black (#1a1a1a) bubbles is fixed BEFORE first paint.
+  6. SQL ordering bug fixed: CREATE TABLE runs before CREATE INDEX/ALTER
+     so "relation public.jobs does not exist" error is gone.
+  7. Visual content preview: /b/[aid] business-plan page shows all 13
+     brand docs + rendered videos inline.
+  8. Brand tone vs identity: warning shown on /b page when they match.
+  9. Cross-project business access: every project's business plan is
+     accessible via /b/[aid].
 
-DEPLOY STEPS:
-  1) Run db/v5.3_PRODUCTION.sql in Supabase SQL Editor.
-     Confirm with: SELECT value FROM settings WHERE key='schema_version';
-     Should show {"v":"5.3",...}.
-  2) Unzip Agent-X-v5.3-UPGRADE.zip into your repo, overwriting.
-  3) git commit && git push. Vercel + Railway auto-deploy.
-  4) In Railway, make sure the worker CMD is `python cli.py worker` (v5).
-     Legacy `python cli.py loop` now has a hard budget guard and won't
-     overspend even if started accidentally.
-  5) After deploy, open any account page and click "Resume this account".
-     The brand_studio will regenerate the 13 brand docs (Brand Identity and
-     Tone Guide as separate docs), then editorial will pick niche-matched
-     topics. Check /b/<account_id> to see the full brand bible.
+ NEW FEATURES:
+  A. AI auto-fallback toggle in Developer console (default ON). When on,
+     agents automatically rotate Anthropic -> Gemini -> Groq -> OpenRouter
+     whenever a key is missing/out-of-credits/erroring. Production never
+     stops because of one dead wallet.
+  B. "AI provider wallets" panel on Developer console — live status and
+     balance/credit check for Anthropic, Google AI Studio (Gemini),
+     OpenRouter, Groq, Railway, ElevenLabs. Shows MTD spend per provider
+     and last-used timestamp. Requires RAILWAY_API_TOKEN to see Railway
+     credits (optional, read-only token from railway.app/account/tokens).
 
-NEW FILES IN THIS ZIP:
-  pipeline/                  (full overwrite)
-  web/app/api/ceo/           (CEO scorecard API)
-  web/app/api/human/         (human desk API)
-  web/app/api/workers/       (worker liveness API)
-  web/app/api/business/[aid] (NEW — brand bible per account)
-  web/app/api/wallet/        (fixed: real pipeline spend)
-  web/app/api/projects/[pid]/accounts/[aid]/route.ts  (pause/resume fixed)
-  web/app/dashboard/ceo/     (CEO scorecard page)
-  web/app/b/[aid]/           (NEW — public brand plan page)
-  web/app/dashboard/workspace/page.tsx (HumanDesk)
-  web/components/Sidebar.tsx (+ CEO link)
-  web/components/HumanDesk.tsx (inline approvals)
-  web/lib/theme-fix.ts       (fixes black-on-black chat bubbles)
-  db/v5.3_PRODUCTION.sql     (run this!)
+ ==========================================================
+ STEP 1 — SUPABASE (run this SQL first!)
+ ==========================================================
+ 1. Open Supabase dashboard -> SQL Editor -> New Query.
+ 2. Open file:  db/v5.3_PRODUCTION.sql
+ 3. Paste the ENTIRE file, click Run. It is idempotent — safe to re-run.
+ 4. Verify with:  SELECT value FROM settings WHERE key='schema_version';
+    Expected result:  {"v": "5.3", "applied_at_epoch": ...}
 
-VERIFY AFTER DEPLOY:
-  - Railway logs show "Agent-X v5.3 pipeline ONLINE"
-  - Wallet "Spent today" matches real LLM spend (not just demo topups)
-  - Clicking "Stop work" does NOT reject ideas — queue shows them paused
-  - Clicking "Resume" on the Cats account produces cat-related ideas, not AI
-  - Budget cannot be exceeded (pre-flight in every paid step)
-  - Chat bubbles on /chat are readable (not black-on-black)
-  - Visiting /b/<account_id> shows all 13 brand docs once Architect finishes
+ ==========================================================
+ STEP 2 — ENVIRONMENT VARIABLES
+ ==========================================================
+ Required (already set if v5.x was running):
+   - ANTHROPIC_API_KEY
+   - GEMINI_API_KEY
+   - SUPABASE_URL  +  SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY)
+   - TENANT_ID = me
+   - DAILY_BUDGET_USD = 1.50 (or whatever you want)
+
+ Optional (enables extra balance panels):
+   - OPENROUTER_API_KEY   (free tier from openrouter.ai)
+   - GROQ_API_KEY         (free tier from console.groq.com)
+   - ELEVENLABS_API_KEY   (voiceovers)
+   - RAILWAY_API_TOKEN    (read-only token from railway.app/account/tokens
+                           — needed to show Railway credits live)
+   - RAILWAY_PROJECT_ID   (shows direct link to your project)
+
+ ==========================================================
+ STEP 3 — DEPLOY CODE
+ ==========================================================
+ A. Vercel (web frontend):
+    - Push the new web/ folder to your repo.
+    - Vercel auto-deploys on push.
+
+ B. Railway (python worker):
+    - Push the new pipeline/ folder + Dockerfile to your repo.
+    - Railway auto-redeploys. Dockerfile CMD is already `python cli.py worker`.
+    - Check deploy logs for "BOOT CHECK OK — all 68 modules imported cleanly."
+
+ ==========================================================
+ STEP 4 — VERIFY
+ ==========================================================
+ 1. Open  /dashboard/console  (Developer console — admin only).
+ 2. You should see:
+    - "Auto-fallback is ON" green banner under AI engine.
+    - "AI provider wallets" panel with per-provider LIVE status.
+    - Daily spend showing real $ from run_ledger.
+ 3. Go to any paused project, click "Resume this account" — ideas should
+    NOT auto-reject anymore; workers start generating niche-correct
+    topics.
+ 4. Open the AI chat — bubbles should be readable (no more black on black).
+ 5. Open /b/<account-id> for a project — should show business plan +
+    rendered posts.
+
+ TROUBLESHOOTING
+ - If worker says "no LLM provider succeeded": check at least one key
+   (ANTHROPIC_API_KEY or GEMINI_API_KEY) is set in Railway.
+ - If the AI provider wallets panel shows "NO KEY" for a provider you
+   want, add the env var to Vercel (web reads keys server-side; never
+   leaks them to the browser).
+ - If SQL fails on re-run: just re-run it. Every statement uses IF EXISTS
+   / IF NOT EXISTS so it's safe.

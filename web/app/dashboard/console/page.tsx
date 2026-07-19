@@ -3,6 +3,7 @@ import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import SettingsPanel from "@/components/SettingsPanel";
 import AdminActions from "@/components/AdminActions";
+import ProviderBalances from "@/components/ProviderBalances";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +30,15 @@ export default async function ConsolePage() {
       <h1>Developer console</h1>
       <p className="note" style={{ maxWidth: 680 }}>
         <b>Admin only.</b> AI engine choice, API keys (set in Vercel/Railway env vars),
-        daily spend cap, kill switch. Regular users never see this — they only connect
-        their own social accounts and spend credits.
+        daily spend cap, kill switch, live provider balances. Regular users never see this
+        — they only connect their own social accounts and spend credits.
       </p>
 
       <div className="honest" style={{ marginTop: 16 }}>
         <b>API keys are set as environment variables in Vercel (web) and Railway (pipeline) — not in the database.</b>
         Required keys: ANTHROPIC_API_KEY (scripts+strategy), GEMINI_API_KEY (images),
         SUPABASE_SERVICE_ROLE_KEY. Optional: ELEVENLABS_API_KEY, OPENROUTER_API_KEY,
-        GROQ_API_KEY, STRIPE_SECRET_KEY.
+        GROQ_API_KEY, RAILWAY_API_TOKEN (for live Railway balance below), STRIPE_SECRET_KEY.
       </div>
 
       <div style={{ marginTop: 28 }}>
@@ -47,8 +48,11 @@ export default async function ConsolePage() {
           initialModel={model.model || ""}
           initialBudget={typeof budget === "number" ? budget : 1.5}
           spentToday={spent}
+          initialAutoFallback={model.auto_fallback !== false}
         />
       </div>
+
+      <ProviderBalances />
 
       <div style={{ marginTop: 28 }}>
         <AdminActions />

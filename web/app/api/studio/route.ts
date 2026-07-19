@@ -77,11 +77,23 @@ export async function POST(req: Request) {
     if (!["anthropic", "gemini", "openrouter", "groq"].includes(provider))
       return NextResponse.json({ error: "Unknown provider." }, { status: 400 });
     const model = String(body.model || "").slice(0, 80);
+    const auto_fallback = body.auto_fallback !== false; // default true
     const { error } = await sb.from("settings").upsert(
-      { tenant_id: TENANT, key: "model", value: { provider, model }, updated_at: new Date().toISOString() },
+      { tenant_id: TENANT, key: "model", value: { provider, model, auto_fallback }, updated_at: new Date().toISOString() },
       { onConflict: "tenant_id,key" });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, provider, model });
+    return NextResponse.json({ ok: true, provider, model, auto_fallback });
+  }
+  if (action === "set_autofallback") {
+    const on = body.on !== false;
+    // Read current model row to preserve provider/model
+    const { data: cur } = await sb.from("settings").select("value").eq("tenant_id", TENANT).eq("key", "model").maybeSingle();
+    const existing = (cur?.value as any) || { provider: "anthropic" };
+    const { error } = await sb.from("settings").upsert(
+      { tenant_id: TENANT, key: "model", value: { ...existing, auto_fallback: on }, updated_at: new Date().toISOString() },
+      { onConflict: "tenant_id,key" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, auto_fallback: on });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }

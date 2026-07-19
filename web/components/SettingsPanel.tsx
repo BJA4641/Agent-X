@@ -8,11 +8,12 @@ const PROVIDERS = [
   { id: "groq", name: "Llama 3.3 70B (Groq)", cost: "FREE tier", note: "Fastest option. Needs GROQ_API_KEY in Railway (console.groq.com → free signup).", free: true },
 ];
 
-export default function SettingsPanel({ isAdmin, initialProvider, initialModel, initialBudget, spentToday }:
-  { isAdmin: boolean; initialProvider: string; initialModel: string; initialBudget: number; spentToday: number }) {
+export default function SettingsPanel({ isAdmin, initialProvider, initialModel, initialBudget, spentToday, initialAutoFallback = true }:
+  { isAdmin: boolean; initialProvider: string; initialModel: string; initialBudget: number; spentToday: number; initialAutoFallback?: boolean }) {
   const [provider, setProvider] = useState(initialProvider);
   const [model, setModel] = useState(initialModel);
   const [budget, setBudget] = useState(initialBudget);
+  const [autoFallback, setAutoFallback] = useState(initialAutoFallback);
   const [msg, setMsg] = useState("");
 
   if (!isAdmin) return (
@@ -29,12 +30,37 @@ export default function SettingsPanel({ isAdmin, initialProvider, initialModel, 
   return (
     <>
       <h2 style={{ marginTop: 32 }}>AI engine</h2>
-      <p className="note" style={{ maxWidth: 640 }}>
+      <p className="note" style={{ maxWidth: 680 }}>
         Which model writes your scripts, critiques, captions, and strategy. Takes effect within a minute — no redeploy.
-        If the chosen model&apos;s key is missing or it fails, the factory automatically falls back to whatever key it has, so
-        production never stops.
       </p>
-      <div className="grid" style={{ marginTop: 12 }}>
+
+      {/* Auto-fallback banner — makes the "agents auto-switch modules" promise explicit */}
+      <div className="card" style={{
+        marginTop: 12, padding: 14,
+        background: "linear-gradient(90deg, rgba(34,197,94,0.08), transparent)",
+        border: "1px solid rgba(34,197,94,0.25)",
+        display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+      }}>
+        <span style={{ fontSize: 22 }}>🛡️</span>
+        <div style={{ flex: "1 1 300px" }}>
+          <b>Auto-fallback is {autoFallback ? "ON" : "OFF"}</b>
+          <div className="note" style={{ fontSize: 12, marginTop: 2 }}>
+            When ON (recommended): agents try your chosen provider first; if the key is missing, rate-limited, out of
+            credits, or errors, they <b>automatically rotate</b> to the next working provider
+            (Anthropic → Gemini → Groq → OpenRouter). Production never stops because of one dead wallet.
+          </div>
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={autoFallback}
+            onChange={(e) => { setAutoFallback(e.target.checked); post({ action: "set_autofallback", on: e.target.checked }, e.target.checked ? "Auto-fallback ON ✓" : "Auto-fallback OFF — agents will fail on dead keys"); }}
+          />
+          <span className="mono" style={{ fontSize: 12 }}>{autoFallback ? "Enabled" : "Disabled"}</span>
+        </label>
+      </div>
+
+      <div className="grid" style={{ marginTop: 14 }}>
         {PROVIDERS.map((p) => (
           <label key={p.id} className="card" style={{ cursor: "pointer", borderColor: provider === p.id ? "var(--approved)" : undefined }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -49,7 +75,7 @@ export default function SettingsPanel({ isAdmin, initialProvider, initialModel, 
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
         <input className="mono" placeholder="custom model id (optional)" value={model} onChange={(e) => setModel(e.target.value)}
                style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 12px", color: "inherit", minWidth: 260 }} />
-        <button onClick={() => post({ action: "set_model", provider, model }, "Engine saved ✓ — active within a minute")}>Save engine</button>
+        <button onClick={() => post({ action: "set_model", provider, model, auto_fallback: autoFallback }, "Engine saved ✓ — active within a minute")}>Save engine</button>
       </div>
 
       <h2 style={{ marginTop: 32 }}>Daily spend limit</h2>

@@ -52,7 +52,6 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const patch: Record<string, any> = {};
   if (body.paused !== undefined) {
     patch.paused = !!body.paused;
-    // When pausing -> set status accordingly; resuming -> re-kickoff architect if docs missing
     if (patch.paused) patch.status = "paused";
   }
   if (body.daily_budget_usd !== undefined) {
@@ -65,12 +64,47 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (body.handle) patch.handle = String(body.handle).replace(/^@/, "").slice(0, 60);
   if (body.config && typeof body.config === "object") patch.config = body.config;
 
-  // If resuming and account was paused, put back to needs_setup or ready
+  // If resuming and account was paused:
+  //  - put back to needs_setup or ready
+  //  - CLEAR any stuck rejected/failed board items from previous run so they
+  //    don't look like "new rejections" (fixes the "stop work rejected all ideas" bug)
   if (body.paused === false) {
     const { data: existing } = await admin.from("account_documents")
       .select("doc_type").eq("account_id", params.aid).limit(5);
     const hasAll5 = (existing || []).length >= 5;
     patch.status = hasAll5 ? "ready" : "needs_setup";
+    // Remove board_items from a prior run that were stuck in a failed/rejected/drafted
+    // state so the fresh v5 run starts clean:
+    try {
+      await admin.from("board_items")
+        .delete()
+        .eq("account_id", params.aid)
+        .in("status", ["rejected","failed"]);
+      // Reset in-progress items back to idea so they can be reconsidered fresh
+      await admin.from("board_items")
+        .update({ status: "idea" })
+        .eq("account_id", params.aid)
+        .in("status", ["drafted","approved","scheduled"]);
+      // Also clear stuck jobs for this account
+      await admin.from("jobs")
+        .update({ status: "failed", error: "cancelled by account resume" })
+        .eq("account_id", params.aid)
+        .in("status", ["queued","claimed","in_progress","blocked"]);
+    } catch (e) {
+      // Non-fatal — tables may not exist on older deploys
+    }
+  }
+
+  // If PAUSING: don't reject existing ideas (fixes the "stop work rejected everything" bug).
+  // Instead leave items in place — the worker simply skips them while paused.
+  if (body.paused === true) {
+    // Only cancel in-flight jobs; leave board_items as-is so they resume later.
+    try {
+      await admin.from("jobs")
+        .update({ status: "blocked", error: "account paused" })
+        .eq("account_id", params.aid)
+        .in("status", ["queued","claimed","in_progress"]);
+    } catch {}
   }
 
   const { data, error } = await admin.from("project_accounts")
