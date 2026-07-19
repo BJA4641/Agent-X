@@ -8,11 +8,16 @@ type Group = { label: string; items: Item[] };
 export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarded?: boolean }) {
   const path = usePathname();
   const groups: Group[] = [
+    { label: "Overview", items: [
+      { href: "/dashboard", label: "Home" },
+      { href: "/dashboard/projects", label: "Projects" },
+      { href: "/dashboard/performance", label: "Performance" },
+    ]},
     { label: "Create", items: [
-      { href: "/dashboard/studio", label: "Studio · production", tag: admin ? "admin" : undefined },
+      { href: "/studio", label: "Studio · production", tag: admin ? "admin" : undefined },
       { href: "/dashboard/workspace", label: "Agent workspace" },
       { href: "/dashboard/clone", label: "Clone viral" },
-      { href: "/dashboard/trends", label: "Trends · scout desk", tag: admin ? "admin" : undefined },
+      { href: "/trends", label: "Trends · scout desk", tag: admin ? "admin" : undefined },
     ]},
     { label: "Social platforms", items: [
       { href: "/dashboard/instagram", label: "Instagram" },
@@ -20,21 +25,24 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
       { href: "/dashboard/tiktok", label: "TikTok" },
       { href: "/dashboard/affiliate", label: "Affiliate links" },
     ]},
-    { label: "Monetize", items: [
+    { label: "Sell & earn", items: [
       { href: "/dashboard/store", label: "Ecommerce · rebrand" },
       { href: "/dashboard/digital", label: "Digital products" },
     ]},
     { label: "Account", items: [
       { href: "/dashboard/wallet", label: "Wallet & billing" },
       { href: "/dashboard/models", label: "AI models" },
-      { href: "/dashboard/settings", label: "Settings" },
+      { href: "/dashboard/settings", label: "Channel settings" },
     ]},
   ];
-  if (admin) { /* admin-only items tagged above */ }
+  if (admin) {
+    groups.push({ label: "Admin", items: [
+      { href: "/dashboard/console", label: "Developer console" },
+    ]});
+  }
   const on = (href: string) => path === href || (href !== "/dashboard" && path.startsWith(href));
   return (
     <aside className="sidebar">
-      <Link href="/dashboard" className={"sideitem" + (path === "/dashboard" ? " on" : "")}>Overview</Link>
       {!onboarded && (
         <Link href="/dashboard/onboarding" className="sideitem on" style={{ borderLeft: "3px solid var(--draft)" }}>
           → Finish setup

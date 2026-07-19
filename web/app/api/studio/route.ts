@@ -5,22 +5,32 @@ import { isAdmin } from "@/lib/admin";
 const TENANT = process.env.TENANT_ID || "me";
 
 export async function POST(req: Request) {
-  const { data: { user } } = await supabaseServer().auth.getUser();
-  if (!user || !isAdmin(user.email)) return NextResponse.json({ error: "Admins only." }, { status: 403 });
+  const sbServer = supabaseServer();
+  const admin = supabaseAdmin();
+  const { data: { user } } = await sbServer.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Login required" }, { status: 401 });
   const body = await req.json();
   const { action, itemId, reason, hookIndex } = body;
-  const sb = supabaseAdmin();
+  const adminUser = isAdmin(user.email);
 
+  // queue_topic is allowed for ANY logged-in user (used from workspace order box, clone page, trends)
   if (action === "queue_topic") {
     const { topic, source } = body;
     if (!topic) return NextResponse.json({ error: "topic required" }, { status: 400 });
-    const { error } = await sb.from("board_items").insert({
+    const { error } = await admin.from("board_items").insert({
       tenant_id: TENANT, status: "idea", topic: String(topic).slice(0, 200),
-      payload: { bucket: "proven", source: source || null, queued_by: "trends-desk" },
+      payload: {
+        bucket: source === "trends-desk" ? "proven" : "user",
+        source: source || "workspace",
+        queued_by: user.id,
+      },
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
+
+  if (!adminUser) return NextResponse.json({ error: "Admins only." }, { status: 403 });
+  const sb = admin;
 
   if (action === "pick_hook") {
     const { data: cur } = await sb.from("board_items").select("payload").eq("id", itemId).single();

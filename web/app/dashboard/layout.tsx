@@ -27,6 +27,7 @@ export default async function DashLayout({ children }: { children: React.ReactNo
         <Link href="/dashboard" className="logo" style={{ textDecoration: "none" }}>Agent<b>-X</b></Link>
         <nav className="top">
           {admin && <Link href="/studio">Studio</Link>}
+          {admin && <Link href="/trends">Trends</Link>}
           <Link href="/dashboard">Dashboard</Link>
           <span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>{user.email}</span>
           <ThemeToggle />

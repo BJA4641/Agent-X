@@ -8,14 +8,20 @@ export default async function StudioLayout({ children }: { children: React.React
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) redirect("/login");
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) redirect("/login");
+  const admin = isAdmin(user.email);
   return (
     <>
       <header className="site"><div className="wrap">
-        <Link href="/" className="logo" style={{ textDecoration: "none" }}>Agent<b>-X</b> <span className="tag" style={{ marginLeft: 8 }}>studio</span></Link>
-        <nav className="top"><span style={{ color: "var(--dim)", fontSize: 14 }}>{user.email}</span></nav>
+        <Link href="/dashboard" className="logo" style={{ textDecoration: "none" }}>Agent<b>-X</b> <span className="tag" style={{ marginLeft: 8 }}>studio</span></Link>
+        <nav className="top">
+          <Link href="/dashboard">Dashboard</Link>
+          {admin && <Link href="/studio">Studio</Link>}
+          {admin && <Link href="/trends">Trends</Link>}
+          <span style={{ marginLeft: 24, color: "var(--dim)", fontSize: 14 }}>{user.email}</span>
+        </nav>
       </div></header>
       <div className="wrap shell">
-        <Sidebar admin={isAdmin(user.email)} />
+        <Sidebar admin={admin} onboarded={true} />
         <main className="shellmain">{children}</main>
       </div>
     </>
