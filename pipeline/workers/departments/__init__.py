@@ -6,7 +6,7 @@ if TYPE_CHECKING:
 
 from . import finance, portfolio, research, editorial, creative, postprod
 from . import distribution, analytics, cqo, risk, knowledge
-from . import ops, human_desk, experiments, brand_studio, monetization
+from . import ops, human_desk, experiments, brand_studio, monetization, ceo
 
 
 def register_all(worker: "Worker"):
@@ -14,6 +14,7 @@ def register_all(worker: "Worker"):
     finance.register(worker)
     cqo.register(worker)
     risk.register(worker)
+    ceo.register(worker)   # v5.5: CEO gates every spend decision
     # Brand (must run before editorial so bible is ready)
     brand_studio.register(worker)
     # Production pipeline
@@ -26,7 +27,7 @@ def register_all(worker: "Worker"):
     distribution.register(worker)
     analytics.register(worker)
     knowledge.register(worker)
-    # Phase 3 additions
+    # Phase 3+ additions
     ops.register(worker)
     human_desk.register(worker)
     experiments.register(worker)

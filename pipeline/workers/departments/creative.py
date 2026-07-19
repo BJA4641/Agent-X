@@ -7,7 +7,7 @@ render:      runs orchestrator.produce's render pipeline (voice + visuals +
               at output/<id>.mp4. Sends to post-production for polish.
 """
 from __future__ import annotations
-import os, time, traceback
+import os, time, json, traceback
 from agentcore import Worker, Job, AgentContext, Priority, FatalError
 from ..common import (board_patch_payload, board_get, OUTPUT_DIR,
                       brand_context_for, job_of, load_account)
@@ -34,17 +34,45 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
         w.fail_job(job, "creative.write_script: no topic", fatal=True)
         return
 
-    # v5.3 BUG FIX: preflight check BEFORE spending on script LLM call
-    from ..common import kill_switch, hard_budget_ok, remaining_budget
+    # v5.5 CEO GATE: ask CEO before spending any money
+    from ..common import kill_switch, hard_budget_ok, remaining_budget, ceo_decide
     if kill_switch():
         bus.agent("brain", "⏸ kill switch on — write held", "warn", "script_held",
                   job_id=job.id, item_id=item_id)
         w.queue.complete(job, {"ok": False, "paused": True})
         return
+    # CEO decision
+    if sb:
+        d = ceo_decide(sb, "write_script", account_id=account_id, est_cost=0.04,
+                       department="creative", topic=topic, item_id=item_id)
+        if d["decision"] == "deny":
+            bus.agent("ceo", f"👔 CEO denied: {d['reason']}", "warn", "ceo_deny", job_id=job.id)
+            w.queue.complete(job, {"ok": False, "denied": d["reason"]})
+            return
+        if d["decision"] == "delay":
+            bus.agent("ceo", f"👔 CEO delay: {d['reason']}", "warn", "ceo_delay", job_id=job.id)
+            w.queue._update_row(job, {"status":"queued","scheduled_for":time.time()+3600,"error":d["reason"]})
+            return
+        if d["decision"] == "reuse":
+            bus.agent("ceo", f"♻️ CEO reuse asset: {d.get('reuse')}", "info", "ceo_reuse", job_id=job.id)
+            # Load reusable script & continue as if we wrote it
+            try:
+                asset_row = sb.table("asset_library").select("content").eq("id", d["reuse"]).limit(1).execute().data
+                if asset_row:
+                    script = json.loads(asset_row[0]["content"])
+                    # skip the LLM write below
+                    if sb and item_id:
+                        board_patch_payload(sb, item_id, {"script": script, "reused_from": d["reuse"]})
+                    # enqueue grade
+                    from ..common import job_of
+                    w.queue.enqueue(job_of(w, "cqo.grade_script", {"item_id": item_id, "account_id": account_id}, parent=job, priority=Priority.HIGH))
+                    w.queue.complete(job, {"ok": True, "reused": d["reuse"]})
+                    return
+            except Exception: pass
+    # Legacy budget check (belt-and-suspenders)
     if not hard_budget_ok(next_cost_usd=0.05):
         bus.agent("cfo", f"⏸ budget too low for script (${remaining_budget():.3f} left) — delaying",
                   "warn", "script_budget", job_id=job.id)
-        # Reschedule in 1 hour instead of failing
         w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
                                   "error": f"budget delay: ${remaining_budget():.3f} left"})
         return

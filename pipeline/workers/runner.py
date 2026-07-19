@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.3"
+VERSION = "5.5"
 
 
 def main():
@@ -38,6 +38,10 @@ def main():
             payload={"booted_at": now, "version": VERSION},
             priority=Priority.HIGH,
             idempotency_key=f"boot:{int(now//60)}"),
+        Job(job_type="ceo.daily_tick",
+            payload={"version": VERSION},
+            priority=Priority.HIGH,
+            idempotency_key=f"ceoday:{int(now//3600)}"),
         Job(job_type="ops.heartbeat",
             payload={"started_at": now, "version": VERSION},
             priority=Priority.LOW,
@@ -53,16 +57,17 @@ def main():
         rt.queue.enqueue(j)
 
     print("=" * 60)
-    print(f"Agent-X v{VERSION} pipeline ONLINE (Phase 3 optimized)")
+    print(f"Agent-X v{VERSION} pipeline ONLINE — CEO ENGINE ACTIVE")
     print(f"  tenant:      {os.environ.get('TENANT_ID','me')}")
-    print(f"  budget:      ${DAILY_BUDGET_USD}")
+    print(f"  budget:      ${DAILY_BUDGET_USD}/day")
     print(f"  kill:        {'ON (PAUSED)' if kill_switch_on() else 'off'}")
+    print(f"  CEO mode:    every spend requires CEO approval (ROI-gated)")
     print(f"  autothrottle: ON (reserves 10% of budget, delays low-priority work)")
+    print(f"  asset reuse: ON (searches library before generating)")
     print(f"  heartbeat:   every 30s → worker_health")
     print(f"  kpi snapshot: every 1h → kpi_snapshots")
+    print(f"  CEO review:  once/day → capital allocation + recommendations")
     print(f"  human desk:  every 20s → escalations")
-    print(f"  brand studio: auto-generates Brand Bible for new accounts")
-    print(f"  monetize:    affiliate/sponsor disclosure injection enabled")
     print(f"  handlers:    {len(worker.handlers)} jobs")
     print("=" * 60)
 

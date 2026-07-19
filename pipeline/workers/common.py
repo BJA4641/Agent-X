@@ -196,7 +196,7 @@ def brand_context_for(sb, account_id: str) -> dict:
         return empty
 
 
-# --------------------------------------------------------------------- budget / kill switch
+# --------------------------------------------------------------------- budget / kill switch / CEO gate
 
 def hard_budget_ok(next_cost_usd: float = 0.01, daily_budget: float = None) -> bool:
     from agentcore import ledger as _l, config as _cfg
@@ -204,9 +204,115 @@ def hard_budget_ok(next_cost_usd: float = 0.01, daily_budget: float = None) -> b
     return _l.budget_ok(next_cost_usd=next_cost_usd, daily_budget=cap)
 
 
+def ceo_decide(sb, action: str, *, account_id=None, est_cost: float = None,
+               department: str = None, topic: str = "", item_id=None) -> dict:
+    """v5.5: synchronously ask the CEO engine before spending money.
+
+    Returns {"decision":"approve|deny|delay|reuse|cheaper", "reason":str,
+             "reuse":asset_id?, "cheaper":tier?, "model_tier":str}.
+
+    If the worker doesn't have a queue/job handy we run the decision inline
+    (direct call) — still writes to exec_decisions for audit trail.
+    """
+    from workers.departments import ceo as _ceo
+    est = float(est_cost if est_cost is not None else
+                _ceo.EXPECTED_VALUE_BY_ACTION.get(action, {}).get("cost", 0.01))
+    # Inline fast-path (no async queue needed): run the decide logic synchronously
+    try:
+        cfg = _ceo._load_config(sb)
+        min_roi = float(cfg.get("min_roi_threshold", _ceo.DEFAULT_MIN_ROI))
+        decision = {"decision": "deny", "reason": "", "cheaper": None, "reuse": None, "model_tier": "cheap"}
+
+        if est <= 0.001:
+            decision.update(decision="approve", reason="free/cached action", model_tier="free")
+            _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
+            return decision
+
+        if not hard_budget_ok(est):
+            decision.update(decision="delay",
+                            reason=f"daily budget hit — {remaining_budget():.3f} left, need ${est:.3f}")
+            _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
+            return decision
+
+        # Brand studio: once per account
+        if action == "brand_studio" and account_id:
+            try:
+                existing = sb.table("account_documents").select("doc_type").eq("account_id", str(account_id)).limit(1).execute().data
+                if existing and len(existing) >= 5:
+                    decision.update(decision="reuse", reason="brand docs already exist", reuse="existing_brand")
+                    _ceo._record_inline(sb, account_id, "brand_studio", action, 0.0, decision)
+                    return decision
+            except Exception: pass
+
+        # Reuse check first
+        if _ceo.EXPECTED_VALUE_BY_ACTION.get(action, {}).get("reuse_ok"):
+            asset = _ceo._find_reusable(sb, action, account_id, topic=topic)
+            if asset:
+                decision.update(decision="reuse",
+                                reason=f"reusable asset (used {asset.get('usage_count',0)}x)",
+                                reuse=asset["id"])
+                _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, 0.0, decision)
+                return decision
+
+        ev = _ceo._expected_value(sb, account_id, action, est, _ceo.EXPECTED_VALUE_BY_ACTION.get(action, {}))
+        ps = _ceo._success_probability(sb, account_id, action)
+        weighted_ev = ev * ps
+        roi = weighted_ev / max(est, 0.001)
+        account_roi = _ceo._account_roi(sb, account_id)
+        days_losing = _ceo._losing_streak(sb, account_id)
+
+        if account_roi is not None:
+            if account_roi < 0.3 and days_losing >= int(cfg.get("pause_losers_after_days", 3)):
+                decision.update(decision="deny", reason=f"account ROI {account_roi:.2f}x losing for {days_losing}d")
+                _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
+                return decision
+            if account_roi > 3.0:
+                decision["model_tier"] = "mix"
+            elif account_roi < 0.8:
+                decision["model_tier"] = "cheap"
+
+        cheaper = _ceo._cheaper_alternative(action, est, cfg)
+
+        if roi >= min_roi:
+            decision.update(decision="approve",
+                            reason=f"ROI {roi:.2f}x ≥ threshold {min_roi}x")
+            if cheaper and decision["model_tier"] != "premium" and cfg.get("free_tier_preferred", True):
+                decision["cheaper"] = cheaper
+                decision["reason"] += f" · using cheaper tier ({cheaper})"
+        elif cheaper and est > 0.01:
+            decision.update(decision="cheaper",
+                            reason=f"ROI {roi:.2f}x below {min_roi}x at ${est:.3f} — try cheaper ({cheaper})",
+                            cheaper=cheaper)
+        else:
+            decision.update(decision="delay", reason=f"ROI {roi:.2f}x below threshold {min_roi}x")
+        _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
+        return decision
+    except Exception:
+        # Fail-safe: if CEO engine errors, allow cheap/free actions, deny expensive ones
+        traceback.print_exc()
+        if est <= 0.005: return {"decision":"approve","reason":"fail-safe: cheap action","model_tier":"free"}
+        return {"decision":"delay","reason":"CEO engine error — delaying non-free action"}
+
+
 def remaining_budget() -> float:
     from agentcore import ledger as _l, config as _cfg
     return max(0.0, _cfg.DAILY_BUDGET_USD - _l.spent_today())
+
+
+def remaining_account_budget(sb, account_id) -> float:
+    """v5.5: per-account remaining budget from capital_allocation."""
+    try:
+        today = __import__("datetime").date.today().isoformat()
+        r = sb.table("capital_allocation").select("budget_usd").eq("account_id", str(account_id)).eq("day", today).limit(1).execute()
+        if r.data:
+            alloc = float(r.data[0].get("budget_usd") or 0)
+            # subtract today's spend for that account
+            s = sb.table("run_ledger").select("cost_usd").eq("account_id", str(account_id)).gte("created_at", today).execute()
+            spent = sum(float(x.get("cost_usd") or 0) for x in (s.data or []))
+            return max(0.0, alloc - spent)
+    except Exception:
+        return remaining_budget()
+    return remaining_budget()
 
 
 def kill_switch() -> bool:
