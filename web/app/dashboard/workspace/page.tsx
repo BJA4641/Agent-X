@@ -22,6 +22,8 @@ const AGENT_META: Record<string,{label:string;color:string;emoji:string}> = {
   community: { label: "Community", color: "#f59e0b", emoji: "💬" },
   digest:    { label: "Digest",    color: "#94a3b8", emoji: "📬" },
   budget:    { label: "Budget",    color: "#4ade80", emoji: "💰" },
+  architect: { label: "Architect", color: "#f472b6", emoji: "🏗️" },
+  strategist:{ label: "Strategist",color: "#eab308", emoji: "📋" },
   you:       { label: "You",       color: "#e2e8f0", emoji: "👤" },
 };
 

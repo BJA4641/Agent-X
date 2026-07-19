@@ -9,7 +9,7 @@ Emits visible agent_events at every step and uses agency-grade v2 renderer:
 import os, time
 from . import (music, community, digest, distribution, config, ledger, board,
                brain, voice, visuals, composer, publishing, analytics, strategy,
-               events, captions, sfx)
+               events, captions, sfx, architect, strategist as account_strategist)
 
 OUT = os.path.join(os.path.dirname(__file__), "..", "output")
 os.makedirs(OUT, exist_ok=True)
@@ -169,6 +169,17 @@ def tick(stub=False):
         events.emit("system", "KILL SWITCH IS ON — tick refused.", "warn", "killed")
         print("KILL SWITCH ON — tick refused.")
         return
+
+    # 0b) Project/Account setup: architects write brand docs, strategists plan kickoff posts
+    try:
+        n_arch = architect.run(limit=1)
+        if n_arch:
+            events.emit("architect", f"Architected {n_arch} new account(s) this tick.", "success", "architect_tick")
+        n_strat = account_strategist.run(limit=1)
+        if n_strat:
+            events.emit("strategist", f"Strategized kickoff posts for {n_strat} account(s) this tick.", "success", "strategist_tick")
+    except Exception as e:
+        events.error("architect", f"Account setup tick error: {str(e)[:200]}")
 
     # 1) plan if the idea queue is low
     ideas = board.list("idea")

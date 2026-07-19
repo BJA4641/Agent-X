@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { supabaseServer, supabaseAdmin } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import SettingsPanel from "@/components/SettingsPanel";
+import AdminActions from "@/components/AdminActions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,10 @@ export default async function ConsolePage() {
           initialBudget={typeof budget === "number" ? budget : 1.5}
           spentToday={spent}
         />
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <AdminActions />
       </div>
     </div>
   );
