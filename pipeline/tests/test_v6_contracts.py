@@ -265,3 +265,29 @@ def test_soft_pause_reads_settings(monkeypatch):
         monkeypatch.setattr(cfg, "supabase",
                             lambda f=flag: types.SimpleNamespace(table=lambda n: _T(f)))
         assert cfg.soft_pause_on() is flag
+
+
+# ---------------------------------------------------------------- v5.7.1 quality contracts
+
+def test_generic_ai_filter_blocks_offniche_topics():
+    """v5.7.1: skincare/pet accounts must never receive generic-AI topics."""
+    from workers.departments.editorial import _is_generic_ai
+    assert _is_generic_ai(" 3 free ai tools that replace paid apps ")
+    assert _is_generic_ai(" the ai setting everyone should turn off ")
+    assert _is_generic_ai(" i asked chatgpt to plan my week ")
+    assert not _is_generic_ai(" 3 skincare mistakes that age you faster ")
+    assert not _is_generic_ai(" the toy cats go crazy for that costs $0 ")
+
+
+def test_grader_skip_never_fakes_scores(monkeypatch):
+    """v5.7.1: when LLM/budget gate is closed, grader must mark skipped=True."""
+    from agent import grader as g
+    monkeypatch.setattr(g.llm, "ready", lambda: False)
+    monkeypatch.setattr(g, "_save_grade", lambda *a, **k: None)
+    monkeypatch.setattr(g.events, "emit", lambda *a, **k: None)
+    monkeypatch.setattr(g.memory, "context_block", lambda *a, **k: "")
+    monkeypatch.setattr(g.memory, "load_grade_feedback", lambda *a, **k: "")
+    monkeypatch.setattr(g.memory, "remember", lambda *a, **k: None, raising=False)
+    v = g.grade_post({"hook": "x", "beats": [{"vo": "y"}]})
+    assert v.get("skipped") is True
+    assert v.get("passed") is False

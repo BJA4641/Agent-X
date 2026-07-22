@@ -101,7 +101,15 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
         memory=mem, past_feedback=past or "none", trends=trends, content=content)
 
     verdict = _default_verdict()
-    if llm.ready() and ledger.budget_ok(0.015):
+    _gate = llm.ready() and ledger.budget_ok(0.015)
+    if not _gate:
+        # v5.7.1: grader can't actually run (no LLM key or daily budget spent).
+        # Say so honestly instead of emitting fake 6.0 scores that trigger
+        # PAID rewrites. Caller must park the draft, not rewrite it.
+        verdict["skipped"] = True
+        verdict["notes"] = "grader skipped — LLM unavailable or daily budget exhausted"
+        verdict["fix"] = "hold for human review"
+    if _gate:
         try:
             text, cost, mlabel = llm.chat(prompt, max_tokens=500)
             ledger.record("grader", model=mlabel, cost_usd=cost, item_id=item_id)

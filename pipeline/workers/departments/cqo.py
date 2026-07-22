@@ -40,6 +40,27 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
               "info", "cqo_grade_start", job_id=job.id)
     verdict = _g.grade_post(script, account_id=account_id, project_id=project_id,
                             item_id=item_id)
+
+    # v5.7.1: if the grader could not actually run (budget/LLM gate), do NOT
+    # burn money on blind rewrites against a fail-safe score. Park the draft
+    # as UNGRADED on the board — the human in Studio is the final gate anyway.
+    if verdict.get("skipped"):
+        bus.agent("cqo", "⚠️ grader unavailable (budget/LLM) — parking draft UNGRADED for human review, $0 spent",
+                  "warn", "cqo_skipped", job_id=job.id)
+        if sb and item_id:
+            try:
+                row = sb.table("board_items").select("payload").eq("id", item_id).limit(1).execute().data
+                payload = dict((row and row[0].get("payload")) or {})
+                payload["script"] = script
+                payload["grade"] = {"skipped": True, "reason": verdict.get("notes", "")}
+                sb.table("board_items").update({
+                    "status": "drafted", "payload": payload,
+                }).eq("id", item_id).execute()
+            except Exception:
+                pass
+        w.queue.complete(job, {"ok": True, "skipped": True, "parked": "drafted"})
+        return
+
     overall = float(verdict.get("overall") or 0)
     scores = verdict.get("scores") or {}
     fix = (verdict.get("fix") or verdict.get("fix_instruction") or "weak content")[:400]

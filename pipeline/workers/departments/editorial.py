@@ -112,6 +112,12 @@ def plan_one(w: Worker, job: Job, ctx: AgentContext):
     w.queue.complete(job, {"ok": True, "item_id": item_id, "topic": topic})
 
 
+def _is_generic_ai(low: str) -> bool:
+    """True if a topic is generic-AI content (blocked for non-AI niches)."""
+    return any(w in low for w in ("chatgpt", "claude", "gemini", "ai tool", "gpt",
+                                  " ai ", "free ai", "ai app", "ai setting", "a.i"))
+
+
 def _pick_topics(n: int, account=None, account_id=None) -> list:
     """Return [(topic, bucket)] — niche-aware."""
     niche = ((account or {}).get("niche") or "").lower().replace("_", " ").replace("-", " ")
@@ -138,9 +144,13 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
             elif isinstance(t, str):
                 topic = t
             topic = topic.strip()
-            if topic and topic.lower() not in seen:
+            low = topic.lower()
+            # v5.7.1: legacy strategy's corpus is AI-niche — filter it like trends
+            if niche and niche not in ("ai", "ai tools", "ai_tools", "tech") and _is_generic_ai(" " + low + " "):
+                continue
+            if topic and low not in seen:
                 topics.append((topic[:120], bucket))
-                seen.add(topic.lower())
+                seen.add(low)
     except Exception as e:
         print(f"[editorial] strategy.plan failed: {e}")
 
@@ -164,8 +174,7 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
                 title = t if isinstance(t, str) else (t.get("title") if isinstance(t, dict) else "")
                 if not title: continue
                 low = title.lower()
-                if niche and niche not in ("ai","ai tools","ai_tools","tech") and \
-                   any(w in low for w in ("chatgpt","claude","gemini","ai tool","gpt")):
+                if niche and niche not in ("ai","ai tools","ai_tools","tech") and _is_generic_ai(" " + low + " "):
                     continue  # skip generic AI topics if this isn't an AI account
                 if low not in seen:
                     topics.append((title[:120], "trend")); seen.add(low)
@@ -184,6 +193,14 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
 def _niche_evergreens(niche: str) -> list:
     """Return clone-the-angle evergreen topics tailored to niche."""
     n = niche.lower()
+    if any(k in n for k in ("skin", "beauty", "glow", "makeup", "self care", "selfcare", "grooming")):
+        return [
+            "The 3-second test that shows if your moisturizer actually works",
+            "Why your skin looks worse right after washing (1-step fix)",
+            "The $8 drugstore product dermatologists quietly recommend",
+            "3 skincare mistakes that age you faster",
+            "The morning habit that clears skin faster than any serum",
+        ]
     if any(k in n for k in ("cat", "kitten", "pet", "dog", "animal")):
         return [
             "The one thing your cat does that means 'I love you'",
