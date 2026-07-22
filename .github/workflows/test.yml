@@ -1,0 +1,39 @@
+# Agent-X CI — runs on every push/PR to main.
+# Rule: if this is RED, do NOT deploy. This is the gate that would have
+# caught the grade_feedback outage before it shipped.
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  pipeline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Dummy env so imports/config never touch real infra in CI
+      SUPABASE_URL: "http://localhost:54321"
+      SUPABASE_SERVICE_KEY: "ci-dummy"
+      TENANT_ID: "ci"
+      DAILY_BUDGET_USD: "0.00"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install deps
+        run: |
+          cd pipeline
+          pip install -r requirements.txt
+          pip install pytest
+      - name: Boot check (70-module import gate)
+        run: |
+          cd pipeline
+          python boot_check.py
+      - name: Run tests
+        run: |
+          cd pipeline
+          python -m pytest tests/ -v
