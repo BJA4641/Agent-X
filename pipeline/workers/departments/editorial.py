@@ -192,13 +192,18 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
     if len(topics) < n:
         try:
             from agent import scout as _s
-            trends = _s.recent_trends(n * 3) or []
+            # v5.8.1 FIX: recent_trends() returns a prompt STRING — the old code
+            # iterated its CHARACTERS, creating literal one-letter board topics
+            # ("U", "C"). Use the structured title list instead, guarded.
+            trends = _s.recent_trend_titles(n * 3, niche=niche) if hasattr(_s, "recent_trend_titles") else []
+            if not isinstance(trends, list):
+                trends = []
             niche_kw = niche.split() if niche else []
             # First pass: niche matches
             for t in trends:
                 if len(topics) >= n: break
                 title = t if isinstance(t, str) else (t.get("title") if isinstance(t, dict) else "")
-                if not title: continue
+                if not title or len(title.strip()) < 8: continue
                 low = title.lower()
                 if niche_kw and any(kw in low for kw in niche_kw) and low not in seen:
                     topics.append((title[:120], "trend")); seen.add(low)
@@ -206,7 +211,7 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
             for t in trends:
                 if len(topics) >= n: break
                 title = t if isinstance(t, str) else (t.get("title") if isinstance(t, dict) else "")
-                if not title: continue
+                if not title or len(title.strip()) < 8: continue
                 low = title.lower()
                 if niche and niche not in ("ai","ai tools","ai_tools","tech") and _is_generic_ai(" " + low + " "):
                     continue  # skip generic AI topics if this isn't an AI account

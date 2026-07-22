@@ -91,7 +91,7 @@ export default function StudioBoard({ items, killOn, softOn, econOn }: { items: 
           <h3 style={{ color: COLOR[status], fontFamily: "var(--font-mono)", fontSize: 13, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>
             {status} · {list.length}
           </h3>
-          <div className="steps">
+          <div className="steps boardcols">
             {list.map((it) => (
               <div className="step" key={it.id} style={{ borderLeft: `3px solid ${COLOR[it.status]}` }}>
                 <span style={{ flex: 1 }}>

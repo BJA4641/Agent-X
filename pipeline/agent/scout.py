@@ -157,6 +157,16 @@ def recent_trends(limit: int = 5, niche: str = "") -> str:
     return "\n".join(out_lines)
 
 
+def recent_trend_titles(limit: int = 6, niche: str = "") -> list:
+    """v5.8.1: STRUCTURED list of recent hot titles (for topic pickers).
+    recent_trends() returns prompt TEXT — iterating it yields characters."""
+    try:
+        return [t for t in (_fetch_recent_titles(limit=limit, niche=niche) or [])
+                if isinstance(t, str) and len(t.strip()) >= 8]
+    except Exception:
+        return []
+
+
 def _fetch_recent_titles(limit: int = 3, niche: str = "") -> list:
     """Pull recent trend titles from Supabase, sorted client-side by heat (desc).
     v5.4: filters by niche when provided."""

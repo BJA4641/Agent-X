@@ -33,10 +33,10 @@ export default async function DashLayout({ children }: { children: React.ReactNo
           <ThemeToggle />
         </nav>
       </div></header>
-      <div className="wrap shell" style={{ display: "grid", gridTemplateColumns: "220px minmax(0,1fr) 300px", gap: 32, alignItems: "start" }}>
+      <div className="wrap shell">
         <Sidebar admin={admin} onboarded={onboarded} />
         <main className="shellmain">{children}</main>
-        <RightPanel />
+        <div className="rightpanel"><RightPanel /></div>
       </div>
     </>
   );

@@ -205,8 +205,11 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
                     if sb and item_id:
                         board_patch_payload(sb, item_id, {"script": script, "reused_from": d["reuse"]})
                     # enqueue grade
-                    from ..common import job_of
-                    w.queue.enqueue(job_of(w, "cqo.grade_script", {"item_id": item_id, "account_id": account_id}, parent=job, priority=Priority.HIGH))
+                    # v5.8.1 FIX: the local `from ..common import job_of` here shadowed
+                    # the module-level import for the WHOLE function -> UnboundLocalError
+                    # on every normal write (circuit breaker + auto kill switch). Also
+                    # job_of() enqueues internally; wrapping it in enqueue() double-queued.
+                    job_of(w, "cqo.grade_script", {"item_id": item_id, "account_id": account_id}, parent=job, priority=Priority.HIGH)
                     w.queue.complete(job, {"ok": True, "reused": d["reuse"]})
                     return
             except Exception: pass
