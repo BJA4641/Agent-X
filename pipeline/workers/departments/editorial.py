@@ -32,12 +32,25 @@ def ideate(w: Worker, job: Job, ctx: AgentContext):
     account_id = job.payload.get("account_id") or job.account_id
     target = int(job.payload.get("target_posts") or 1)
 
-    # ----- BUDGET / KILL SWITCH PREFLIGHT -----
+    # ----- BUDGET / KILL SWITCH / CEO PREFLIGHT -----
     if kill_switch():
         bus.agent("strategist", "⏸ kill switch on — ideation skipped",
                   "info", "ideate_paused", job_id=job.id)
         w.queue.complete(job, {"ok": True, "paused": True})
         return
+    # v5.5 CEO gate for ideation
+    if sb:
+        from ..common import ceo_decide
+        d = ceo_decide(sb, "ideate", account_id=account_id, est_cost=0.02,
+                       department="editorial", topic="", item_id=None)
+        if d["decision"] == "deny":
+            bus.agent("ceo", f"👔 CEO denied ideation: {d['reason']}", "warn", "ceo_deny_ideate", job_id=job.id)
+            w.queue.complete(job, {"ok": False, "denied": d["reason"]})
+            return
+        if d["decision"] == "delay":
+            bus.agent("ceo", f"👔 CEO delay ideation: {d['reason']}", "warn", "ceo_delay_ideate", job_id=job.id)
+            w.queue._update_row(job, {"status":"queued","scheduled_for":time.time()+3600,"error":d["reason"]})
+            return
     if not hard_budget_ok(next_cost_usd=0.02):
         bus.agent("cfo", f"⏸ budget too thin to ideate (${remaining_budget():.3f} left) — skipping",
                   "warn", "ideate_budget", job_id=job.id)

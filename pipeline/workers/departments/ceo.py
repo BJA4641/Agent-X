@@ -229,10 +229,28 @@ def ceo_record_outcome(w: Worker, job: Job, ctx: AgentContext):
     """After an action finishes, update the asset_library (if reusable) and record ROI."""
     p = job.payload or {}
     sb = w.sb
+    bus = ctx.deps["bus"]
     try:
-        if p.get("store_asset") and p.get("asset_type") and p.get("content"):
-            _store_asset(sb, p["asset_type"], p["content"], account_id=p.get("account_id"),
-                         niche=p.get("niche"), cost=p.get("cost_usd",0), tags=p.get("tags",[]))
+        if p.get("store_asset") and p.get("asset_type"):
+            # Media assets (video_path/image_path/voice_path) carry a blob_path; content is a path str
+            asset_type = p["asset_type"]
+            content = p.get("content") or ""
+            blob_path = p.get("blob_path")
+            perf = p.get("performance_score")
+            if asset_type in ("video_path","image_path","voice_path") and not blob_path:
+                blob_path = content  # path string itself is the blob reference
+                content = ""  # don't bloat content column with filesystem path
+            if content or blob_path:
+                _store_asset(sb, asset_type, content, account_id=p.get("account_id"),
+                             niche=p.get("niche"), cost=p.get("cost_usd",0),
+                             tags=p.get("tags",[]), perf_score=perf, blob_path=blob_path)
+                bus.agent("ceo", f"♻️ stored reusable {asset_type} asset", "info",
+                          "asset_stored", job_id=job.id, item_id=p.get("item_id"))
+        # Optional revenue_event record (e.g. affiliate click pixel firing)
+        if p.get("revenue_usd") and p.get("revenue_source"):
+            _record_revenue(sb, p.get("account_id"), p.get("item_id"),
+                            float(p["revenue_usd"]), p["revenue_source"],
+                            p.get("metadata") or {})
     except Exception:
         traceback.print_exc()
     w.queue.complete(job, {"ok": True})
@@ -250,7 +268,9 @@ def _load_config(sb) -> dict:
 
 
 def _find_reusable(sb, action: str, account_id, topic: str = "") -> Optional[dict]:
-    """Search asset_library for a reusable asset of the matching type/niche."""
+    """Search asset_library for a reusable asset of the matching type/niche.
+    v5.5 P0: also considers blob_path for media assets (video/image/voice).
+    """
     asset_type_map = {
         "write_script": "script",
         "render_image": "image_path",
@@ -266,10 +286,15 @@ def _find_reusable(sb, action: str, account_id, topic: str = "") -> Optional[dic
         if account_id:
             q = q.or_(f"account_id.eq.{account_id},account_id.is.null")
         r = q.limit(5).order("performance_score", desc=True).execute()
-        candidates = [c for c in (r.data or []) if c.get("performance_score",0) >= 0.6]
+        candidates = [c for c in (r.data or []) if c.get("performance_score", 0 if c.get("performance_score") is not None else 0.7) >= 0.6]
         if candidates:
             # bump usage_count
             best = candidates[0]
+            # If it's a media asset and blob_path/path no longer exists, skip
+            if asset_type in ("video_path","image_path","voice_path"):
+                path = best.get("blob_path") or best.get("content")
+                if path and not os.path.exists(path):
+                    return None
             sb.table("asset_library").update({"usage_count": (best.get("usage_count") or 0)+1,
                                               "last_used_at": datetime.datetime.utcnow().isoformat()}).eq("id", best["id"]).execute()
             return best
@@ -278,25 +303,55 @@ def _find_reusable(sb, action: str, account_id, topic: str = "") -> Optional[dic
     return None
 
 
-def _store_asset(sb, asset_type: str, content: str, account_id=None, niche: str = "", cost: float = 0, tags: List[str] = None, perf_score: float = None):
-    """Store content as a reusable asset in asset_library (keyed by hash)."""
-    content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
+def _store_asset(sb, asset_type: str, content: str, account_id=None, niche: str = "", cost: float = 0, tags: List[str] = None, perf_score: float = None, blob_path: str = None):
+    """Store content as a reusable asset in asset_library (keyed by hash).
+    v5.5 P0 FIX: supports blob_path for media files (video/image/voice) and upserts
+    so repeated calls don't duplicate.
+    """
+    # Content keyed by hash of (type + content/blob_path + niche) so identical content dedupes
+    key_src = f"{asset_type}|{niche}|{content}|{blob_path or ''}"
+    content_hash = hashlib.sha256(key_src.encode("utf-8")).hexdigest()[:16]
     try:
-        existing = sb.table("asset_library").select("id").eq("id", content_hash).execute()
-        if existing.data: return existing.data[0]["id"]
-        sb.table("asset_library").insert({
+        existing = sb.table("asset_library").select("id,usage_count").eq("id", content_hash).execute()
+        if existing.data:
+            # Bump usage count instead of duplicating
+            cur = existing.data[0]
+            sb.table("asset_library").update({
+                "usage_count": (cur.get("usage_count") or 0) + 1,
+                "last_used_at": datetime.datetime.utcnow().isoformat(),
+            }).eq("id", content_hash).execute()
+            return content_hash
+        row = {
             "id": content_hash, "tenant_id":"me",
             "account_id": str(account_id) if account_id else None,
             "niche": niche or None, "asset_type": asset_type,
-            "content": content if len(content) < 10000 else content[:10000],
-            "tags": tags or [], "usage_count": 0,
+            "content": content if content and len(content) < 10000 else (content[:10000] if content else ""),
+            "tags": tags or [], "usage_count": 1,
             "performance_score": perf_score,
             "cost_to_make_usd": cost,
-        }).execute()
+        }
+        if blob_path:
+            row["blob_path"] = blob_path
+        sb.table("asset_library").insert(row).execute()
         return content_hash
     except Exception:
         traceback.print_exc()
         return None
+
+
+def _record_revenue(sb, account_id, item_id, amount_usd: float, source: str, metadata: dict = None):
+    """v5.5 P0: insert a revenue_events row so roi_snapshots can compute real revenue."""
+    try:
+        sb.table("revenue_events").insert({
+            "tenant_id": "me",
+            "account_id": str(account_id) if account_id else None,
+            "item_id": str(item_id) if item_id else None,
+            "amount_usd": round(float(amount_usd), 5),
+            "source": source,
+            "metadata": metadata or {},
+        }).execute()
+    except Exception:
+        traceback.print_exc()
 
 
 def _expected_value(sb, account_id, action: str, cost: float, default_cfg: dict) -> float:
@@ -400,8 +455,13 @@ def _snapshot_roi(sb):
             shares   = sum(x.get("shares",0) or 0 for x in perf)
             saves    = sum(x.get("saves",0) or 0 for x in perf)
             followers= sum(x.get("follows",0) or 0 for x in perf)
-            # Revenue TODO: affiliate conversions, sponsorships when available
+            # Revenue: sum of revenue_events for this account today (v5.5 P0)
             revenue = 0.0
+            try:
+                rev = sb.table("revenue_events").select("amount_usd").eq("account_id", aid).gte("created_at", today).execute()
+                revenue = round(sum(float(x.get("amount_usd") or 0) for x in (rev.data or [])), 5)
+            except Exception:
+                pass
             # Upsert snapshot
             sb.table("roi_snapshots").upsert({
                 "tenant_id":"me","account_id":aid,"day":today,

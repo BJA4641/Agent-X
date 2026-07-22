@@ -30,7 +30,7 @@ MODULES = [
     "agentcore.observability", "agentcore.validators",
     "agentcore.agent", "agentcore.worker",
     "agentcore.ledger", "agentcore.memory", "agentcore.events",
-    "agentcore.runtime",
+    "agentcore.runtime", "agentcore.aisuite",
     # v5 workers
     "workers",
     "workers.common", "workers.runner",
@@ -51,6 +51,7 @@ MODULES = [
     "workers.departments.experiments",
     "workers.departments.brand_studio",
     "workers.departments.monetization",
+    "workers.departments.ceo",
 ]
 
 

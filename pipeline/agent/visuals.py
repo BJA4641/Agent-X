@@ -82,7 +82,29 @@ def beat_frame(text: str, image_prompt: str, out_path: str, seed: int = 0,
 
     bg = None
     used_ai = False
-    if config.HAS_GEMINI and ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until and not is_cta:
+    # v5.5 P0 FIX: try aisuite first (honors /dashboard/models model_t2i selection),
+    # then fall back to legacy Gemini direct call, then procedural gradient.
+    if ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until and not is_cta:
+        # 1) aisuite (catalog-driven, user-selectable providers)
+        try:
+            from agentcore import aisuite
+            full_prompt = (
+                spec["prompt"] + ". " + image_prompt
+                + ". Vertical 9:16, NO TEXT whatsoever, no logos, no watermarks, no words. "
+                "Leave the bottom 30% of the frame relatively dark/neutral so subtitles can sit there. "
+                "High energy, premium, modern creator aesthetic."
+            )
+            t0 = time.time()
+            path = aisuite.generate_image(full_prompt, size="1080x1920")
+            bg = Image.open(path).convert("RGB")
+            ledger.record("visuals", model="aisuite:t2i", cost_usd=EST_COST, item_id=item_id,
+                          latency=time.time()-t0)
+            used_ai = True
+        except Exception as e:
+            ledger.record("visuals", ok=False, model="aisuite:t2i", detail=f"aisuite fail: {str(e)[:120]}",
+                          item_id=item_id)
+    # 2) Legacy Gemini direct (backup if aisuite fails or no key)
+    if bg is None and config.HAS_GEMINI and ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until and not is_cta:
         try:
             time.sleep(float(config.get("GEMINI_DELAY", "6.5")))
             full_prompt = (
@@ -99,6 +121,7 @@ def beat_frame(text: str, image_prompt: str, out_path: str, seed: int = 0,
             ledger.record("visuals", ok=False, detail=str(e)[:200], item_id=item_id)
             if "429" in str(e):
                 _gemini_cooldown_until = time.time() + 600
+    # 3) Free procedural fallback (always works)
     if bg is None:
         bg = _rich_background(seed, style)
         ledger.record("visuals", model="rich-gradient-v2", cost_usd=0, item_id=item_id)

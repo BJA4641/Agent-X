@@ -60,6 +60,42 @@ def publish(w: Worker, job: Job, ctx: AgentContext):
               f"📤 done — {len(live)} live, {len(dry)} dry-run. Receipts: {[r['platform'] for r in receipts]}",
               "success", "publish_done", job_id=job.id, item_id=item_id)
 
+    # P0 FIX: store published assets into asset_library so CEO reuse works
+    if sb and item_id:
+        try:
+            job_of(w, "ceo.record_outcome", {
+                "store_asset": True,
+                "asset_type": "video_path",
+                "content": vid,
+                "account_id": job.account_id,
+                "niche": (job.payload.get("account") or {}).get("niche") or "",
+                "cost_usd": _today_spend_for_item(sb, item_id),
+                "tags": _tags_from_payload(job.payload),
+                "item_id": item_id,
+            }, parent=job, account_id=job.account_id, project_id=job.project_id,
+               priority=Priority.LOW)
+            # Also store the script as reusable text asset
+            script = job.payload.get("script") or {}
+            if script:
+                try:
+                    import json as _json
+                    job_of(w, "ceo.record_outcome", {
+                        "store_asset": True,
+                        "asset_type": "script",
+                        "content": _json.dumps(script)[:9500],
+                        "account_id": job.account_id,
+                        "niche": (job.payload.get("account") or {}).get("niche") or "",
+                        "cost_usd": 0.0,
+                        "tags": _tags_from_payload(job.payload),
+                        "item_id": item_id,
+                    }, parent=job, account_id=job.account_id, project_id=job.project_id,
+                       priority=Priority.LOW)
+                except Exception:
+                    pass
+        except Exception as e:
+            bus.agent("ceo", f"♻️ asset store skipped (non-fatal): {str(e)[:100]}", "warn",
+                      "asset_store_skip", job_id=job.id)
+
     # Chain metrics collection after a delay (24h for real metrics)
     metrics_job = Job(
         job_type="analytics.collect_metrics",
@@ -78,6 +114,27 @@ def publish(w: Worker, job: Job, ctx: AgentContext):
     }, parent=job, account_id=job.account_id, project_id=job.project_id)
 
     w.queue.complete(job, {"ok": True, "receipts": receipts})
+
+
+def _today_spend_for_item(sb, item_id) -> float:
+    """Best-effort: pull today's spend for this item from run_ledger."""
+    try:
+        today = time.strftime("%Y-%m-%d")
+        r = sb.table("run_ledger").select("cost_usd").eq("item_id", str(item_id)).gte("created_at", today).execute()
+        return round(sum(float(x.get("cost_usd") or 0) for x in (r.data or [])), 4)
+    except Exception:
+        return 0.0
+
+
+def _tags_from_payload(p: dict) -> list:
+    tags = []
+    for k in ("niche", "bucket", "style"):
+        v = p.get(k)
+        if v: tags.append(str(v))
+    seo = p.get("seo") or {}
+    if isinstance(seo.get("hashtags"), list):
+        tags.extend(str(t) for t in seo["hashtags"][:8])
+    return list({t for t in tags if t})[:15]
 
 
 def cross_promote(w: Worker, job: Job, ctx: AgentContext):

@@ -36,6 +36,24 @@ def generate_brand_bible(w: Worker, job: Job, ctx: AgentContext):
     account = load_account(sb, account_id)
     name = (account or {}).get("name") or (account or {}).get("handle") or "new account"
 
+    # v5.5 CEO gate for brand studio (note: brand_studio is zero-cost once docs exist — CEO handles that)
+    if sb:
+        from ..common import ceo_decide, kill_switch
+        if kill_switch():
+            bus.agent("architect", "⏸ kill switch on — brand studio held", "warn", "brand_held", job_id=job.id)
+            w.queue.complete(job, {"ok": False, "paused": True})
+            return
+        d = ceo_decide(sb, "brand_studio", account_id=account_id, est_cost=0.00,
+                       department="brand_studio", topic="brand:"+niche)
+        if d["decision"] == "deny":
+            bus.agent("ceo", f"👔 CEO denied brand: {d['reason']}", "warn", "ceo_deny_brand", job_id=job.id)
+            w.queue.complete(job, {"ok": False, "denied": d["reason"]})
+            return
+        if d["decision"] == "reuse":
+            bus.agent("ceo", "♻️ brand docs already exist — marking ready", "info", "ceo_reuse_brand", job_id=job.id)
+            w.queue.complete(job, {"ok": True, "reused": True})
+            return
+
     bus.agent("architect", f"🏛️ drafting Brand Bible for {name} ({niche})", "info",
               "brand_start", job_id=job.id, account_id=account_id)
 

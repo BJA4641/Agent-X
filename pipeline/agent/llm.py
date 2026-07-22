@@ -1,16 +1,10 @@
 """llm.py — one door to every text model, switchable from the Studio without redeploy.
 
-Providers:
-  anthropic  — Claude (paid, highest quality; ~$3/M in, $15/M out)
-  gemini     — Google Gemini 2.5 Flash text (FREE tier; key already used for images)
-  openrouter — 100+ models incl. moonshotai/kimi-k2:free (FREE)
-  groq       — Llama 3.3 70B (FREE tier, very fast)
-
-Selection order: settings table row {key:"model"} (set from the Studio) -> env MODEL_PROVIDER.
-If the chosen provider's key is missing or the call fails, falls through the rest so a
-misconfigured picker can never halt the factory.
+v5.5 P0 FIX: primary path now routes through agentcore.aisuite (catalog-driven, 74 models),
+falling back to legacy direct-provider code ONLY if aisuite throws (misconfigured catalog,
+missing deps, etc). This makes the /dashboard/models model picker actually control inference.
 """
-import json, time, urllib.request
+import json, time, urllib.request, traceback
 from . import config
 
 DEFAULT_MODEL = {
@@ -51,15 +45,37 @@ def ready() -> bool:
     return any(_has_key(p) for p in DEFAULT_MODEL)
 
 def chat(prompt: str, max_tokens: int = 800):
-    """-> (text, cost_usd, model_label). Tries chosen provider, then falls through the rest.
+    """-> (text, cost_usd, model_label).
 
-    Auto-fallback is driven by the 'model' settings row's auto_fallback flag. When OFF,
-    only the chosen provider is tried (useful when you want to force-debug a specific
-    model). When ON (default), it rotates through all working providers so production
-    never stops because of one dead wallet/key.
+    v5.5: TRY AISUITE FIRST (unified router, honors /dashboard/models selection),
+    fall back to legacy direct-provider rotation only if aisuite raises. This
+    way the model picker actually works, but a bad catalog entry never halts
+    production.
     """
+    # 1) aisuite path (v5.5+)
+    try:
+        from agentcore import aisuite
+        chosen, model_override = selection()
+        # Map chosen provider -> aisuite tier hint
+        tier = "cheap" if chosen in ("groq", "openrouter", "gemini") else "standard"
+        text, meta = aisuite.generate_text(prompt, tier=tier, model=model_override or None,
+                                           max_tokens=max_tokens)
+        if text:
+            return text, float(meta.get("cost_usd", 0.0)), meta.get("model", "aisuite")
+    except Exception as e:
+        # Log but don't raise — fall through to legacy path
+        try:
+            traceback.print_exc()
+        except Exception:
+            pass
+
+    # 2) Legacy direct-provider fallback (v5.3 code)
+    return _chat_legacy(prompt, max_tokens=max_tokens)
+
+
+def _chat_legacy(prompt: str, max_tokens: int = 800):
+    """Original v5.3 provider rotation (Anthropic/Gemini/Groq/OpenRouter)."""
     chosen, model = selection()
-    # Read auto_fallback flag — default ON.
     auto_fb = True
     try:
         if config.HAS_SUPABASE:

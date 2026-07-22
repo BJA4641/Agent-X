@@ -132,6 +132,23 @@ alter table public.ceo_recommendations disable row level security;
 create index if not exists ceo_rec_day on public.ceo_recommendations (tenant_id, day desc);
 create index if not exists ceo_rec_open on public.ceo_recommendations (tenant_id, dismissed, applied, ts desc);
 
+-- 5b) revenue_events (v5.5 P0): affiliate clicks, sponsorship payouts, product sales.
+--     Written by monetization pixel + ceo.record_outcome; consumed by _snapshot_roi
+--     so roi_snapshots.revenue_usd is no longer hardcoded to 0.
+create table if not exists public.revenue_events (
+    id bigint generated always as identity primary key,
+    tenant_id text not null default 'me',
+    account_id uuid,
+    item_id text,                              -- board_item id (post that earned it)
+    amount_usd numeric(10,5) not null default 0,
+    source text not null,                      -- affiliate | sponsor | product | tip | other
+    metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now()
+);
+alter table public.revenue_events disable row level security;
+create index if not exists rev_evt_acct_day on public.revenue_events (account_id, created_at desc);
+create index if not exists rev_evt_source on public.revenue_events (source, created_at desc);
+
 -- 6) Run ledger columns needed for ROI calculation
 alter table public.run_ledger add column if not exists department text;
 alter table public.run_ledger add column if not exists action text;

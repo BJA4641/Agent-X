@@ -16,6 +16,131 @@ from ..common import (board_patch_payload, board_get, OUTPUT_DIR,
 def register(w: Worker):
     w.register("creative.write_script", write_script)
     w.register("creative.render",       render)
+    w.register("creative.render_video", render_video)
+
+
+# --------------------------------------------------------- render_video (AI video — fal/kling/veo)
+
+def render_video(w: Worker, job: Job, ctx: AgentContext):
+    """AI-generated video via aisuite (fal/kling/veo/sora). Expensive (~$0.10-0.40)
+    so heavily CEO-gated. Falls back gracefully if no video key is set.
+
+    Payload: { item_id, script, hook_image_path? (for image-to-video), topic? }
+    """
+    bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
+    item_id = job.payload.get("item_id")
+    script = job.payload.get("script") or {}
+    account_id = job.account_id
+    project_id = job.project_id
+    topic = script.get("title") or job.payload.get("topic") or "content"
+
+    # CEO gate — video is EXPENSIVE, so strict
+    from ..common import kill_switch, ceo_decide, hard_budget_ok, remaining_budget
+    if kill_switch():
+        bus.agent("video", "⏸ kill switch on — video held", "warn", "video_held", job_id=job.id)
+        w.queue.complete(job, {"ok": False, "paused": True})
+        return
+    if sb:
+        d = ceo_decide(sb, "render_video", account_id=account_id, est_cost=0.15,
+                       department="creative", topic=topic, item_id=item_id)
+        if d["decision"] != "approve":
+            bus.agent("ceo", f"👔 CEO video decision={d['decision']}: {d['reason']}", "warn",
+                      f"ceo_video_{d['decision']}", job_id=job.id)
+            # Fallback: hand off to regular render (static-image reel) which is cheaper
+            if d["decision"] in ("deny", "cheaper", "delay"):
+                bus.agent("video", "🎬 falling back to static-image reel (ffmpeg)", "info",
+                          "video_fallback", job_id=job.id)
+                job_of(w, "creative.render",
+                       {"item_id": item_id, "script": script, "style": job.payload.get("style","cinemagraph")},
+                       parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+                w.queue.complete(job, {"ok": True, "fallback": "static_render", "reason": d["reason"]})
+                return
+            if d["decision"] == "reuse":
+                try:
+                    asset_row = sb.table("asset_library").select("content").eq("id", d["reuse"]).limit(1).execute().data
+                    if asset_row and __import__("os").path.exists(asset_row[0]["content"]):
+                        job_of(w, "post.polish",
+                               {"item_id": item_id, "video_path": asset_row[0]["content"], "script": script},
+                               parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+                        w.queue.complete(job, {"ok": True, "reused": d["reuse"]})
+                        return
+                except Exception:
+                    pass
+                # reuse didn't resolve — fallback
+                job_of(w, "creative.render",
+                       {"item_id": item_id, "script": script},
+                       parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+                w.queue.complete(job, {"ok": True, "fallback": "static_render"})
+                return
+
+    if not hard_budget_ok(next_cost_usd=0.15):
+        bus.agent("cfo", f"⏸ budget too low for AI video (${remaining_budget():.3f}) — static fallback",
+                  "warn", "video_budget", job_id=job.id)
+        job_of(w, "creative.render",
+               {"item_id": item_id, "script": script},
+               parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+        w.queue.complete(job, {"ok": True, "fallback": "static_render"})
+        return
+
+    bus.agent("video", "🎥 generating AI video (fal/kling/veo)…", "info", "video_start",
+              job_id=job.id, item_id=item_id)
+
+    short_id = (item_id or job.id)[:8]
+    out_vid = os.path.join(OUTPUT_DIR, short_id + "_ai.mp4")
+
+    try:
+        from agentcore import aisuite
+        prompt = _assemble_narration(script) or topic
+        img_bytes = None
+        hook_img = job.payload.get("hook_image_path")
+        if hook_img and os.path.exists(hook_img):
+            with open(hook_img, "rb") as f:
+                img_bytes = f.read()
+        vid_path = aisuite.generate_video(prompt, image_bytes=img_bytes)
+        if vid_path and os.path.exists(vid_path):
+            import shutil
+            shutil.copy(vid_path, out_vid)
+            bus.agent("video", f"🎥 AI video ready: {os.path.getsize(out_vid)/1024/1024:.1f}MB",
+                      "success", "video_done", job_id=job.id, item_id=item_id)
+        else:
+            raise RuntimeError("aisuite returned no path")
+    except Exception as e:
+        traceback.print_exc()
+        bus.agent("video", f"🎥 AI video failed ({str(e)[:120]}) — falling back to static reel",
+                  "warn", "video_fail", job_id=job.id)
+        job_of(w, "creative.render",
+               {"item_id": item_id, "script": script},
+               parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+        w.queue.complete(job, {"ok": True, "fallback": "static_render", "error": str(e)[:200]})
+        return
+
+    # SEO (reuse creative's SEO path)
+    plat_captions = {}
+    seo_pack = {}
+    try:
+        from agent import brain as _brain
+        plat_captions = _brain.captions(script, item_id=item_id)
+    except Exception:
+        pass
+    try:
+        from agent import seo as _seo
+        seo_pack = _seo.seoize(topic, script, account_id=account_id,
+                               project_id=project_id, captions=plat_captions, item_id=item_id) or {}
+    except Exception:
+        pass
+
+    if sb and item_id:
+        board_patch_payload(sb, item_id, {"video_path": out_vid, "script": script,
+                                          "captions": plat_captions, "seo": seo_pack,
+                                          "ai_video": True})
+
+    caption_text = _compose_caption(plat_captions, seo_pack, script)
+    job_of(w, "post.polish", {
+        "item_id": item_id, "video_path": out_vid, "script": script,
+        "captions": plat_captions, "seo": seo_pack, "caption_text": caption_text,
+    }, parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+    w.queue.complete(job, {"ok": True, "video_path": out_vid, "ai_video": True})
 
 
 # --------------------------------------------------------- write_script
@@ -133,15 +258,41 @@ def render(w: Worker, job: Job, ctx: AgentContext):
     project_id = job.project_id
     topic = script.get("title") or job.payload.get("topic") or "content"
 
-    # v5.3 BUDGET CHECK before render (render itself is cheap — uses Gemini for
-    # visuals which is free-tier, but LLM steps + any paid voice cost money)
-    from ..common import kill_switch, hard_budget_ok, remaining_budget
+    # v5.5 CEO GATE: ask CEO before spending money on render (~$0.02-0.06 for Gemini images)
+    from ..common import kill_switch, hard_budget_ok, remaining_budget, ceo_decide
     if kill_switch():
         bus.agent("composer", "⏸ kill switch on — render held", "warn", "render_held",
                   job_id=job.id, item_id=item_id)
         w.queue.complete(job, {"ok": False, "paused": True})
         return
-    if not hard_budget_ok(next_cost_usd=0.01):
+    if sb:
+        d = ceo_decide(sb, "render_image", account_id=account_id, est_cost=0.03,
+                       department="creative", topic=topic, item_id=item_id)
+        if d["decision"] == "deny":
+            bus.agent("ceo", f"👔 CEO denied render: {d['reason']}", "warn", "ceo_deny_render", job_id=job.id)
+            w.queue.complete(job, {"ok": False, "denied": d["reason"]})
+            return
+        if d["decision"] == "delay":
+            bus.agent("ceo", f"👔 CEO delay render: {d['reason']}", "warn", "ceo_delay_render", job_id=job.id)
+            w.queue._update_row(job, {"status":"queued","scheduled_for":time.time()+3600,"error":d["reason"]})
+            return
+        if d["decision"] == "reuse":
+            bus.agent("ceo", f"♻️ CEO reuse render asset: {d.get('reuse')}", "info", "ceo_reuse_render", job_id=job.id)
+            # For now skip render entirely — mark item as needing repurpose of existing
+            try:
+                asset_row = sb.table("asset_library").select("content").eq("id", d["reuse"]).limit(1).execute().data
+                if asset_row:
+                    reused_path = asset_row[0]["content"]
+                    if reused_path and __import__("os").path.exists(reused_path):
+                        board_patch_payload(sb, item_id, {"video_path": reused_path, "reused_from": d["reuse"]})
+                        job_of(w, "post.polish", {"item_id": item_id, "video_path": reused_path, "script": script},
+                               parent=job, account_id=account_id, project_id=project_id, priority=job.priority)
+                        w.queue.complete(job, {"ok": True, "reused": d["reuse"]})
+                        return
+            except Exception:
+                pass
+    # Legacy budget check (belt-and-suspenders)
+    if not hard_budget_ok(next_cost_usd=0.03):
         bus.agent("cfo", f"⏸ budget too low for render (${remaining_budget():.3f} left) — delaying 1h",
                   "warn", "render_budget", job_id=job.id)
         w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
@@ -165,13 +316,35 @@ def render(w: Worker, job: Job, ctx: AgentContext):
         hook_word = _hook_word(script.get("hook") or topic)
         total_beats = len(beats) + 1
 
-        # 1) narration
+        # 1) narration — v5.5 CEO gate for TTS spend
         narration = _assemble_narration(script)
-        bus.agent("voice", "🎙️ recording narration…", "info", "voice_start",
-                  job_id=job.id, item_id=item_id)
-        words = _capmod.timed_words(narration, audio, item_id=item_id, style=style)
-        bus.agent("voice", f"🎙️ narration recorded — {len(words)} words", "success",
-                  "voice_done", job_id=job.id, item_id=item_id)
+        _tts_allowed = True
+        if sb:
+            td = ceo_decide(sb, "tts", account_id=account_id, est_cost=0.005,
+                            department="creative", topic=topic, item_id=item_id)
+            if td["decision"] in ("deny", "delay"):
+                bus.agent("ceo", f"👔 CEO TTS delay: {td['reason']} — using silent captions-only reel",
+                          "warn", "ceo_tts_delay", job_id=job.id)
+                _tts_allowed = False
+        if _tts_allowed:
+            bus.agent("voice", "🎙️ recording narration…", "info", "voice_start",
+                      job_id=job.id, item_id=item_id)
+            try:
+                words = _capmod.timed_words(narration, audio, item_id=item_id, style=style)
+                bus.agent("voice", f"🎙️ narration recorded — {len(words)} words", "success",
+                          "voice_done", job_id=job.id, item_id=item_id)
+            except Exception as e:
+                bus.agent("voice", f"🎙️ TTS failed, falling back to captions-only: {str(e)[:100]}",
+                          "warn", "voice_fail", job_id=job.id)
+                words = [{"word": w, "start": i*0.3, "end": (i+1)*0.3}
+                         for i, w in enumerate(narration.split()[:60])]
+                # create empty audio placeholder
+                open(audio, "wb").close()
+        else:
+            # Captions-only fallback (no narration audio)
+            words = [{"word": w, "start": i*0.3, "end": (i+1)*0.3}
+                     for i, w in enumerate(narration.split()[:60])]
+            open(audio, "wb").close()
 
         # 2) frames
         bus.agent("visuals", f"🎨 rendering {total_beats} frames…", "info",
