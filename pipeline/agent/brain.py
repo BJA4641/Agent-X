@@ -240,10 +240,40 @@ def _normalize_script(raw: dict, topic: str, account_id=None, account_niche: str
     return raw
 
 
-def captions(script: dict, item_id=None) -> dict:
-    """Per-platform captions from the script's caption/hashtags. Niche-aware fallback."""
+_GEO_WINDOWS = {
+    "AE": "18:00\u201321:00 GST (Gulf evening)",
+    "SA": "18:00\u201321:00 AST (Gulf evening)",
+    "US": "17:00\u201320:00 EST / 14:00\u201317:00 PST (NA evening)",
+    "CA": "17:00\u201320:00 EST (NA evening)",
+    "LB": "19:00\u201322:00 EET (Levant evening)",
+    "GB": "18:00\u201321:00 BST (UK evening)",
+}
+
+def post_windows(geos: list) -> list:
+    """v5.8: suggested manual posting windows for the account's target geos."""
+    out, seen = [], set()
+    for g in (geos or []):
+        wdw = _GEO_WINDOWS.get(str(g).upper())
+        if wdw and wdw not in seen:
+            seen.add(wdw); out.append(wdw)
+    return out
+
+
+def _niche_from_text(text: str) -> str:
+    """v5.8 fallback niche classifier from topic text (no DB)."""
+    t = (text or "").lower()
+    if any(k in t for k in ("skin", "glow", "beauty", "serum", "spf")): return "skincare"
+    if any(k in t for k in ("puppy", "dog", "pet", "leash", "crate")): return "dog training"
+    if any(k in t for k in ("invest", "money", "budget", "save")): return "personal finance"
+    return ""
+
+
+def captions(script: dict, item_id=None, geos=None, language="en", account_id=None) -> dict:
+    """Per-platform captions from the script's caption/hashtags. Niche-aware fallback.
+    v5.8 FIX: the old call passed topic= to _niche_for_account (no such kwarg) →
+    TypeError swallowed upstream → captions were silently EMPTY in production."""
     cap = script.get("caption","save this for later")
-    niche = _niche_for_account(None, topic=script.get("title",""))
+    niche = _niche_for_account(account_id) or _niche_from_text(script.get("title",""))
     tags = script.get("hashtags") or _hashtags_for_niche(niche)
     hook = script.get("hook","")
     sound_note = _sound_for_niche(niche)
@@ -252,6 +282,8 @@ def captions(script: dict, item_id=None) -> dict:
       "tiktok":    {"caption": f"{hook} — {cap}",  "hashtags": tags[:8], "sound_note": sound_note},
       "youtube":   {"title": hook[:90], "description": f"{cap}\n\n{script.get('cta','')}",
                     "tags": tags[:10]},
+      "post_windows": post_windows(geos),
+      "language": language or "en",
     }
 
 

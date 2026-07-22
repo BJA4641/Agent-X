@@ -37,6 +37,24 @@ def polish(w: Worker, job: Job, ctx: AgentContext):
     bus.agent("composer", f"🎞️ video verified: {size/1024/1024:.1f}MB", "success",
               "post_verify", job_id=job.id, item_id=item_id)
 
+    # v5.8 BATCH4: upload render to Supabase Storage so Studio can play/download
+    # it and the file survives redeploys (container disk is ephemeral).
+    video_url = None
+    try:
+        from agent import delivery as _dl
+        video_url = _dl.upload_video(sb, vid, item_id) if sb else None
+    except Exception as e:
+        bus.agent("composer", f"⬆️ upload failed (non-fatal): {str(e)[:100]}",
+                  "warn", "upload_fail", job_id=job.id, item_id=item_id)
+    if video_url:
+        bus.agent("composer", "⬆️ render uploaded — playable in Studio", "success",
+                  "upload_ok", job_id=job.id, item_id=item_id)
+        if sb and item_id:
+            board_patch_payload(sb, item_id, {"video_url": video_url})
+    else:
+        bus.agent("composer", "⚠️ render NOT uploaded — file only on worker disk",
+                  "warn", "upload_missing", job_id=job.id, item_id=item_id)
+
     # 2) distribution repurposing (cross-platform cuts) — best-effort
     repurp = {}
     try:

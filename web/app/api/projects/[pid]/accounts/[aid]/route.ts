@@ -17,6 +17,50 @@ async function verifyOwnership(pid: string, aid: string) {
   return { user, admin };
 }
 
+// POST /api/projects/[pid]/accounts/[aid] — actions (v5.8: clone_post)
+// Inserts an account-bound board item AND its job chain atomically —
+// board rows without a job are decoration (nothing consumes bare ideas).
+export async function POST(req: Request, { params }: Ctx) {
+  const v = await verifyOwnership(params.pid, params.aid);
+  if ("error" in v) return NextResponse.json({ ok: false, error: v.error }, { status: v.status });
+  const { admin } = v;
+  const body = await req.json().catch(() => ({}));
+
+  if (body.action === "clone_post") {
+    const notes = String(body.notes || "").trim();
+    const sourceUrl = String(body.source_url || "").trim();
+    const format = body.format === "carousel" ? "carousel" : "reel";
+    if (notes.length < 10) {
+      return NextResponse.json({ ok: false, error: "Describe the post in a sentence or two — IG links are login-walled, the description is what the agents work from." }, { status: 400 });
+    }
+    // tenant: reuse whatever the pipeline writes (single-tenant today)
+    const { data: trow } = await admin.from("board_items").select("tenant_id").limit(1);
+    const tenant = trow?.[0]?.tenant_id || "default";
+    const topic = "[CLONE] " + notes.slice(0, 140);
+
+    const { data: item, error: e1 } = await admin.from("board_items").insert({
+      tenant_id: tenant, status: "idea", topic,
+      account_id: params.aid,
+      payload: { bucket: "clone", source_url: sourceUrl, source_notes: notes, format },
+    }).select("id").single();
+    if (e1 || !item) return NextResponse.json({ ok: false, error: e1?.message || "insert failed" }, { status: 500 });
+
+    const now = Date.now() / 1000;
+    const jobType = format === "carousel" ? "creative.write_carousel" : "creative.write_script";
+    const { error: e2 } = await admin.from("jobs").insert({
+      id: crypto.randomUUID(), job_type: jobType, status: "queued", priority: 80,
+      payload: { item_id: item.id, topic, account_id: params.aid, source_notes: notes, source_url: sourceUrl },
+      account_id: params.aid, project_id: params.pid, requested_by: "human",
+      attempts: 0, max_attempts: 3, idempotency_key: `clone:${item.id}`,
+      created_at: now, scheduled_for: now,
+    });
+    if (e2) return NextResponse.json({ ok: false, error: e2.message }, { status: 500 });
+    return NextResponse.json({ ok: true, item_id: item.id, format });
+  }
+
+  return NextResponse.json({ ok: false, error: "unknown action" }, { status: 400 });
+}
+
 // GET /api/projects/[pid]/accounts/[aid] — documents + posts + grades
 export async function GET(_req: Request, { params }: Ctx) {
   const v = await verifyOwnership(params.pid, params.aid);

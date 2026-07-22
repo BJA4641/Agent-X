@@ -291,3 +291,40 @@ def test_grader_skip_never_fakes_scores(monkeypatch):
     v = g.grade_post({"hook": "x", "beats": [{"vo": "y"}]})
     assert v.get("skipped") is True
     assert v.get("passed") is False
+
+
+# ---------------- v5.8 BATCH4 contracts ----------------
+
+def test_post_windows_geo_map():
+    from agent import brain
+    wins = brain.post_windows(["AE", "US", "CA", "LB"])
+    assert any("Gulf" in w for w in wins)
+    assert any("NA evening" in w for w in wins)
+    # CA collapses into the same NA window string as US? No — distinct strings allowed;
+    # the contract is: no duplicates, all strings non-empty.
+    assert len(wins) == len(set(wins)) and all(wins)
+    assert brain.post_windows([]) == []
+    assert brain.post_windows(None) == []
+
+
+def test_captions_carry_post_windows_and_language():
+    from agent import brain
+    caps = brain.captions({"caption": "x", "hook": "y", "hashtags": ["#a"]},
+                          geos=["AE"], language="en")
+    assert "post_windows" in caps and caps["language"] == "en"
+    assert isinstance(caps["post_windows"], list) and caps["post_windows"]
+
+
+def test_slide_card_dimensions():
+    from PIL import Image
+    from workers.departments.creative import _slide_card
+    img = Image.new("RGB", (1080, 1920), (20, 20, 30))
+    out = _slide_card(img, "Test Heading", "Some body text for the slide", 2, 5)
+    assert out.size == (1080, 1350)
+
+
+def test_carousel_weekday_map_sane():
+    from workers.departments.portfolio import _CAROUSEL_DAYS
+    for k, days in _CAROUSEL_DAYS.items():
+        assert len(days) == min(k, 7)
+        assert all(0 <= d <= 6 for d in days)

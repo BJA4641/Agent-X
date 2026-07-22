@@ -300,7 +300,10 @@ export default function AccountDetailPage() {
       </div>
 
       {/* Tab content */}
-      {tab==="overview" && <Overview docs={docs} posts={posts} account={account} onOpenDoc={openDoc} />}
+      {tab==="overview" && (<>
+        <Overview docs={docs} posts={posts} account={account} onOpenDoc={openDoc} />
+        <CloneBox pid={pid as string} aid={aid as string} />
+      </>)}
       {tab==="library" && (
         <DocLibrary docs={docs} libDoc={libDoc} setLibDoc={(k)=>{setLibDoc(k);setEditing(false);}}
                     editing={editing} setEditing={setEditing}
@@ -600,6 +603,52 @@ function PostsGrid({ posts }:{ posts:Post[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+
+// v5.8 BATCH4 — Clone a trending post (angle-clone, never a repost)
+function CloneBox({ pid, aid }: { pid: string; aid: string }) {
+  const [url, setUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [format, setFormat] = useState<"reel"|"carousel">("reel");
+  const [state, setState] = useState<"idle"|"busy"|"done"|"err">("idle");
+  const [msg, setMsg] = useState("");
+  async function submit() {
+    setState("busy"); setMsg("");
+    const r = await fetch(`/api/projects/${pid}/accounts/${aid}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clone_post", source_url: url, notes, format }),
+    });
+    const j = await r.json();
+    if (j.ok) { setState("done"); setMsg(`Queued as a ${j.format} — the writers pick it up within a tick. Watch it in Studio.`); setUrl(""); setNotes(""); }
+    else { setState("err"); setMsg(j.error || "failed"); }
+  }
+  return (
+    <div className="card" style={{ maxWidth: 720, marginTop: 16 }}>
+      <h3 style={{ marginTop: 0 }}>🎯 Clone a trending post</h3>
+      <p className="note">
+        Paste the link, then <b>describe what the post is</b> — Instagram login-walls its pages, so the
+        agents can't read the URL; your description is the brief. They recreate the <b>angle</b> as an
+        original script in this account's brand voice. Never a repost (reposts don't monetize — Content
+        ID pays the original creator).
+      </p>
+      <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://www.instagram.com/reel/… (optional, kept for reference)"
+             style={{ width: "100%", marginBottom: 8 }} />
+      <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+                placeholder='What is it? e.g. "7-slide carousel: 5 morning skincare mistakes, bold red text on beige, very fast hook"'
+                style={{ width: "100%", marginBottom: 8 }} />
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
+          <option value="reel">Make it a reel</option>
+          <option value="carousel">Make it a carousel</option>
+        </select>
+        <button onClick={submit} disabled={state === "busy" || notes.trim().length < 10}>
+          {state === "busy" ? "Queuing…" : "Send to the agents"}
+        </button>
+      </div>
+      {msg && <p className="note" style={{ color: state === "err" ? "#e5484d" : "var(--approved)", marginTop: 8 }}>{msg}</p>}
     </div>
   );
 }

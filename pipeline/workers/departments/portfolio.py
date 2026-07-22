@@ -74,67 +74,89 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         w.queue.complete(job, {"ok": True, "budget_blocked": True})
         return
 
-    acct = first_active_account(sb)
-    if not acct:
+    # v5.8 BATCH4: loop over ALL active accounts (the old single-account
+    # mandate is retired — glowup + puppy both get daily content now).
+    accounts = active_accounts(sb) or []
+    if not accounts:
         bus.agent("ceo", "no active accounts — idling (resume one in project_accounts)",
                   "info", "tick_idle", job_id=job.id)
         _schedule_next_tick(w, job)
         w.queue.complete(job, {"ok": True, "no_accounts": True})
         return
 
-    # BUG FIX v5.3: double-check the account is actually active (not paused,
-    # project not paused). first_active_account should already filter, but be safe.
     from ..common import is_account_active
-    if not is_account_active(sb, acct["id"]):
-        bus.agent("ceo", f"account {acct.get('name','?')} is paused (or project paused) — skipping",
-                  "info", "tick_paused", job_id=job.id)
-        _schedule_next_tick(w, job)
-        w.queue.complete(job, {"ok": True, "paused": True})
-        return
+    touched = []
+    for acct in accounts:
+        if not is_account_active(sb, acct["id"]):
+            continue
+        bus.agent("ceo", f"👔 tick — account: {acct.get('name','?')} (@{acct.get('handle','?')})",
+                  "info", "tick_account", job_id=job.id, account_id=acct["id"])
 
-    bus.agent("ceo", f"👔 tick — active account: {acct.get('name','?')} (@{acct.get('handle','?')})",
-              "info", "tick_account", job_id=job.id, account_id=acct["id"])
+        inflight = _count_inflight(sb, acct["id"])
+        target = int(acct.get("posts_per_day") or POSTS_PER_DAY_DEFAULT)
+        bus.agent("coo", f"in-flight for @{acct.get('handle','?')}: {inflight}/{MAX_INFLIGHT_PER_ACCOUNT}, daily target {target}",
+                  "info", "inflight", job_id=job.id)
 
-    # Count in-flight items (idea/drafted/approved/scheduled) for this account
-    inflight = _count_inflight(sb, acct["id"])
-    target = int(acct.get("posts_per_day") or POSTS_PER_DAY_DEFAULT)
-    bus.agent("coo", f"in-flight for @{acct.get('handle','?')}: {inflight}/{MAX_INFLIGHT_PER_ACCOUNT}, daily target {target}",
-              "info", "inflight", job_id=job.id)
+        # No brand bible yet → generate it first, skip content this tick.
+        if not acct.get("brand_bible"):
+            bus.agent("architect", f"🏛️ no brand bible for {acct.get('name','?')} — queuing generation",
+                      "info", "brand_queued", job_id=job.id)
+            job_of(w, "brand_studio.generate", {"niche": acct.get("niche", "")},
+                   parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
+                   priority=Priority.HIGH)
+            touched.append(acct.get("handle"))
+            continue
 
-    # Phase 3: if this account lacks a brand bible, generate one FIRST before producing.
-    if not acct.get("brand_bible"):
-        bus.agent("architect", f"🏛️ no brand bible for {acct.get('name','?')} — queuing generation",
-                  "info", "brand_queued", job_id=job.id)
-        from ..common import job_of as _jof
-        _jof(w, "brand_studio.generate", {
-            "niche": acct.get("niche", ""),
-        }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
-           priority=Priority.HIGH)
-        _schedule_next_tick(w, job)
-        w.queue.complete(job, {"ok": True, "active_account": acct.get("name"),
-                               "inflight": inflight, "generating_brand_bible": True})
-        return
+        if inflight < MAX_INFLIGHT_PER_ACCOUNT:
+            job_of(w, "editorial.ideate", {
+                "account_id": acct["id"], "project_id": acct.get("project_id"),
+                "target_posts": max(1, MAX_INFLIGHT_PER_ACCOUNT - inflight),
+            }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
+               priority=Priority.HIGH)
+        else:
+            bus.agent("coo", f"@{acct.get('handle','?')} in-flight at cap — no new reels this tick",
+                      "info", "tick_cap", job_id=job.id)
 
-    if inflight < MAX_INFLIGHT_PER_ACCOUNT:
-        # Spawn ideation -> Editorial pipeline for this account
-        job_of(w, "editorial.ideate", {
-            "account_id": acct["id"], "project_id": acct.get("project_id"),
-            "target_posts": max(1, MAX_INFLIGHT_PER_ACCOUNT - inflight),
-        }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
-           priority=Priority.HIGH)
-    else:
-        bus.agent("coo", "in-flight at cap — not starting new work this tick",
-                  "info", "tick_cap", job_id=job.id)
+        # v5.8 CAROUSEL CADENCE: carousels_per_week from account config (default 3),
+        # mapped to fixed weekdays so the schedule is predictable and idempotent.
+        _maybe_spawn_carousel(w, job, sb, bus, acct)
+        touched.append(acct.get("handle"))
 
     # CFO daily report every ~4 hours
     if int(time.time()) % (4*3600) < TICK_SECONDS:
         job_of(w, "cfo.daily_report", {}, parent=job, priority=Priority.LOW)
-    # Kill-switch heartbeat
     job_of(w, "cfo.killswitch_check", {}, parent=job, priority=Priority.LOW)
 
     _schedule_next_tick(w, job)
-    w.queue.complete(job, {"ok": True, "active_account": acct.get("name"),
-                           "inflight": inflight})
+    w.queue.complete(job, {"ok": True, "accounts": touched})
+
+
+_CAROUSEL_DAYS = {1: {2}, 2: {1, 4}, 3: {0, 2, 4}, 4: {0, 1, 3, 4},
+                  5: {0, 1, 2, 3, 4}, 6: {0, 1, 2, 3, 4, 5}, 7: {0, 1, 2, 3, 4, 5, 6}}
+
+def _maybe_spawn_carousel(w, job, sb, bus, acct):
+    """Spawn one editorial.plan_carousel on scheduled weekdays, once per day
+    per account (idempotency key carries the date)."""
+    try:
+        cfg = acct.get("config") or {}
+        cw = int(cfg.get("carousels_per_week", 3) or 0)
+        if cw <= 0:
+            return
+        today = time.gmtime()
+        if today.tm_wday not in _CAROUSEL_DAYS.get(min(cw, 7), set()):
+            return
+        datekey = time.strftime("%Y%m%d", today)
+        j = Job(job_type="editorial.plan_carousel",
+                payload={"account_id": acct["id"], "project_id": acct.get("project_id")},
+                priority=Priority.MEDIUM, account_id=acct["id"],
+                project_id=acct.get("project_id"),
+                idempotency_key=f"carousel:{acct['id']}:{datekey}")
+        w.queue.enqueue(j)
+        bus.agent("coo", f"🖼️ carousel day for @{acct.get('handle','?')} — planning one",
+                  "info", "carousel_spawn", job_id=job.id, account_id=acct["id"])
+    except Exception as e:
+        bus.agent("coo", f"carousel spawn skipped: {str(e)[:80]}", "warn",
+                  "carousel_skip", job_id=job.id)
 
 
 def _schedule_next_tick(w: Worker, job: Job):

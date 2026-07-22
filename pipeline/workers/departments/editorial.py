@@ -24,6 +24,40 @@ from ..common import (board_add, board_patch, brand_context_for,
 def register(w: Worker):
     w.register("editorial.ideate", ideate)
     w.register("editorial.plan_one", plan_one)
+    w.register("editorial.plan_carousel", plan_carousel)
+
+
+def plan_carousel(w: Worker, job: Job, ctx: AgentContext):
+    """v5.8 BATCH4: pick one niche topic and brief creative for a 5-slide
+    carousel (image post). Cheap format, real algorithmic reach."""
+    bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
+    account_id = job.account_id or job.payload.get("account_id")
+    account = None
+    if sb and account_id:
+        try:
+            res = sb.table("project_accounts").select("*").eq("id", str(account_id)).execute()
+            account = (res.data or [None])[0]
+        except Exception:
+            account = None
+    picked = _pick_topics(1, account=account, account_id=account_id)
+    if not picked:
+        w.queue.complete(job, {"ok": False, "reason": "no_topic"})
+        return
+    topic, bucket = picked[0]
+    row = board_add(sb, f"[carousel] {topic}",
+                    {"bucket": bucket, "format": "carousel"},
+                    status="idea", account_id=account_id) if sb else {"id": None}
+    item_id = row.get("id")
+    bus.agent("strategist", f"🖼️ carousel brief: \"{topic[:70]}\"", "info",
+              "carousel_brief", job_id=job.id, item_id=item_id, account_id=account_id)
+    job_of(w, "creative.write_carousel", {
+        "item_id": item_id, "topic": topic, "account_id": account_id,
+        "project_id": job.project_id or job.payload.get("project_id"),
+    }, parent=job, account_id=account_id,
+       project_id=job.project_id or job.payload.get("project_id"),
+       priority=job.priority)
+    w.queue.complete(job, {"ok": True, "item_id": item_id, "topic": topic})
 
 
 def ideate(w: Worker, job: Job, ctx: AgentContext):

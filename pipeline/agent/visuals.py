@@ -84,8 +84,9 @@ def beat_frame(text: str, image_prompt: str, out_path: str, seed: int = 0,
     used_ai = False
     # v5.5 P0 FIX: try aisuite first (honors /dashboard/models model_t2i selection),
     # then fall back to legacy Gemini direct call, then procedural gradient.
-    if ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until and not is_cta:
-        # 1) aisuite (catalog-driven, user-selectable providers)
+    from agentcore.config import econ_mode_on as _econ
+    if ledger.budget_ok(EST_COST) and time.time() >= _gemini_cooldown_until and not is_cta and not _econ():
+        # 1) aisuite (catalog-driven, user-selectable providers) — skipped in econ mode
         try:
             from agentcore import aisuite
             full_prompt = (

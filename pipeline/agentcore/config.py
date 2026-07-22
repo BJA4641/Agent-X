@@ -47,6 +47,23 @@ def supabase():
         return None
 
 
+def econ_mode_on() -> bool:
+    """v5.8 ECON MODE: prefer free visual providers (Gemini free tier /
+    procedural) and skip the paid image branch. Settings key `econ_mode`."""
+    if get("ECON_MODE", "0") == "1":
+        return True
+    sb = supabase()
+    if sb:
+        try:
+            res = (sb.table("settings").select("value")
+                   .eq("tenant_id", TENANT_ID).eq("key", "econ_mode").execute())
+            if res.data and res.data[0]["value"].get("on"):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def soft_pause_on() -> bool:
     """v5.7 SOFT PAUSE: take no NEW content work, but let in-flight jobs finish.
     Gentler than the kill switch (which blocks everything immediately)."""

@@ -9,10 +9,11 @@ const COLOR: Record<string, string> = {
   rejected: "var(--dim)", failed: "#e5484d",
 };
 
-export default function StudioBoard({ items, killOn, softOn }: { items: Item[]; killOn: boolean; softOn?: boolean }) {
+export default function StudioBoard({ items, killOn, softOn, econOn }: { items: Item[]; killOn: boolean; softOn?: boolean; econOn?: boolean }) {
   const [rows, setRows] = useState(items);
   const [kill, setKill] = useState(killOn);
   const [soft, setSoft] = useState(!!softOn);
+  const [econ, setEcon] = useState(!!econOn);
   const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const REASONS = ["weak hook", "boring visuals", "off topic", "too generic", "wrong tone"];
@@ -49,6 +50,7 @@ export default function StudioBoard({ items, killOn, softOn }: { items: Item[]; 
     if (!r.ok) { alert(j.error); return; }
     if (itemId) { setRows(rows.map((x) => (x.id === itemId ? { ...x, status: j.status } : x))); setRejecting(null); }
     else if (j.soft !== undefined) setSoft(j.soft);
+    else if (j.econ !== undefined) setEcon(j.econ);
     else setKill(j.kill);
   }
 
@@ -62,14 +64,20 @@ export default function StudioBoard({ items, killOn, softOn }: { items: Item[]; 
           </span>
         </span>
         <span style={{ display: "flex", gap: 8 }}>
-          {!kill && (
+          {!kill && (<>
             <button className="ghost" style={soft ? { borderColor: "#f59e0b", color: "#f59e0b" } : {}}
               onClick={() => act(soft ? "soft_pause_off" : "soft_pause_on")}
               disabled={busy === "soft_pause_on" || busy === "soft_pause_off"}
               title="Take no NEW content work, but let anything mid-render finish. Gentle brake.">
               {soft ? "Resume intake" : "Pause intake"}
             </button>
-          )}
+            <button className="ghost" style={econ ? { borderColor: "#22c55e", color: "#22c55e" } : {}}
+              onClick={() => act(econ ? "econ_off" : "econ_on")}
+              disabled={busy === "econ_on" || busy === "econ_off"}
+              title="Econ mode: visuals prefer free providers (Gemini free tier → procedural). Paid image calls are skipped. LLM free-preference lands in v5.8.1.">
+              {econ ? "💚 Econ mode ON" : "Econ mode"}
+            </button>
+          </>)}
           <button className={kill ? "primary" : "ghost"} onClick={() => act(kill ? "kill_off" : "kill_on")}
             disabled={busy === "kill_on" || busy === "kill_off"}
             title="Hard stop: worker refuses ALL paid work immediately. Nothing is lost; Resume picks the queue back up.">
@@ -102,8 +110,29 @@ export default function StudioBoard({ items, killOn, softOn }: { items: Item[]; 
                     <p className="note mono" style={{ color: "#e5484d", marginTop: 6, whiteSpace: "pre-wrap" }}>{it.payload.error}</p>
                   )}
                   {it.payload?.video_url && (
-                    <video src={it.payload.video_url} controls preload="metadata"
-                           style={{ width: 180, borderRadius: 8, marginTop: 10, border: "1px solid var(--line)" }} />
+                    <div style={{ marginTop: 10 }}>
+                      <video src={it.payload.video_url} controls preload="metadata"
+                             style={{ width: 180, borderRadius: 8, border: "1px solid var(--line)" }} />
+                      <div><a href={it.payload.video_url} download target="_blank" rel="noreferrer"
+                           style={{ fontSize: 13, color: "var(--approved)" }}>⬇ Download reel (post this file)</a></div>
+                    </div>
+                  )}
+                  {Array.isArray(it.payload?.carousel_urls) && it.payload.carousel_urls.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", gap: 6, overflowX: "auto", maxWidth: 460 }}>
+                        {it.payload.carousel_urls.map((u: string, i: number) => (
+                          <a key={u} href={u} target="_blank" rel="noreferrer" title={`Open slide ${i + 1}`}>
+                            <img src={u} alt={`slide ${i + 1}`}
+                                 style={{ width: 84, height: 105, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)" }} />
+                          </a>
+                        ))}
+                      </div>
+                      <p className="note" style={{ marginTop: 4 }}>
+                        🖼️ Carousel — open each slide → save image → post as an IG carousel / TikTok photo post.
+                        {Array.isArray(it.payload?.captions?.post_windows) && it.payload.captions.post_windows.length > 0 &&
+                          <> Best times: {it.payload.captions.post_windows.join(" · ")}</>}
+                      </p>
+                    </div>
                   )}
                   {it.status === "drafted" && !it.payload?.video_url && (
                     <p className="note">No browser preview (worker had no Supabase storage) — check the file on the worker before approving.</p>
