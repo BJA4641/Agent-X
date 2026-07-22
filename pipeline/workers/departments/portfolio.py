@@ -49,6 +49,14 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         w.queue.complete(job, {"ok": True, "paused": True})
         return
 
+    # v5.6 NO-OUTPUT KILL SWITCH: if we have spent real money since this worker
+    # booted and NOTHING has reached approved/scheduled/published, the pipeline
+    # is broken — stop spending automatically instead of burning for 63 hours.
+    if _no_output_trip(bus, sb, job):
+        _schedule_next_tick(w, job)
+        w.queue.complete(job, {"ok": True, "auto_killed": True})
+        return
+
     if not hard_budget_ok():
         bus.agent("cfo", "⛔ daily budget exhausted — no new content this tick",
                   "warn", "tick_budget", job_id=job.id)
@@ -129,15 +137,69 @@ def _schedule_next_tick(w: Worker, job: Job):
     w.queue.enqueue(j)
 
 
+_BOOT_TS = time.time()
+_NO_OUTPUT_SPEND_USD = 0.50   # spend this much since boot with zero output -> stop
+_NO_OUTPUT_GRACE_S = 900      # give a fresh boot 15 min before judging
+
+def _no_output_trip(bus, sb, job) -> bool:
+    """Auto kill switch: spend > $0.50 since boot AND zero items have reached
+    approved/scheduled/published since boot AND boot was >15 min ago."""
+    if sb is None or (time.time() - _BOOT_TS) < _NO_OUTPUT_GRACE_S:
+        return False
+    try:
+        import datetime as _dt
+        boot_iso = _dt.datetime.utcfromtimestamp(_BOOT_TS).isoformat() + "Z"
+        led = sb.table("run_ledger").select("cost_usd").gte("created_at", boot_iso).execute()
+        spend = sum(float(x.get("cost_usd") or 0) for x in (led.data or []))
+        if spend <= _NO_OUTPUT_SPEND_USD:
+            return False
+        out = (sb.table("board_items").select("id", count="exact")
+               .in_("status", ["approved", "scheduled", "published"])
+               .gte("created_at", boot_iso).execute())
+        if int(out.count or 0) > 0:
+            return False
+        # TRIP: flip the kill switch, scream, leave a recommendation.
+        from agentcore import config as _cfg
+        sb.table("settings").upsert({
+            "tenant_id": _cfg.TENANT_ID, "key": "kill_switch",
+            "value": {"on": True, "by": "no_output_guard",
+                       "reason": f"${spend:.2f} spent since boot with zero output"},
+        }, on_conflict="tenant_id,key").execute()
+        bus.agent("ceo", f"🛑 AUTO KILL SWITCH: ${spend:.2f} spent since boot with ZERO items "
+                          f"reaching approved/published. Pipeline is broken — spending stopped. "
+                          f"Fix the failing step, then turn the kill switch off in Settings.",
+                  "critical", "auto_killswitch", job_id=job.id)
+        try:
+            import datetime as _dt2
+            sb.table("ceo_recommendations").insert({
+                "severity": "critical", "category": "pause",
+                "recommendation": "🛑 Auto kill switch engaged — money out, nothing published",
+                "reasoning": f"${spend:.2f} spent since worker boot with zero items reaching "
+                             f"approved/scheduled/published. A pipeline step is failing repeatedly. "
+                             f"Check the activity feed for the failing job type, deploy the fix, "
+                             f"then disable the kill switch in Settings.",
+                "projected_roi": 0.0, "projected_value_usd": spend,
+                "action_url": "/dashboard/settings",
+                "day": _dt2.date.today().isoformat(),
+            }).execute()
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def _count_inflight(sb, account_id) -> int:
     if sb is None:
         return 0
     try:
         from ..common import board_get
+        # v5.6 P0 FIX: the old chain .eq("status","idea").or_("status.eq.drafted,...")
+        # combined as AND in supabase-py -> matched ZERO rows -> the in-flight cap
+        # NEVER engaged -> ideation flooded 7,307 items. in_() is the correct filter.
         res = (sb.table("board_items")
                .select("id", count="exact")
-               .eq("status", "idea")
-               .or_("status.eq.drafted,status.eq.approved,status.eq.scheduled")
+               .in_("status", ["idea", "drafted", "approved", "scheduled"])
                .execute())
         # Can't easily filter by account_id because legacy board_items don't
         # have account_id columns in all deployments; count globally and cap

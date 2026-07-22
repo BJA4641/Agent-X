@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.5.1"  # v5.5 P0 audit-fix patch: CEO gates on all spend, aisuite wired, assets stored, video job, TikTok, revenue_events
+VERSION = "5.6.0"  # v5.6 P0: grade_feedback signature fix (7,220-fail outage), inflight-cap fix, circuit breaker, no-output auto killswitch, ElevenLabs timed-words + char cap
 
 
 def main():

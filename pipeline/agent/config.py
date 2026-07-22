@@ -24,7 +24,7 @@ def supabase_service_key():
 # capability flags (drive dry-run vs live everywhere)
 HAS_GEMINI    = bool(get("GEMINI_API_KEY") or get("GOOGLE_API_KEY"))
 HAS_ANTHROPIC = bool(get("ANTHROPIC_API_KEY"))
-HAS_ELEVEN    = bool(get("ELEVENLABS_API_KEY"))
+HAS_ELEVEN    = bool(get("ELEVENLABS_API_KEY") or get("ELEVEN_API_KEY"))  # v5.6: docs said ELEVEN_API_KEY, code read ELEVENLABS_API_KEY — accept both
 HAS_SUPABASE  = bool(get("SUPABASE_URL") and supabase_service_key())
 HAS_IG        = bool(get("IG_USER_ID") and get("IG_ACCESS_TOKEN"))
 HAS_YT        = bool(get("YT_TOKEN_JSON")) and os.path.exists(get("YT_TOKEN_JSON", ""))

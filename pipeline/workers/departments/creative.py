@@ -331,8 +331,16 @@ def render(w: Worker, job: Job, ctx: AgentContext):
                       job_id=job.id, item_id=item_id)
             try:
                 words = _capmod.timed_words(narration, audio, item_id=item_id, style=style)
-                bus.agent("voice", f"🎙️ narration recorded — {len(words)} words", "success",
+                _engine = getattr(_capmod, "LAST_ENGINE", "edge")
+                bus.agent("voice", f"🎙️ narration recorded — {len(words)} words via {_engine}", "success",
                           "voice_done", job_id=job.id, item_id=item_id)
+                # v5.6 quality metadata: which engine actually narrated. Batch 3's
+                # quality floor reads this to route fallback-voice reels to review.
+                if sb and item_id:
+                    try:
+                        board_patch_payload(sb, item_id, {"voice_engine": _engine})
+                    except Exception:
+                        pass
             except Exception as e:
                 bus.agent("voice", f"🎙️ TTS failed, falling back to captions-only: {str(e)[:100]}",
                           "warn", "voice_fail", job_id=job.id)

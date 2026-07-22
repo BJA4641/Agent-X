@@ -12,9 +12,16 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { amount_usd, source, account_id, item_id, metadata, secret } = body || {};
 
-    // Simple shared-secret auth so random internet can't spoof revenue
+    // v5.6: shared secret is MANDATORY. Unauthenticated revenue injection
+    // steers the CEO's capital allocation — that's a budget-steering attack,
+    // not a convenience. No secret configured = endpoint disabled.
     const expected = process.env.REVENUE_WEBHOOK_SECRET;
-    if (expected && secret !== expected) {
+    if (!expected) {
+      return NextResponse.json(
+        { ok: false, error: "REVENUE_WEBHOOK_SECRET not configured — endpoint disabled" },
+        { status: 503 });
+    }
+    if (secret !== expected) {
       return NextResponse.json({ ok: false, error: "bad secret" }, { status: 401 });
     }
 

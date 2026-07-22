@@ -37,9 +37,16 @@ _DEMO_SCRIPT = {
 }
 
 
-def write_script(topic: str, item_id=None, account_id=None, project_id=None) -> dict:
+def write_script(topic: str, item_id=None, account_id=None, project_id=None,
+                 grade_feedback: str = "") -> dict:
     """Write a script with full brand/memory/trend context and grade it.
-    Rewrites up to grader.MAX_ATTEMPTS times if score < MIN_GRADE."""
+    Rewrites up to grader.MAX_ATTEMPTS times if score < MIN_GRADE.
+
+    v5.6 P0 FIX: accepts grade_feedback= from the job payload (CQO rewrite
+    loop passes the grader's fix list). v5.5.1 creative.py passed this kwarg
+    while brain.py did not accept it -> TypeError x7,220 -> 63h outage.
+    Job-supplied feedback takes priority and is merged with memory feedback."""
+    _job_feedback = (grade_feedback or "").strip()
     prompt_tpl, version = config.load_prompt("script_v3")
     brand = _load_brand_context(account_id)
     # v5.4: look up niche once so all fallbacks (hashtags/visuals/captions)
@@ -51,7 +58,10 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None) -> 
         trends = scout.recent_trends(5, niche=account_niche)
     except Exception:
         trends = "pattern_interrupt hooks · 6-7 beats · tight cuts · upbeat bed"
-    grade_feedback = memory.load_grade_feedback(account_id, project_id)
+    grade_feedback = memory.load_grade_feedback(account_id, project_id) or ""
+    if _job_feedback:
+        # The CQO's concrete fix list for THIS rewrite outranks general memory.
+        grade_feedback = (_job_feedback + "\n" + grade_feedback).strip()
 
     def _fill(extra_note: str = "") -> str:
         # Brand docs: new 13-doc system maps to legacy placeholder names.

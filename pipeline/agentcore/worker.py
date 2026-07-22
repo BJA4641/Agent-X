@@ -24,6 +24,13 @@ class Worker:
         self.tracer = Tracer()
         self.handlers: Dict[str, Handler] = {}
         self.poll_interval = poll_interval
+        # v5.6 circuit breaker: N identical consecutive failures on a job_type
+        # pauses that job_type for BREAKER_HOLD_S instead of retrying forever.
+        # (v5.5.1 failed creative.write_script 7,220 times in a row.)
+        self._fail_streaks: Dict[str, dict] = {}
+        self._breaker_until: Dict[str, float] = {}
+        self.BREAKER_THRESHOLD = 5
+        self.BREAKER_HOLD_S = 1800
         self._running = False
         self._ctx = AgentContext(run_id=uuid.uuid4().hex[:12], deps={})
 
@@ -59,6 +66,16 @@ class Worker:
         ctx = self._ctx.child(job_id=job.id, brand_id=job.brand_id,
                               account_id=job.account_id, project_id=job.project_id,
                               priority=job.priority)
+        # v5.6 circuit breaker: if this job_type is tripped, park the job.
+        until = self._breaker_until.get(job.job_type, 0)
+        if until > time.time():
+            try:
+                self.queue._update_row(job, {"status": "queued",
+                                              "scheduled_for": until,
+                                              "error": "circuit breaker open"})
+            except Exception:
+                pass
+            return
         try:
             self.queue.mark_in_progress(job)
             handler = self.handlers.get(job.job_type)
@@ -71,6 +88,7 @@ class Worker:
                 handler(self, job, ctx)
                 span.annotate("cost_cents", job.cost_cents)
             # If handler didn't fail and didn't wait_human, complete
+            self._fail_streaks.pop(job.job_type, None)
             if job.status == JobStatus.IN_PROGRESS:
                 self.queue.complete(job, job.result or {"ok": True})
                 try:
@@ -92,6 +110,7 @@ class Worker:
             print(tb)
             self.queue.fail(job, f"{type(e).__name__}: {e}",
                             fatal=type(e).__name__ == "FatalError")
+            self._record_failure(job, f"{type(e).__name__}: {e}")
             try:
                 from workers.departments.ops import _bump_counters
                 _bump_counters(False)
@@ -115,3 +134,37 @@ class Worker:
 
     def fail_job(self, job: Job, reason: str, fatal: bool = False):
         self.queue.fail(job, reason, fatal=fatal)
+        self._record_failure(job, reason)
+
+    def _record_failure(self, job: Job, reason: str):
+        """v5.6: track consecutive identical failures per job_type; trip the
+        breaker at threshold so one broken step can't loop thousands of times."""
+        sig = (reason or "?")[:120]
+        st = self._fail_streaks.get(job.job_type)
+        if st and st.get("sig") == sig:
+            st["n"] += 1
+        else:
+            st = {"sig": sig, "n": 1}
+            self._fail_streaks[job.job_type] = st
+        if st["n"] >= self.BREAKER_THRESHOLD and self._breaker_until.get(job.job_type, 0) < time.time():
+            self._breaker_until[job.job_type] = time.time() + self.BREAKER_HOLD_S
+            self.bus.agent("ops",
+                f"⛔ CIRCUIT BREAKER: {job.job_type} failed {st['n']}x in a row with the same "
+                f"error — pausing this job type for {self.BREAKER_HOLD_S//60} min. Error: {sig}",
+                "critical", "circuit_breaker", job_id=job.id)
+            sb_f = self._ctx.deps.get("supabase")
+            if sb_f:
+                try:
+                    import datetime as _dt
+                    sb_f().table("ceo_recommendations").insert({
+                        "severity": "critical", "category": "ops",
+                        "recommendation": f"⛔ {job.job_type} is broken — circuit breaker engaged",
+                        "reasoning": f"{st['n']} consecutive identical failures: {sig}. The job type is "
+                                     f"paused for {self.BREAKER_HOLD_S//60} minutes. Deploy a fix; the "
+                                     f"breaker resets automatically after the hold.",
+                        "projected_roi": 0.0, "projected_value_usd": 0.0,
+                        "action_url": "/dashboard/agents",
+                        "day": _dt.date.today().isoformat(),
+                    }).execute()
+                except Exception:
+                    pass

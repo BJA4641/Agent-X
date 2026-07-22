@@ -37,8 +37,29 @@ async def _stream_and_save(text: str, voice: str, rate: str, out_path: str) -> l
     return words
 
 
+# v5.6: which TTS engine produced the last narration ("elevenlabs" | "edge" | "silent").
+# creative.render reads this to stamp quality metadata on the board item.
+LAST_ENGINE = "edge"
+
+
 def timed_words(text: str, out_audio_path: str, item_id=None, style: str = None) -> list:
-    """Generate narration mp3 AND word timings in ONE pass (the only edge-tts call)."""
+    """Generate narration mp3 AND word timings in ONE pass.
+    v5.6: tries ElevenLabs (premium, char-capped) first when a key is present,
+    falls back to edge-tts (free), falls back to silent track. Engine used is
+    recorded in LAST_ENGINE and in run_ledger."""
+    global LAST_ENGINE
+    # ---- Premium path: ElevenLabs with word timestamps ----
+    try:
+        from . import voice as _vv
+        if _vv.eleven_key() and _vv.eleven_chars_ok(len(text)):
+            w = _vv.eleven_timed_words(text, out_audio_path, item_id=item_id, style=style)
+            if w and os.path.exists(out_audio_path) and os.path.getsize(out_audio_path) > 500:
+                LAST_ENGINE = "elevenlabs"
+                return w
+    except Exception as e:
+        ledger.record("voice", model="elevenlabs-timed", ok=False, detail=str(e)[:200], item_id=item_id)
+    # ---- Free path: edge-tts ----
+    LAST_ENGINE = "edge"
     # Pick voice from voice.pick_voice if possible, fall back to Christopher/default
     voice = VOICE
     try:
@@ -57,6 +78,7 @@ def timed_words(text: str, out_audio_path: str, item_id=None, style: str = None)
             else:
                 raise RuntimeError("audio file too small")
     except Exception as e:
+        LAST_ENGINE = "silent"
         ledger.record("voice", model="edge-tts", ok=False, detail=str(e)[:200], item_id=item_id)
         # Write a silent fallback so composer never crashes
         try:
