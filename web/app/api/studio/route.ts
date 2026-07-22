@@ -55,6 +55,13 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, status });
   }
+  if (action === "soft_pause_on" || action === "soft_pause_off") {
+    const { error } = await sb.from("settings").upsert(
+      { tenant_id: TENANT, key: "soft_pause", value: { on: action === "soft_pause_on" }, updated_at: new Date().toISOString() },
+      { onConflict: "tenant_id,key" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, soft: action === "soft_pause_on" });
+  }
   if (action === "kill_on" || action === "kill_off") {
     const { error } = await sb.from("settings").upsert(
       { tenant_id: TENANT, key: "kill_switch", value: { on: action === "kill_on" }, updated_at: new Date().toISOString() },

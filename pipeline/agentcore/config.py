@@ -47,6 +47,23 @@ def supabase():
         return None
 
 
+def soft_pause_on() -> bool:
+    """v5.7 SOFT PAUSE: take no NEW content work, but let in-flight jobs finish.
+    Gentler than the kill switch (which blocks everything immediately)."""
+    if get("SOFT_PAUSE", "0") == "1":
+        return True
+    sb = supabase()
+    if sb:
+        try:
+            res = (sb.table("settings").select("value")
+                   .eq("tenant_id", TENANT_ID).eq("key", "soft_pause").execute())
+            if res.data and res.data[0]["value"].get("on"):
+                return True
+        except Exception:
+            pass
+    return False
+
+
 def kill_switch_on() -> bool:
     if get("KILL_SWITCH", "0") == "1":
         return True

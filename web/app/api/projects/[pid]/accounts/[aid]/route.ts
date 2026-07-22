@@ -120,3 +120,28 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   await supabaseAdmin().from("project_accounts").delete().eq("id", params.aid);
   return NextResponse.json({ ok: true });
 }
+
+// PUT /api/projects/[pid]/accounts/[aid] — edit a brand document (v5.7)
+export async function PUT(req: Request, { params }: Ctx) {
+  const v = await verifyOwnership(params.pid, params.aid);
+  if ("error" in v) return NextResponse.json({ error: v.error }, { status: v.status });
+  const { admin } = v;
+  const body = await req.json().catch(() => ({}));
+  const docType = String(body.doc_type || "");
+  const content = String(body.content ?? "");
+  if (!docType) return NextResponse.json({ error: "doc_type required" }, { status: 400 });
+  if (content.length > 200_000) return NextResponse.json({ error: "content too large" }, { status: 400 });
+  const { data: cur } = await admin.from("account_documents")
+    .select("id,version").eq("account_id", params.aid).eq("doc_type", docType).maybeSingle();
+  if (cur) {
+    const { error } = await admin.from("account_documents")
+      .update({ content, version: (cur.version || 1) + 1, agent: "human_edit", updated_at: new Date().toISOString() })
+      .eq("id", cur.id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true, version: (cur.version || 1) + 1 });
+  }
+  const { error } = await admin.from("account_documents")
+    .insert({ account_id: params.aid, doc_type: docType, content, agent: "human_edit", version: 1 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  return NextResponse.json({ ok: true, version: 1 });
+}

@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.6.0"  # v5.6 P0: grade_feedback signature fix (7,220-fail outage), inflight-cap fix, circuit breaker, no-output auto killswitch, ElevenLabs timed-words + char cap
+VERSION = "5.7.0"  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 def main():

@@ -3,7 +3,7 @@
 A typed, observable, budget-guarded kernel on which every agent in the
 company runs. Used by workers/* to implement the v2 blueprint.
 """
-from .config import get, supabase, has_supabase, TENANT_ID, DAILY_BUDGET_USD, kill_switch_on
+from .config import get, supabase, has_supabase, TENANT_ID, DAILY_BUDGET_USD, kill_switch_on, soft_pause_on
 from .runtime import Runtime, get_runtime, reset_runtime_for_tests
 from .models import (
     AgentContext, Job, JobStatus, Event, EventType, AgentResult,
@@ -24,7 +24,7 @@ from .validators import (
 
 __all__ = [
     # config
-    "get", "supabase", "has_supabase", "TENANT_ID", "DAILY_BUDGET_USD", "kill_switch_on",
+    "get", "supabase", "has_supabase", "TENANT_ID", "DAILY_BUDGET_USD", "kill_switch_on", "soft_pause_on",
     # runtime
     "Runtime", "get_runtime", "reset_runtime_for_tests",
     # models

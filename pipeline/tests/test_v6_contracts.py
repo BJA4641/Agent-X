@@ -246,3 +246,22 @@ def test_eleven_daily_char_cap(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ---------------------------------------------------------------- soft pause contract
+
+def test_soft_pause_reads_settings(monkeypatch):
+    """v5.7: soft_pause_on() must reflect the settings row the web UI writes."""
+    from agentcore import config as cfg
+
+    class _T:
+        def __init__(self, on): self.on = on
+        def select(self, *a): return self
+        def eq(self, *a): return self
+        def execute(self):
+            return types.SimpleNamespace(data=[{"value": {"on": self.on}}])
+
+    for flag in (True, False):
+        monkeypatch.setattr(cfg, "supabase",
+                            lambda f=flag: types.SimpleNamespace(table=lambda n: _T(f)))
+        assert cfg.soft_pause_on() is flag

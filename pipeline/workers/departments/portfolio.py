@@ -49,6 +49,16 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         w.queue.complete(job, {"ok": True, "paused": True})
         return
 
+    # v5.7 SOFT PAUSE: no NEW content work; in-flight jobs already queued keep
+    # processing. Ops chains (heartbeat/snapshot/desk) are unaffected.
+    from agentcore import soft_pause_on as _soft
+    if _soft():
+        bus.agent("ceo", "⏸ soft pause — finishing in-flight work, taking no new work",
+                  "info", "tick_soft_paused", job_id=job.id)
+        _schedule_next_tick(w, job)
+        w.queue.complete(job, {"ok": True, "soft_paused": True})
+        return
+
     # v5.6 NO-OUTPUT KILL SWITCH: if we have spent real money since this worker
     # booted and NOTHING has reached approved/scheduled/published, the pipeline
     # is broken — stop spending automatically instead of burning for 63 hours.

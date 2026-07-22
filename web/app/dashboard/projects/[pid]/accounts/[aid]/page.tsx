@@ -128,6 +128,7 @@ const TABS = [
   { key:"visuals",   label:"Visuals",     icon:"🎬", doc:"visual_rules" },
   { key:"content",   label:"Content rules", icon:"📐", doc:"content_rules" },
   { key:"posts",     label:"Posts",       icon:"📱" },
+  { key:"library",   label:"All documents", icon:"📚" },
 ];
 
 const STATUS_STYLE: Record<string,{bg:string;fg:string;label:string}> = {
@@ -172,6 +173,10 @@ export default function AccountDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("overview");
   const [chatText, setChatText] = useState("");
+  const [libDoc, setLibDoc] = useState<string|null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState("");
+  const [savingDoc, setSavingDoc] = useState(false);
   const [sendingChat, setSendingChat] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
@@ -195,6 +200,21 @@ export default function AccountDetailPage() {
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [memory, tab]);
+
+  async function saveDoc() {
+    if (!libDoc) return;
+    setSavingDoc(true);
+    const r = await fetch(`/api/projects/${pid}/accounts/${aid}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doc_type: libDoc, content: editText }),
+    });
+    setSavingDoc(false);
+    if (!r.ok) { const j = await r.json().catch(()=>({})); alert(j.error || "Save failed"); return; }
+    setEditing(false);
+    await refresh();
+  }
+
+  function openDoc(k: string) { setTab("library"); setLibDoc(k); setEditing(false); }
 
   async function togglePaused() {
     if (!account) return;
@@ -280,7 +300,13 @@ export default function AccountDetailPage() {
       </div>
 
       {/* Tab content */}
-      {tab==="overview" && <Overview docs={docs} posts={posts} account={account} />}
+      {tab==="overview" && <Overview docs={docs} posts={posts} account={account} onOpenDoc={openDoc} />}
+      {tab==="library" && (
+        <DocLibrary docs={docs} libDoc={libDoc} setLibDoc={(k)=>{setLibDoc(k);setEditing(false);}}
+                    editing={editing} setEditing={setEditing}
+                    editText={editText} setEditText={setEditText}
+                    saveDoc={saveDoc} saving={savingDoc} />
+      )}
       {tab==="chat" && <ChatPanel memory={memory} chatText={chatText} setChatText={setChatText}
                                   sendChat={sendChat} sendingChat={sendingChat} chatRef={chatRef} />}
       {docContent && (
@@ -312,7 +338,7 @@ export default function AccountDetailPage() {
   );
 }
 
-function Overview({ docs, posts, account }: { docs:Record<string,Doc>; posts:Post[]; account:Account|null }) {
+function Overview({ docs, posts, account, onOpenDoc }: { docs:Record<string,Doc>; posts:Post[]; account:Account|null; onOpenDoc:(k:string)=>void }) {
   const ready = Object.keys(docs).length;
   const avgGrade = posts.filter(p=>p.grade).reduce((s,p)=>s+(p.grade?.overall||0),0) / Math.max(1, posts.filter(p=>p.grade).length);
   const passedCount = posts.filter(p=>p.grade?.passed).length;
@@ -332,9 +358,23 @@ function Overview({ docs, posts, account }: { docs:Record<string,Doc>; posts:Pos
           {(["business_plan","brand_guidelines","tone_guide","visual_rules","content_rules"] as const).map(k=>{
             const label:any = { business_plan:"📘 Business plan", brand_guidelines:"🎨 Brand guidelines",
                               tone_guide:"🗣️ Tone guide", visual_rules:"🎬 Visual rules", content_rules:"📐 Content rules" }[k];
-            return <li key={k}>{label} — {docs[k]?"✅ written":"⏳ pending…"}</li>;
+            return (
+              <li key={k}>
+                {docs[k] ? (
+                  <button onClick={()=>onOpenDoc(k)}
+                    style={{background:"none",border:"none",color:"inherit",cursor:"pointer",padding:0,font:"inherit",textDecoration:"underline",textUnderlineOffset:3}}>
+                    {label}
+                  </button>
+                ) : label} — {docs[k]?"✅ written · click to open":"⏳ pending…"}
+              </li>
+            );
           })}
         </ul>
+        {Object.keys(docs).length > 5 && (
+          <p className="note" style={{fontSize:12,margin:"4px 0 0"}}>
+            + {Object.keys(docs).length - 5} more documents (revenue model, playbooks, strategy…) in the <b>📚 All documents</b> tab.
+          </p>
+        )}
       </div>
 
       {account?.paused && (
@@ -374,6 +414,72 @@ function Overview({ docs, posts, account }: { docs:Record<string,Doc>; posts:Pos
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DocLibrary({ docs, libDoc, setLibDoc, editing, setEditing, editText, setEditText, saveDoc, saving }: {
+  docs: Record<string,Doc>; libDoc: string|null; setLibDoc:(k:string)=>void;
+  editing: boolean; setEditing:(b:boolean)=>void;
+  editText: string; setEditText:(t:string)=>void;
+  saveDoc: ()=>void; saving: boolean;
+}) {
+  const keys = Object.keys(docs).sort();
+  const pretty = (k:string) => k.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase());
+  const cur = libDoc ? docs[libDoc] : null;
+  if (keys.length === 0) return (
+    <p className="note" style={{padding:30,textAlign:"center"}}>
+      No documents yet. The Architect writes the full kit automatically when this account becomes active.
+    </p>
+  );
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"230px 1fr",gap:14,alignItems:"start"}}>
+      <div className="card" style={{padding:8,position:"sticky",top:10}}>
+        {keys.map(k => (
+          <button key={k} onClick={()=>setLibDoc(k)}
+            style={{display:"block",width:"100%",textAlign:"left",padding:"8px 10px",borderRadius:8,cursor:"pointer",
+                    fontSize:13, border:"1px solid "+(libDoc===k?"var(--scheduled)":"transparent"),
+                    background: libDoc===k?"var(--scheduled)":"transparent",
+                    color: libDoc===k?"#000":"inherit", fontWeight: libDoc===k?600:400, marginBottom:2}}>
+            {pretty(k)}
+          </button>
+        ))}
+      </div>
+      <div className="card" style={{minHeight:200}}>
+        {!cur ? (
+          <p className="note" style={{padding:20}}>Pick a document on the left to read or edit it.</p>
+        ) : editing ? (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <b>{pretty(libDoc!)} — editing</b>
+              <span style={{display:"flex",gap:8}}>
+                <button className="ghost" onClick={()=>setEditing(false)} disabled={saving}>Cancel</button>
+                <button className="primary" onClick={saveDoc} disabled={saving}>{saving?"Saving…":"Save"}</button>
+              </span>
+            </div>
+            <textarea value={editText} onChange={e=>setEditText(e.target.value)}
+              style={{width:"100%",minHeight:420,fontFamily:"var(--font-mono)",fontSize:13,lineHeight:1.6,
+                      background:"var(--bg)",color:"inherit",border:"1px solid var(--line)",borderRadius:10,padding:12}} />
+            <p className="note" style={{fontSize:11,marginTop:8}}>
+              Markdown supported. Agents read this document when writing every script for this account —
+              your edits change their behavior from the next job onward.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <b>{pretty(libDoc!)}</b>
+              <button className="ghost" onClick={()=>{setEditText(cur.content||"");setEditing(true);}}>✏️ Edit</button>
+            </div>
+            <div className="markdown" style={{fontSize:14,lineHeight:1.7}}>
+              <SimpleMarkdown text={cur.content||""} />
+            </div>
+            <p className="note" style={{fontSize:11,marginTop:16}}>
+              Written by <b>{cur.agent}</b> · v{cur.version} · updated {new Date(cur.updated_at||"").toLocaleString()}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

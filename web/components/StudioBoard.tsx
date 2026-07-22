@@ -9,9 +9,10 @@ const COLOR: Record<string, string> = {
   rejected: "var(--dim)", failed: "#e5484d",
 };
 
-export default function StudioBoard({ items, killOn }: { items: Item[]; killOn: boolean }) {
+export default function StudioBoard({ items, killOn, softOn }: { items: Item[]; killOn: boolean; softOn?: boolean }) {
   const [rows, setRows] = useState(items);
   const [kill, setKill] = useState(killOn);
+  const [soft, setSoft] = useState(!!softOn);
   const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const REASONS = ["weak hook", "boring visuals", "off topic", "too generic", "wrong tone"];
@@ -47,17 +48,34 @@ export default function StudioBoard({ items, killOn }: { items: Item[]; killOn: 
     setBusy(null);
     if (!r.ok) { alert(j.error); return; }
     if (itemId) { setRows(rows.map((x) => (x.id === itemId ? { ...x, status: j.status } : x))); setRejecting(null); }
+    else if (j.soft !== undefined) setSoft(j.soft);
     else setKill(j.kill);
   }
 
   const grouped = ORDER.map((s) => [s, rows.filter((r) => r.status === s)] as const).filter(([, v]) => v.length);
   return (
     <>
-      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <span><b>Worker:</b> <span style={{ color: kill ? "#e5484d" : "var(--approved)" }}>{kill ? "STOPPED (kill switch on)" : "running"}</span></span>
-        <button className={kill ? "primary" : "ghost"} onClick={() => act(kill ? "kill_off" : "kill_on")} disabled={busy === "kill_on" || busy === "kill_off"}>
-          {kill ? "Resume worker" : "Stop everything"}
-        </button>
+      <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, gap: 10, flexWrap: "wrap" }}>
+        <span><b>Worker:</b>{" "}
+          <span style={{ color: kill ? "#e5484d" : soft ? "#f59e0b" : "var(--approved)" }}>
+            {kill ? "STOPPED (emergency stop on)" : soft ? "INTAKE PAUSED (finishing in-flight work)" : "running"}
+          </span>
+        </span>
+        <span style={{ display: "flex", gap: 8 }}>
+          {!kill && (
+            <button className="ghost" style={soft ? { borderColor: "#f59e0b", color: "#f59e0b" } : {}}
+              onClick={() => act(soft ? "soft_pause_off" : "soft_pause_on")}
+              disabled={busy === "soft_pause_on" || busy === "soft_pause_off"}
+              title="Take no NEW content work, but let anything mid-render finish. Gentle brake.">
+              {soft ? "Resume intake" : "Pause intake"}
+            </button>
+          )}
+          <button className={kill ? "primary" : "ghost"} onClick={() => act(kill ? "kill_off" : "kill_on")}
+            disabled={busy === "kill_on" || busy === "kill_off"}
+            title="Hard stop: worker refuses ALL paid work immediately. Nothing is lost; Resume picks the queue back up.">
+            {kill ? "Resume worker" : "Emergency stop"}
+          </button>
+        </span>
       </div>
       {grouped.length === 0 && <p className="note">Board is empty. Run <code className="mono">python cli.py tick</code> on the worker to fill it.</p>}
       {grouped.map(([status, list]) => (

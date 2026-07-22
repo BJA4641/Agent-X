@@ -17,7 +17,7 @@ export default async function Studio() {
   const [{ data: items }, { data: ledger }, { data: killRow }, { data: subs }, usersRes] = await Promise.all([
     sb.from("board_items").select("id,status,topic,payload,created_at").eq("tenant_id", TENANT).order("created_at", { ascending: false }).limit(100),
     sb.from("run_ledger").select("step,cost_usd,ok,created_at").gte("created_at", new Date().toISOString().slice(0, 10)).limit(3000),
-    sb.from("settings").select("key,value").eq("tenant_id", TENANT).in("key", ["kill_switch", "digest_latest"]),
+    sb.from("settings").select("key,value").eq("tenant_id", TENANT).in("key", ["kill_switch", "digest_latest", "soft_pause"]),
     sb.from("task_progress").select("user_id,task_key,proof,updated_at").not("proof", "is", null).order("updated_at", { ascending: false }).limit(50),
     sb.auth.admin.listUsers({ perPage: 500 }),
   ]);
@@ -45,6 +45,7 @@ export default async function Studio() {
   const AGENT_NAMES: Record<string, string> = { strategy: "Strategist", brain: "Writer", critique: "Critic", visuals: "Art dept", voice: "Voice", captions: "Captions", produce: "Renderer", publish: "Publisher", community: "Community", digest: "Analyst" };
   const agents = AGENT_ORDER.filter(k => agentStats[k]).map(k => ({ key: k, name: AGENT_NAMES[k] || k, ...agentStats[k] }));
   const killOn = !!killRow?.find((r: any) => r.key === "kill_switch")?.value?.on;
+  const softOn = !!killRow?.find((r: any) => r.key === "soft_pause")?.value?.on;
   const digest = killRow?.find((r: any) => r.key === "digest_latest")?.value;
 
   return (
@@ -72,7 +73,7 @@ export default async function Studio() {
               <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 14, lineHeight: 1.6, margin: 0 }}>{digest.md}</pre>
             </div>
           )}
-          <StudioBoard items={(items as any) || []} killOn={killOn} />
+          <StudioBoard items={(items as any) || []} killOn={killOn} softOn={softOn} />
           <div style={{ marginTop: 36 }}>
             <h3>Course submissions</h3>
             <p className="note" style={{ marginBottom: 12 }}>Latest verification proofs from students. This is your quality window into who is actually doing the work.</p>
