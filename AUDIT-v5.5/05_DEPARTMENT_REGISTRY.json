@@ -1,0 +1,493 @@
+[
+  {
+    "name": "cfo",
+    "purpose": "Budget enforcement, killswitch, auto-throttle, daily spend report",
+    "manager": "CFO agent",
+    "agents": [
+      "cfo.preflight",
+      "cfo.daily_report",
+      "cfo.killswitch_check"
+    ],
+    "responsibilities": "Prevent overspend; honor killswitch; throttle at 90% budget",
+    "KPIs": [
+      "budget_utilization",
+      "overspend_events"
+    ],
+    "comms": "event bus",
+    "inputs": [
+      "job cost estimates"
+    ],
+    "outputs": [
+      "approve/delay decisions"
+    ],
+    "dependencies": [
+      "ledger",
+      "settings"
+    ],
+    "status": "implemented",
+    "completion": 80
+  },
+  {
+    "name": "cqo",
+    "purpose": "Grade every script 1-10, rewrite up to 2x if below 8.0 bar",
+    "manager": "CQO agent",
+    "agents": [
+      "cqo.grade_script"
+    ],
+    "responsibilities": "Quality gate before render",
+    "KPIs": [
+      "avg_grade",
+      "rewrite_rate"
+    ],
+    "comms": "event bus",
+    "inputs": [
+      "script,brand_context"
+    ],
+    "outputs": [
+      "verdict{passed,overall,...}"
+    ],
+    "dependencies": [
+      "agent.grader"
+    ],
+    "status": "implemented",
+    "completion": 75
+  },
+  {
+    "name": "risk",
+    "purpose": "Content policy / banned claim detection",
+    "manager": "Risk agent",
+    "agents": [
+      "risk.scan_content"
+    ],
+    "responsibilities": "Prevent banned claims, FTC issues",
+    "KPIs": [
+      "violations_caught"
+    ],
+    "comms": "event bus",
+    "inputs": [
+      "script/caption"
+    ],
+    "outputs": [
+      "pass/fail"
+    ],
+    "dependencies": [],
+    "status": "stub",
+    "completion": 20
+  },
+  {
+    "name": "ceo",
+    "purpose": "Autonomous CEO: ROI gate, capital allocation, recommendations, asset reuse",
+    "manager": "CEO agent (v5.5)",
+    "agents": [
+      "ceo.decide",
+      "ceo.daily_tick",
+      "ceo.allocate_budgets",
+      "ceo.reuse_search",
+      "ceo.record_outcome"
+    ],
+    "responsibilities": "Approve/deny/delay/reuse every spend; allocate budgets; write recs",
+    "KPIs": [
+      "roi",
+      "approval_rate",
+      "reuse_savings"
+    ],
+    "comms": "event bus + ceo_recommendations table",
+    "inputs": [
+      "action,cost,account,topic"
+    ],
+    "outputs": [
+      "decision{approve,deny,delay,reuse,cheaper},allocations,recommendations"
+    ],
+    "dependencies": [
+      "roi_snapshots",
+      "exec_decisions",
+      "capital_allocation",
+      "asset_library"
+    ],
+    "status": "partial",
+    "completion": 40,
+    "note": "only wired on creative.write_script; revenue=0 placeholder"
+  },
+  {
+    "name": "portfolio",
+    "purpose": "Account discovery, scheduling, orchestrate work across accounts",
+    "manager": "COO agent",
+    "agents": [
+      "portfolio.boot",
+      "portfolio.tick"
+    ],
+    "responsibilities": "Single-active-account scheduling; kick off pipeline",
+    "KPIs": [
+      "accounts_active",
+      "pipeline_health"
+    ],
+    "comms": "event bus + enqueues",
+    "inputs": [
+      "project_accounts.status"
+    ],
+    "outputs": [
+      "enqueued jobs"
+    ],
+    "dependencies": [
+      "active_accounts"
+    ],
+    "status": "implemented",
+    "completion": 75
+  },
+  {
+    "name": "research",
+    "purpose": "Trend scouting (Reddit/HN/Google/YouTube/pattern library)",
+    "manager": "Head of Research",
+    "agents": [
+      "research.scout_run"
+    ],
+    "responsibilities": "Populate trend_items with fresh, niche-relevant items",
+    "KPIs": [
+      "trends_scraped",
+      "niche_coverage"
+    ],
+    "comms": "event bus + trend_items",
+    "inputs": [
+      "niches"
+    ],
+    "outputs": [
+      "trend_items rows"
+    ],
+    "dependencies": [
+      "agent.scout"
+    ],
+    "status": "implemented",
+    "completion": 75
+  },
+  {
+    "name": "editorial",
+    "purpose": "Niche-aware topic selection, board_item creation",
+    "manager": "Editor in Chief",
+    "agents": [
+      "editorial.ideate",
+      "editorial.plan_one"
+    ],
+    "responsibilities": "Pick topics that fit brand + niche; avoid generic AI content",
+    "KPIs": [
+      "topics_picked",
+      "niche_match_rate"
+    ],
+    "comms": "event bus + board_items",
+    "inputs": [
+      "account,trends,evergreens"
+    ],
+    "outputs": [
+      "board_items status=idea + write_script jobs"
+    ],
+    "dependencies": [
+      "strategist,scout.recent_trends,niche bank"
+    ],
+    "status": "implemented",
+    "completion": 75
+  },
+  {
+    "name": "creative",
+    "purpose": "Scriptwriting + frame rendering + video stitching + voiceover",
+    "manager": "Head of Creative",
+    "agents": [
+      "creative.write_script",
+      "creative.render",
+      "creative.render_video"
+    ],
+    "responsibilities": "Produce publishable reels",
+    "KPIs": [
+      "scripts_written",
+      "renders_completed",
+      "render_success"
+    ],
+    "comms": "event bus + board_items.payload.script",
+    "inputs": [
+      "topic,item,brand"
+    ],
+    "outputs": [
+      "scripts, mp4 videos"
+    ],
+    "dependencies": [
+      "brain,visuals,composer,voice,ceo_decide"
+    ],
+    "status": "partial",
+    "completion": 50,
+    "note": "render not auto-enqueued; AI video not implemented"
+  },
+  {
+    "name": "postprod",
+    "purpose": "Final polish: trimming, caption burn, audio normalization",
+    "manager": "Post Prod lead",
+    "agents": [
+      "post.polish"
+    ],
+    "responsibilities": "Final pass on video before publish",
+    "KPIs": [
+      "polish_time"
+    ],
+    "comms": "event bus",
+    "inputs": [
+      "raw mp4"
+    ],
+    "outputs": [
+      "final mp4"
+    ],
+    "dependencies": [
+      "ffmpeg"
+    ],
+    "status": "partial",
+    "completion": 40
+  },
+  {
+    "name": "brand_studio",
+    "purpose": "Generate 13 brand docs per account on first run",
+    "manager": "Brand lead",
+    "agents": [
+      "brand_studio.generate"
+    ],
+    "responsibilities": "Produce brand identity/playbooks/hashtag sets",
+    "KPIs": [
+      "docs_per_account"
+    ],
+    "comms": "account_documents table",
+    "inputs": [
+      "account_id,name,niche"
+    ],
+    "outputs": [
+      "13 account_document rows"
+    ],
+    "dependencies": [
+      "architect"
+    ],
+    "status": "implemented",
+    "completion": 75
+  },
+  {
+    "name": "ops",
+    "purpose": "Heartbeat, KPI snapshots, worker health",
+    "manager": "COO",
+    "agents": [
+      "ops.heartbeat",
+      "ops.snapshot"
+    ],
+    "responsibilities": "Keep worker visible, emit KPIs",
+    "KPIs": [
+      "uptime",
+      "snapshot_frequency"
+    ],
+    "comms": "worker_health,kpi_snapshots",
+    "inputs": [],
+    "outputs": [
+      "health/snapshot rows"
+    ],
+    "dependencies": [],
+    "status": "implemented",
+    "completion": 80
+  },
+  {
+    "name": "human_desk",
+    "purpose": "Surface escalations needing founder approval",
+    "manager": "Founder (you)",
+    "agents": [
+      "human_desk.sync",
+      "human_desk.rescan"
+    ],
+    "responsibilities": "Wait human desk: failures, low-grade scripts, sponsorships",
+    "KPIs": [
+      "escalations_resolved",
+      "time_to_resolution"
+    ],
+    "comms": "escalations table + web UI",
+    "inputs": [
+      "failures,manual_review"
+    ],
+    "outputs": [
+      "resolution propagated"
+    ],
+    "dependencies": [],
+    "status": "partial",
+    "completion": 60
+  },
+  {
+    "name": "experiments",
+    "purpose": "A/B test hooks, captions, creatives",
+    "manager": "CTO",
+    "agents": [
+      "experiments.create_hook_test",
+      "experiments.decide"
+    ],
+    "responsibilities": "Continuous improvement through testing",
+    "KPIs": [
+      "experiments_run",
+      "winners_found"
+    ],
+    "comms": "experiments table",
+    "inputs": [
+      "variants"
+    ],
+    "outputs": [
+      "winner selection"
+    ],
+    "dependencies": [
+      "performance"
+    ],
+    "status": "stub",
+    "completion": 25
+  },
+  {
+    "name": "knowledge",
+    "purpose": "End-of-day summarization, RAG over past posts",
+    "manager": "CKO",
+    "agents": [
+      "knowledge.summarize_day"
+    ],
+    "responsibilities": "Compress experience into reusable knowledge",
+    "KPIs": [
+      "memory_compression"
+    ],
+    "comms": "memory,lessons",
+    "inputs": [
+      "daily activity"
+    ],
+    "outputs": [
+      "summaries,embeddings"
+    ],
+    "dependencies": [
+      "memory"
+    ],
+    "status": "stub",
+    "completion": 20
+  },
+  {
+    "name": "analytics",
+    "purpose": "Collect post metrics, post-mortem failures",
+    "manager": "CMO",
+    "agents": [
+      "analytics.collect_metrics",
+      "analytics.post_mortem"
+    ],
+    "responsibilities": "Measure views/likes/shares/followers/revenue",
+    "KPIs": [
+      "views,engagement,CPV,CPF"
+    ],
+    "comms": "performance,roi_snapshots",
+    "inputs": [
+      "item_id"
+    ],
+    "outputs": [
+      "metrics rows, lessons"
+    ],
+    "dependencies": [
+      "social APIs (MISSING)"
+    ],
+    "status": "partial",
+    "completion": 25
+  },
+  {
+    "name": "distribution",
+    "purpose": "Publish to IG/YT/TikTok, first-comment pin",
+    "manager": "Head of Distribution",
+    "agents": [
+      "distribution.publish",
+      "distribution.cross_promote"
+    ],
+    "responsibilities": "Ship content, schedule, receipt",
+    "KPIs": [
+      "publish_success",
+      "platforms_posted"
+    ],
+    "comms": "event bus + board_items",
+    "inputs": [
+      "video_path,caption,item"
+    ],
+    "outputs": [
+      "publish receipts"
+    ],
+    "dependencies": [
+      "agent.publishing (IG+YT; TikTok MISSING)"
+    ],
+    "status": "partial",
+    "completion": 45
+  },
+  {
+    "name": "monetization",
+    "purpose": "Affiliate link injection, sponsor disclosure, sponsor inbox scan",
+    "manager": "CRO",
+    "agents": [
+      "monetization.inject",
+      "monetization.scan_inbox"
+    ],
+    "responsibilities": "Capture revenue without violating FTC rules",
+    "KPIs": [
+      "affiliate_clicks",
+      "sponsor_deals",
+      "revenue"
+    ],
+    "comms": "board_items.payload.caption",
+    "inputs": [
+      "account,caption"
+    ],
+    "outputs": [
+      "augmented captions, deals"
+    ],
+    "dependencies": [],
+    "status": "partial",
+    "completion": 25
+  },
+  {
+    "name": "sales",
+    "purpose": "Sponsor outreach, deal desk",
+    "manager": "CRO",
+    "agents": [
+      "sales.outreach"
+    ],
+    "responsibilities": "Outbound DMs/emails to brands",
+    "KPIs": [
+      "deals_closed",
+      "outbound_response_rate"
+    ],
+    "comms": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "status": "NOT IMPLEMENTED",
+    "completion": 0
+  },
+  {
+    "name": "legal",
+    "purpose": "FTC, DMCA, rights, content licensing",
+    "manager": "Legal",
+    "agents": [
+      "legal.compliance_scan"
+    ],
+    "responsibilities": "Prevent legal risk",
+    "KPIs": [
+      "compliance_incidents"
+    ],
+    "comms": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "status": "NOT IMPLEMENTED",
+    "completion": 0
+  },
+  {
+    "name": "community",
+    "purpose": "Reply to comments/DMs",
+    "manager": "Community",
+    "agents": [
+      "community.reply"
+    ],
+    "responsibilities": "Boost engagement, answer comments",
+    "KPIs": [
+      "reply_rate",
+      "engagement_rate"
+    ],
+    "comms": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "status": "NOT IMPLEMENTED",
+    "completion": 0
+  }
+]

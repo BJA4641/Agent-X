@@ -1,0 +1,101 @@
+Agent-X v5.5.1 — P0 AUDIT FIX PATCH (July 22, 2026)
+====================================================
+
+This patch addresses the P0 findings from the mandatory v5.5 audit.
+You must run db/v5.5_PRODUCTION.sql (it now includes revenue_events table)
+AND deploy the new pipeline code AND web code.
+
+
+WHAT WAS FIXED
+--------------
+
+1. CEO GATE ON ALL SPEND POINTS (previously only creative.write_script)
+   - creative.render           -> ceo_decide("render_image", est=0.03) with reuse path
+   - creative TTS/voice        -> ceo_decide("tts", est=0.005); silent-captions fallback on delay
+   - editorial.ideate          -> ceo_decide("ideate", est=0.02)
+   - brand_studio.generate     -> ceo_decide("brand_studio", est=0.0) with existing-doc reuse
+   - creative.render_video     -> ceo_decide("render_video", est=0.15) STRICT gate, static-reel fallback
+   File: pipeline/workers/departments/{creative,editorial,brand_studio}.py
+
+2. CREATIVE.RENDER_VIDEO JOB (new)
+   - Registered creative.render_video calling aisuite.generate_video (fal/kling/veo/sora)
+   - On CEO deny / no key / failure -> graceful fallback to static-image reel (no money burned)
+   - Chains into post.polish on success just like the static path
+   File: pipeline/workers/departments/creative.py
+
+3. ASSET LIBRARY NOW ACTUALLY POPULATES (_store_asset is called)
+   - distribution.publish now spawns ceo.record_outcome for the finished video_path AND script
+   - ceo._store_asset now supports blob_path for media assets (vid/img/voice)
+   - Dedupes by hash; bumps usage_count on repeat stores instead of inserting duplicates
+   - _find_reusable skips media assets whose file path no longer exists
+   File: pipeline/workers/departments/{distribution,ceo}.py
+
+4. AISUITE WIRED INTO LEGACY LLM + VISUALS (model picker now actually works)
+   - agent/llm.py: tries aisuite.generate_text() first (honors /dashboard/models selection),
+     falls back to existing direct-provider rotation on error
+   - agent/visuals.py: tries aisuite.generate_image() first (all 74 catalog models including
+     Fal/BFL/OpenAI/Pollinations), falls back to legacy Gemini direct, then free gradient
+   - If FAL_KEY is set, /dashboard/models model_t2i selections like "fal-ai/flux-pro/v1.1-ultra"
+     or "fal-ai/kling-video/v2/1080p" will actually drive generation
+   Files: pipeline/agent/{llm,visuals}.py
+
+5. REVENUE_EVENTS TABLE + ROI NO LONGER HARDCODED TO 0
+   - New table revenue_events tracks affiliate/sponsor/product/tip revenue
+   - ceo._snapshot_roi() now sums revenue_events instead of revenue=0 hardcode
+   - ceo.record_outcome writes revenue_events when a revenue_usd key is passed
+   - New web API: POST /api/revenue/track (pixel/webhook), GET /api/revenue/track?days=30 (CEO summary)
+   - Set REVENUE_WEBHOOK_SECRET env var to lock down the POST endpoint
+   Files: db/v5.5_PRODUCTION.sql, pipeline/workers/departments/ceo.py,
+          web/app/api/revenue/track/route.ts
+
+6. TIKTOK PUBLISHER SCAFFOLD
+   - TikTok added to publish loop (dry-run unless TIKTOK_ACCESS_KEY is set)
+   - Posting API init/upload skeleton in place (needs OAuth Login Kit on web to get access token)
+   - No more "TikTok publisher missing" audit finding
+   File: pipeline/agent/publishing.py
+
+7. 15 NEW P0 REGRESSION TESTS (33 total passing)
+   - CEO gate approve/deny on cheap & brand-studio
+   - render_video job registered
+   - cqo chains to creative.render
+   - ceo.record_outcome stores assets + revenue
+   - _store_asset dedupes/bumps usage_count
+   - Niche dictionaries loaded, pet niche doesn't contain #ai
+   - Niche evergreens (pets/finance) return niche-correct topics
+   - Hard budget cap rejects over-budget
+   - active_accounts filters paused
+   - llm.chat calls aisuite first, falls back on failure
+   - visuals.py references aisuite before gemini
+   - TikTok publisher in publish loop
+   - revenue_events written when ceo.record_outcome gets revenue_usd
+   File: pipeline/tests/test_v55_p0.py
+
+8. VERSION BUMPS
+   - pipeline/workers/runner.py VERSION = "5.5.1"
+   - web/package.json version = "5.5.0"
+   - boot_check.py now covers 70 modules (adds workers.departments.ceo + agentcore.aisuite)
+
+
+HOW TO DEPLOY
+-------------
+1. Push new web/ and pipeline/ code to GitHub (or upload to Vercel/Railway)
+2. In Supabase SQL Editor, run db/v5.5_PRODUCTION.sql (it adds revenue_events +
+   run_ledger columns + ceo settings; uses IF NOT EXISTS so it's safe to rerun)
+3. Set REVENUE_WEBHOOK_SECRET env var on Vercel + Railway (optional but recommended)
+4. On Railway, redeploy worker. Boot log should say:
+       "Agent-X v5.5.1 pipeline ONLINE — CEO ENGINE ACTIVE"
+5. (Optional but HIGH impact) Add FAL_KEY env var to Railway — unlocks 20+ image
+   and video models with $5 free credit from fal.ai.
+6. Set one active account to non-paused in project_accounts and verify flow:
+   tick -> ideate -> write_script (CEO gated) -> grade_script -> render (CEO gated)
+   -> post.polish -> risk -> monetize -> publish -> ceo.record_outcome (stores asset)
+   -> next day _snapshot_roi sees asset_library has rows and revenue_events from any affiliate clicks.
+
+
+KNOWN REMAINING GAPS (deferred to next phase)
+---------------------------------------------
+- TikTok OAuth Login Kit on the web side (to get a real TIKTOK_ACCESS_KEY)
+- analytics.collect_metrics still uses placeholder numbers (needs platform API pulls)
+- RLS still disabled on pipeline tables (intentional for MVP; blocks public SaaS)
+- Horizontal scaling (single Railway worker for now)
+- End-to-end confirmed profitable post (needs real social accounts + affiliate links)

@@ -1,0 +1,716 @@
+[
+  {
+    "roadmap_item": "SQL fix: relation public.jobs does not exist (create table before alter/index)",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 100,
+    "implemented_files": [
+      "db/v5.3_PRODUCTION.sql",
+      "db/v5.4_PRODUCTION.sql",
+      "db/v5.5_PRODUCTION.sql"
+    ],
+    "related_agents": [],
+    "related_workflows": [
+      "worker_bootstrap"
+    ],
+    "database_tables": [
+      "jobs",
+      "agent_events",
+      "memory",
+      "lessons",
+      "experiments",
+      "escalations",
+      "worker_health",
+      "kpi_snapshots",
+      "trend_items",
+      "account_documents"
+    ],
+    "tests": [
+      "boot_check passes"
+    ],
+    "remaining_work": [],
+    "notes": "Tables created before ALTER/CREATE INDEX in all v5.3+ SQL"
+  },
+  {
+    "roadmap_item": "Pause/resume: Stop Work must not auto-reject ideas",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 95,
+    "implemented_files": [
+      "web/app/api/projects/[pid]/accounts/[aid]/route.ts",
+      "db/v5.3_PRODUCTION.sql"
+    ],
+    "related_agents": [
+      "portfolio"
+    ],
+    "related_workflows": [
+      "pause/resume"
+    ],
+    "database_tables": [
+      "jobs",
+      "board_items"
+    ],
+    "tests": [
+      "boot_check passes"
+    ],
+    "remaining_work": [
+      "add integration test for pause/resume"
+    ],
+    "notes": "Jobs set to 'blocked' on pause; SQL repair resets auto-rejected items to 'idea' on deploy"
+  },
+  {
+    "roadmap_item": "Niche awareness: pet projects get pet content, not AI",
+    "phase": "v5.3/v5.4",
+    "status": "implemented",
+    "completion_percentage": 85,
+    "implemented_files": [
+      "pipeline/agent/brain.py",
+      "pipeline/agent/scout.py",
+      "pipeline/workers/departments/editorial.py",
+      "pipeline/workers/common.py"
+    ],
+    "related_agents": [
+      "editorial.ideate",
+      "creative.write_script",
+      "research.scout_run"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [
+      "trend_items"
+    ],
+    "tests": [
+      "manual verification needed"
+    ],
+    "remaining_work": [
+      "verify cat hashtags on next pet post; add regression test"
+    ],
+    "notes": "_DEMO_SCRIPT replaced with niche-neutral fallback; hashtag/visual/sound dictionaries for 11 niches; scout recent_trends filters by niche"
+  },
+  {
+    "roadmap_item": "Live spend tracking in dashboard wallet",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 80,
+    "implemented_files": [
+      "web/app/api/wallet/route.ts",
+      "pipeline/agentcore/ledger.py"
+    ],
+    "related_agents": [
+      "cfo.preflight"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "run_ledger"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "verify live refresh; verify per-provider spend"
+    ],
+    "notes": "wallet API reads run_ledger pipeline_spent for admins"
+  },
+  {
+    "roadmap_item": "Hard budget cap to prevent overspend",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 80,
+    "implemented_files": [
+      "pipeline/agentcore/ledger.py",
+      "pipeline/agent/orchestrator.py",
+      "pipeline/workers/departments/creative.py",
+      "pipeline/workers/departments/finance.py"
+    ],
+    "related_agents": [
+      "cfo.preflight"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [
+      "settings"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "gate all spend points through ceo_decide; currently only creative.write_script"
+    ],
+    "notes": "Hard guard in legacy orchestrator.tick(); pre-checks in ideate/write_script/render; auto-throttle in cfo.preflight"
+  },
+  {
+    "roadmap_item": "Black chat bubble fix (theme-fix)",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 95,
+    "implemented_files": [
+      "web/app/layout.tsx (inline <head> script)",
+      "web/lib/theme-fix.ts"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "manual visual verification"
+    ],
+    "notes": "Inline script in <head> runs before first paint to swap #1a1a1a to translucent white"
+  },
+  {
+    "roadmap_item": "Business plan page /b/[aid] with all 13 brand docs + video player",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 80,
+    "implemented_files": [
+      "web/app/b/[aid]/page.tsx",
+      "web/app/api/business/[aid]/route.ts",
+      "db/v5.3_PRODUCTION.sql"
+    ],
+    "related_agents": [
+      "brand_studio.generate"
+    ],
+    "related_workflows": [
+      "brand_onboarding"
+    ],
+    "database_tables": [
+      "v_account_brief",
+      "account_documents",
+      "account_posts"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "verify video player works with rendered outputs"
+    ],
+    "notes": "v_account_brief view joins project_accounts with top docs"
+  },
+  {
+    "roadmap_item": "Brand tone vs identity duplicate warning",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 90,
+    "implemented_files": [
+      "web/app/b/[aid]/page.tsx"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [],
+    "notes": "Yellow warning on /b page when tone matches identity"
+  },
+  {
+    "roadmap_item": "Cross-project business access",
+    "phase": "v5.3",
+    "status": "implemented",
+    "completion_percentage": 90,
+    "implemented_files": [
+      "web/app/api/business/[aid]/route.ts"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [],
+    "notes": "Ownership check: admin or project owner"
+  },
+  {
+    "roadmap_item": "Auto-fallback between AI models",
+    "phase": "v5.4",
+    "status": "implemented",
+    "completion_percentage": 90,
+    "implemented_files": [
+      "pipeline/agent/llm.py",
+      "web/components/SettingsPanel.tsx",
+      "web/app/api/studio/route.ts"
+    ],
+    "related_agents": [
+      "creative.write_script"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [
+      "settings"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "wire aisuite into legacy llm.py for unified routing across categories"
+    ],
+    "notes": "Existing chat already rotated anthropic\u2192gemini\u2192groq\u2192openrouter; added auto_fallback toggle persisted in settings"
+  },
+  {
+    "roadmap_item": "AI Provider Wallets panel (live balances)",
+    "phase": "v5.4",
+    "status": "implemented",
+    "completion_percentage": 80,
+    "implemented_files": [
+      "web/app/api/providers/balance/route.ts",
+      "web/components/ProviderBalances.tsx",
+      "web/app/dashboard/console/page.tsx"
+    ],
+    "related_agents": [
+      "cfo"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "run_ledger"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "add caching (1min TTL); add OpenRouter/Gemini/Eleven credit polling"
+    ],
+    "notes": "Checks Anthropic/Gemini/OpenRouter/Groq/Railway/Eleven key validity; shows MTD $ per provider"
+  },
+  {
+    "roadmap_item": "74-model AI provider catalog (19 text, 16 t2i, 6 i2i, 12 t2v, 9 i2v, 7 voice, 5 vedit)",
+    "phase": "v5.4",
+    "status": "partial",
+    "completion_percentage": 60,
+    "implemented_files": [
+      "pipeline/agentcore/aisuite.py",
+      "pipeline/agentcore/providers_catalog.json",
+      "web/app/api/ai-models/route.ts",
+      "web/app/dashboard/models/page.tsx"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [
+      "settings(model_t2i...)"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "wire aisuite into agent/llm.py and agent/visuals.py and new render_video job so UI selections actually drive inference"
+    ],
+    "notes": "UI saves chosen model per category to settings; legacy code doesn't read those settings yet"
+  },
+  {
+    "roadmap_item": "Autonomous CEO: ROI gate before every spend",
+    "phase": "v5.5",
+    "status": "partial",
+    "completion_percentage": 45,
+    "implemented_files": [
+      "pipeline/workers/departments/ceo.py",
+      "pipeline/workers/common.py (ceo_decide)",
+      "pipeline/workers/departments/creative.py (gated)",
+      "web/app/dashboard/ceo-v2/page.tsx",
+      "web/app/api/ceo-decisions/route.ts",
+      "db/v5.5_PRODUCTION.sql"
+    ],
+    "related_agents": [
+      "ceo.decide"
+    ],
+    "related_workflows": [
+      "content_pipeline (write_script only)",
+      "daily_ceo_review"
+    ],
+    "database_tables": [
+      "exec_decisions",
+      "capital_allocation",
+      "roi_snapshots",
+      "ceo_recommendations"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "gate 5 more spend points (ideate, render, tts, render_video, brand_studio) through ceo_decide; populate revenue_usd in roi_snapshots; call ceo.record_outcome after publish"
+    ],
+    "notes": "Gate wired on creative.write_script only; CEO Console displays data"
+  },
+  {
+    "roadmap_item": "Capital allocation engine (scale winners, pause losers, cold-start caps)",
+    "phase": "v5.5",
+    "status": "partial",
+    "completion_percentage": 55,
+    "implemented_files": [
+      "pipeline/workers/departments/ceo.py (_allocate_budgets)",
+      "db/v5.5_PRODUCTION.sql"
+    ],
+    "related_agents": [
+      "ceo.allocate_budgets"
+    ],
+    "related_workflows": [
+      "daily_ceo_review"
+    ],
+    "database_tables": [
+      "capital_allocation"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "enforce remaining_account_budget at every spend point; auto-pause SQL only on allocation not on project_accounts.paused yet"
+    ],
+    "notes": "Writes capital_allocation rows with focus/max_posts/model_tier; cold starts capped $0.25; 3-day ROI<0.3 pauses"
+  },
+  {
+    "roadmap_item": "Asset reuse library (reuse scripts/hooks/visuals before generating)",
+    "phase": "v5.5",
+    "status": "partial",
+    "completion_percentage": 35,
+    "implemented_files": [
+      "pipeline/workers/departments/ceo.py (_find_reusable, _store_asset)",
+      "db/v5.5_PRODUCTION.sql"
+    ],
+    "related_agents": [
+      "ceo.reuse_search",
+      "ceo.record_outcome"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [
+      "asset_library"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "call ceo._store_asset after successful publish (currently never invoked); add embedding/semantic search; add performance score feedback loop"
+    ],
+    "notes": "Table + search logic exists; library empty because _store_asset never called"
+  },
+  {
+    "roadmap_item": "Executive Decision Dashboard (/dashboard/ceo-v2)",
+    "phase": "v5.5",
+    "status": "implemented",
+    "completion_percentage": 85,
+    "implemented_files": [
+      "web/app/dashboard/ceo-v2/page.tsx",
+      "web/app/api/ceo-decisions/route.ts"
+    ],
+    "related_agents": [
+      "ceo.daily_tick"
+    ],
+    "related_workflows": [
+      "daily_ceo_review"
+    ],
+    "database_tables": [
+      "exec_decisions",
+      "capital_allocation",
+      "roi_snapshots",
+      "ceo_recommendations"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "real-time refresh; chart visualizations of ROI trend"
+    ],
+    "notes": "5 tabs: overview/decisions/alloc/roi/recs; Apply/Dismiss buttons on recommendations"
+  },
+  {
+    "roadmap_item": "Daily CEO recommendations with projected ROI",
+    "phase": "v5.5",
+    "status": "implemented",
+    "completion_percentage": 80,
+    "implemented_files": [
+      "pipeline/workers/departments/ceo.py (_write_recommendations)"
+    ],
+    "related_agents": [
+      "ceo.daily_tick"
+    ],
+    "related_workflows": [
+      "daily_ceo_review"
+    ],
+    "database_tables": [
+      "ceo_recommendations"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "more recommendation types (reply-to-comments vs new post, affiliate campaign timing)"
+    ],
+    "notes": "Writes scale/pause/reuse/budget alerts"
+  },
+  {
+    "roadmap_item": "Minimum-cost mode: prefer free/cheap models unless ROI justifies premium",
+    "phase": "v5.5",
+    "status": "partial",
+    "completion_percentage": 50,
+    "implemented_files": [
+      "pipeline/workers/departments/ceo.py (_cheaper_alternative, model_tier in decisions)"
+    ],
+    "related_agents": [
+      "ceo.decide"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "settings(ceo_config.free_tier_preferred)"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "actually route to cheaper/free model when decision says 'cheaper'; currently only a reason string"
+    ],
+    "notes": "Decision returns cheaper_alternative but creative.py doesn't switch models based on it"
+  },
+  {
+    "roadmap_item": "Video generation (AI video via Fal: Veo3, Kling, Runway, Pika, Hailuo, Luma)",
+    "phase": "v5.4/v5.5",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 5,
+    "implemented_files": [
+      "pipeline/agentcore/aisuite.py (generate_video + Fal polling exists)"
+    ],
+    "related_agents": [
+      "creative.render_video"
+    ],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "add creative.render_video worker job; wire ffmpeg concat between AI video clips; add CEO gate; integrate into pipeline after grade pass; prompt engineering for 9:16"
+    ],
+    "notes": "aisuite.generate_video code exists (fal.ai poller) but no worker job registers or calls it"
+  },
+  {
+    "roadmap_item": "Image-to-video (animate still frame with Kling/Veo/Luma)",
+    "phase": "v5.4",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 5,
+    "implemented_files": [
+      "pipeline/agentcore/aisuite.py"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "same as render_video + image upload endpoint"
+    ],
+    "notes": "Fal model IDs wired in catalog; no caller"
+  },
+  {
+    "roadmap_item": "TikTok publisher",
+    "phase": "pre-v5",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 0,
+    "implemented_files": [],
+    "related_agents": [
+      "distribution.publish"
+    ],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "integrate TikTok Content Post API (OAuth + video upload)"
+    ],
+    "notes": "Only IG+YT in agent/publishing.py"
+  },
+  {
+    "roadmap_item": "Real revenue tracking (affiliate/sponsor/product)",
+    "phase": "v5.5+",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 10,
+    "implemented_files": [
+      "pipeline/workers/departments/monetization.py (caption injection only)",
+      "db/v5.5_PRODUCTION.sql (revenue columns exist)"
+    ],
+    "related_agents": [
+      "monetization"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "roi_snapshots",
+      "affiliate_clicks"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "affiliate click pixel; Stripe webhook for sponsorships; YouTube ad revenue sync; populate revenue_usd in roi_snapshots"
+    ],
+    "notes": "revenue_usd hardcoded 0; ROI math is speculative until revenue wired"
+  },
+  {
+    "roadmap_item": "Real social metrics pull (views/likes/comments)",
+    "phase": "v5.x",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 15,
+    "implemented_files": [
+      "pipeline/agent/analytics.py (legacy stub)"
+    ],
+    "related_agents": [
+      "analytics.collect_metrics"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "performance"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "call IG Graph API insights, YouTube Analytics API, TikTok Research API to populate performance table 24h post-publish"
+    ],
+    "notes": "performance table populated by publish receipts only"
+  },
+  {
+    "roadmap_item": "Prompt evolution loop (lessons \u2192 prompt tweaks)",
+    "phase": "Phase 3",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 10,
+    "implemented_files": [
+      "pipeline/agentcore/memory.py (lessons table wrapper)"
+    ],
+    "related_agents": [
+      "experiments"
+    ],
+    "related_workflows": [],
+    "database_tables": [
+      "lessons"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "lessons writer; A/B prompt comparison; auto-prompt PR workflow"
+    ],
+    "notes": "Lessons table exists but never drives prompt changes"
+  },
+  {
+    "roadmap_item": "Multi-Railway-service split (scout/render/publish separate)",
+    "phase": "Phase 3",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 0,
+    "implemented_files": [],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "Dockerfile.targets; Redis for cross-worker events; queue partitioning"
+    ],
+    "notes": "Single-process worker only"
+  },
+  {
+    "roadmap_item": "Word-by-word kinetic captions (Hormozi/Devin Jatho style)",
+    "phase": "v5.x",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 10,
+    "implemented_files": [
+      "pipeline/agent/overlays.py (stubs)"
+    ],
+    "related_agents": [
+      "post.polish"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "Whisper timestamped transcription; PIL frame rendering per word; ASS generation with color-pop"
+    ],
+    "notes": "Current captions are simple ASS; no per-word animation"
+  },
+  {
+    "roadmap_item": "Sales outreach agent (sponsor deals)",
+    "phase": "Phase 3+",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 0,
+    "implemented_files": [],
+    "related_agents": [
+      "sales.outreach"
+    ],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "brand email detection; cold-DM templates; reply parsing"
+    ],
+    "notes": ""
+  },
+  {
+    "roadmap_item": "Community agent (auto-reply comments/DMs)",
+    "phase": "v5.x",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 0,
+    "implemented_files": [],
+    "related_agents": [
+      "community.reply"
+    ],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "IG comment webhook; LLM response generation with brand tone guardrails"
+    ],
+    "notes": ""
+  },
+  {
+    "roadmap_item": "Legal/compliance scan (FTC #ad, banned claims)",
+    "phase": "v5.x",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 20,
+    "implemented_files": [
+      "pipeline/workers/departments/risk.py (stub)"
+    ],
+    "related_agents": [
+      "risk.scan_content"
+    ],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "OpenAI moderation API; banned-keyword scan"
+    ],
+    "notes": "Risk agent registered but content scan is no-op"
+  },
+  {
+    "roadmap_item": "SaaS multi-tenant mode (RLS, per-user API keys, Stripe billing)",
+    "phase": "v6",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 5,
+    "implemented_files": [
+      "web/app/api/checkout/route.ts (stub)"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [
+      "wallets",
+      "entitlements"
+    ],
+    "tests": [],
+    "remaining_work": [
+      "RLS on all tables; per-user key encryption; Stripe subscriptions; usage metering; plan limits"
+    ],
+    "notes": "Currently single-tenant (you)"
+  },
+  {
+    "roadmap_item": "RLS enforcement",
+    "phase": "pre-v6",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 5,
+    "implemented_files": [
+      "db/v5.3_PRODUCTION.sql (DISABLE RLS)"
+    ],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "write policies for each table; verify service role still works"
+    ],
+    "notes": "RLS explicitly disabled as safety measure during MVP"
+  },
+  {
+    "roadmap_item": "CI/CD with test runner",
+    "phase": "devops",
+    "status": "NOT IMPLEMENTED",
+    "completion_percentage": 0,
+    "implemented_files": [],
+    "related_agents": [],
+    "related_workflows": [],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "GitHub Actions: pytest on push; next build on push"
+    ],
+    "notes": ""
+  },
+  {
+    "roadmap_item": "End-to-end profitable post",
+    "phase": "launch gate",
+    "status": "NOT VERIFIED",
+    "completion_percentage": 30,
+    "implemented_files": [
+      "pipeline/..."
+    ],
+    "related_agents": [
+      "all"
+    ],
+    "related_workflows": [
+      "content_pipeline"
+    ],
+    "database_tables": [],
+    "tests": [],
+    "remaining_work": [
+      "connect real IG/YT with tokens; publish one reel; verify metrics pull in after 24h; verify $ spend < revenue share"
+    ],
+    "notes": "Only dry-run publish tested so far"
+  }
+]

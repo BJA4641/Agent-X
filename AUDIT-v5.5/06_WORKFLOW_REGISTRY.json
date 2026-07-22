@@ -1,0 +1,237 @@
+[
+  {
+    "name": "worker_bootstrap",
+    "trigger": "worker start",
+    "agents": [
+      "portfolio.boot",
+      "research.scout_run",
+      "portfolio.tick",
+      "cfo.daily_report",
+      "cfo.killswitch_check",
+      "ceo.daily_tick",
+      "ops.heartbeat",
+      "ops.snapshot",
+      "human_desk.sync"
+    ],
+    "departments": [
+      "portfolio",
+      "research",
+      "cfo",
+      "ceo",
+      "ops",
+      "human_desk"
+    ],
+    "steps": [
+      "runner enqueues boot jobs with idempotency keys",
+      "portfolio.boot enqueues first scout/tick/cfo jobs",
+      "ops.heartbeat/snapshot start rescheduling via idempotency",
+      "ceo.daily_tick runs once per boot + daily"
+    ],
+    "tables": [
+      "jobs",
+      "worker_health",
+      "capital_allocation",
+      "roi_snapshots",
+      "ceo_recommendations"
+    ],
+    "events": [
+      "boot"
+    ],
+    "memory_usage": "none",
+    "quality_gates": [],
+    "retry_logic": "idempotency keys prevent dupes; failed jobs retry up to max_attempts",
+    "human_approval": "none",
+    "KPIs": [
+      "boot_time"
+    ],
+    "outputs": [
+      "running worker with all departments"
+    ],
+    "failure_paths": "if Supabase unreachable worker retries on next poll"
+  },
+  {
+    "name": "content_pipeline",
+    "trigger": "portfolio.tick picks active account",
+    "agents": [
+      "research.scout_run",
+      "editorial.ideate",
+      "creative.write_script",
+      "cqo.grade_script",
+      "creative.render",
+      "post.polish",
+      "monetization.inject",
+      "risk.scan_content",
+      "distribution.publish",
+      "analytics.collect_metrics",
+      "ceo.decide",
+      "ceo.record_outcome"
+    ],
+    "departments": [
+      "research",
+      "editorial",
+      "creative",
+      "cqo",
+      "postprod",
+      "monetization",
+      "risk",
+      "distribution",
+      "analytics",
+      "ceo"
+    ],
+    "steps": [
+      "portfolio.tick enqueues editorial.ideate for active account",
+      "editorial.ideate picks N niche topics, writes board_items, enqueues creative.write_script per topic",
+      "creative.write_script calls ceo_decide (v5.5); if reuse loads from asset_library; else calls brain.write_script",
+      "cqo.grade_script grades; rewrites up to 2x if fail; if pass enqueues creative.render (GAP: not currently wired)",
+      "creative.render: visuals.beat_frame per beat (Gemini or procedural), composer.render (ffmpeg), voice TTS, returns mp4",
+      "post.polish: trim/normalize (stub)",
+      "monetization.inject appends link-in-bio / #ad",
+      "risk.scan_content (stub)",
+      "distribution.publish to IG/YT (dry-run if no keys)",
+      "analytics.collect_metrics enqueued in 24h",
+      "ceo.record_outcome stores asset (NOT CALLED)"
+    ],
+    "tables": [
+      "board_items",
+      "jobs",
+      "run_ledger",
+      "asset_library",
+      "exec_decisions",
+      "account_documents",
+      "performance",
+      "capital_allocation"
+    ],
+    "events": [
+      "ideate",
+      "script_start",
+      "grade",
+      "render",
+      "publish_start",
+      "publish_done"
+    ],
+    "memory_usage": "grade_feedback, brand context, lessons",
+    "quality_gates": [
+      "cqo.grade_script >= 8.0 before render",
+      "ceo ROI >= 1.5 before spend"
+    ],
+    "retry_logic": "max 2 rewrite attempts, 2 LLM attempts total",
+    "human_approval": "wait_human escalations pause work until approved",
+    "KPIs": [
+      "pipeline_throughput",
+      "cost_per_post",
+      "grade_pass_rate",
+      "publish_success"
+    ],
+    "outputs": [
+      "MP4 published to connected platforms, receipts, performance rows"
+    ],
+    "failure_paths": "LLM failure \u2192 fallback to demo/cached; render failure \u2192 fail job; publish failure \u2192 retry once"
+  },
+  {
+    "name": "daily_ceo_review",
+    "trigger": "daily (midnight) + on boot",
+    "agents": [
+      "ceo.daily_tick",
+      "ceo.allocate_budgets"
+    ],
+    "departments": [
+      "ceo"
+    ],
+    "steps": [
+      "_snapshot_roi: sum run_ledger spend + performance metrics per account per day",
+      "_allocate_budgets: cold starts $0.25 free; scale winners (ROI>3x) to mix/premium; pause losers after 3 days ROI<0.3; balanced for 1-3x",
+      "_write_recommendations: 3-7 action items for the CEO"
+    ],
+    "tables": [
+      "roi_snapshots",
+      "capital_allocation",
+      "ceo_recommendations",
+      "run_ledger",
+      "performance"
+    ],
+    "events": [
+      "ceo_day_start",
+      "ceo_day_done",
+      "alloc"
+    ],
+    "memory_usage": "roi history (consecutive losing streak)",
+    "quality_gates": [],
+    "retry_logic": "once per day",
+    "human_approval": "recommendations appear for Apply/Dismiss",
+    "KPIs": [
+      "recommendations_acted_on",
+      "budget_utilization",
+      "paused_accounts"
+    ],
+    "outputs": [
+      "capital_allocation rows + recommendations"
+    ],
+    "failure_paths": "if tables missing, logs but doesn't crash"
+  },
+  {
+    "name": "brand_onboarding",
+    "trigger": "new project_account created",
+    "agents": [
+      "brand_studio.generate"
+    ],
+    "departments": [
+      "brand_studio"
+    ],
+    "steps": [
+      "detect account with <5 docs",
+      "call architect to generate all 13 brand docs",
+      "store in account_documents"
+    ],
+    "tables": [
+      "account_documents",
+      "project_accounts"
+    ],
+    "events": [
+      "brand_start",
+      "brand_done"
+    ],
+    "memory_usage": "none",
+    "quality_gates": "basic presence check",
+    "retry_logic": "once per account",
+    "human_approval": "docs visible on /b/[aid] for edit",
+    "KPIs": [
+      "docs_generated"
+    ],
+    "outputs": [
+      "13 brand documents"
+    ],
+    "failure_paths": "LLM failure retried; partial docs left for human completion"
+  },
+  {
+    "name": "human_approval",
+    "trigger": "job enters wait_human, or grade fails final, or CEO escalates",
+    "agents": [
+      "human_desk.sync"
+    ],
+    "departments": [
+      "human_desk"
+    ],
+    "steps": [
+      "human_desk.sync scans escalations + wait_human jobs",
+      "Founder sees cards on /dashboard/workspace HumanDesk component",
+      "Founder Approve/Reject/Edit",
+      "resolution propagates to job, which resumes"
+    ],
+    "tables": [
+      "escalations",
+      "jobs"
+    ],
+    "events": [],
+    "memory_usage": "none",
+    "quality_gates": [],
+    "retry_logic": "stays open until acted on",
+    "human_approval": "the entire flow",
+    "KPIs": [
+      "time_to_resolution"
+    ],
+    "outputs": [
+      "approved/rejected content"
+    ],
+    "failure_paths": "stale escalations cleared on boot"
+  }
+]

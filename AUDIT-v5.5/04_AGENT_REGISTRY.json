@@ -1,0 +1,1276 @@
+[
+  {
+    "name": "cfo.preflight",
+    "department": "cfo",
+    "manager": "worker",
+    "reports_to": "portfolio.tick",
+    "purpose": "Auto-throttle: check budget utilization, reschedule low-priority jobs when >90% spent",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 80,
+    "source_files": [
+      "pipeline/workers/departments/finance.py"
+    ],
+    "tools": [
+      "run_ledger",
+      "settings"
+    ],
+    "memory": [],
+    "events": [
+      "cfo_preflight"
+    ],
+    "inputs": [
+      "job.payload"
+    ],
+    "outputs": [
+      "job reschedule/approve"
+    ],
+    "dependencies": [
+      "ledger.budget_ok"
+    ],
+    "KPIs": [
+      "budget_utilization"
+    ],
+    "business_owner": "CEO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "20ms"
+  },
+  {
+    "name": "cfo.daily_report",
+    "department": "cfo",
+    "manager": "worker",
+    "reports_to": "portfolio.boot",
+    "purpose": "Daily spend summary event",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 60,
+    "source_files": [
+      "pipeline/workers/departments/finance.py"
+    ],
+    "tools": [],
+    "memory": [],
+    "events": [
+      "cfo_daily"
+    ],
+    "inputs": [],
+    "outputs": [
+      "agent event summary"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CEO",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "200ms"
+  },
+  {
+    "name": "cfo.killswitch_check",
+    "department": "cfo",
+    "manager": "worker",
+    "reports_to": "portfolio.boot",
+    "purpose": "Honor kill_switch setting and halt work if on",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 95,
+    "source_files": [
+      "pipeline/workers/departments/finance.py"
+    ],
+    "tools": [
+      "settings"
+    ],
+    "memory": [],
+    "events": [
+      "killswitch"
+    ],
+    "inputs": [],
+    "outputs": [
+      "halt if kill_switch"
+    ],
+    "dependencies": [
+      "config.kill_switch_on"
+    ],
+    "KPIs": [],
+    "business_owner": "CEO",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "5ms"
+  },
+  {
+    "name": "cqo.grade_script",
+    "department": "cqo",
+    "manager": "worker",
+    "reports_to": "creative.write_script",
+    "purpose": "Grade produced script 1-10, rewrite up to 2x if fails 8.0 bar",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/cqo.py",
+      "pipeline/agent/grader.py"
+    ],
+    "tools": [
+      "llm.chat",
+      "brand context"
+    ],
+    "memory": [
+      "lessons",
+      "grade_feedback"
+    ],
+    "events": [
+      "grade_pass",
+      "grade_fail",
+      "rewrite"
+    ],
+    "inputs": [
+      "script, brand_context, item_id"
+    ],
+    "outputs": [
+      "verdict {passed,overall,...}"
+    ],
+    "dependencies": [
+      "agent.grader"
+    ],
+    "KPIs": [
+      "avg_grade",
+      "rewrite_rate"
+    ],
+    "business_owner": "CQO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "~$0.025",
+    "estimated_execution_time": "8s"
+  },
+  {
+    "name": "risk.scan_content",
+    "department": "risk",
+    "manager": "worker",
+    "reports_to": "creative.write_script",
+    "purpose": "Flag policy violations / banned claims (stub)",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 20,
+    "source_files": [
+      "pipeline/workers/departments/risk.py"
+    ],
+    "tools": [],
+    "memory": [],
+    "events": [
+      "risk_scan"
+    ],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Legal",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "5ms"
+  },
+  {
+    "name": "ceo.decide",
+    "department": "ceo",
+    "manager": "worker",
+    "reports_to": "creative.write_script",
+    "purpose": "Approve/deny/delay/reuse/cheaper every spending decision based on expected ROI",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 45,
+    "source_files": [
+      "pipeline/workers/departments/ceo.py",
+      "pipeline/workers/common.py"
+    ],
+    "tools": [
+      "exec_decisions",
+      "capital_allocation",
+      "asset_library"
+    ],
+    "memory": [
+      "roi_snapshots"
+    ],
+    "events": [
+      "ceo_approve",
+      "ceo_deny",
+      "ceo_delay",
+      "ceo_reuse",
+      "ceo_cheaper"
+    ],
+    "inputs": [
+      "action,account_id,est_cost,topic"
+    ],
+    "outputs": [
+      "{decision,reason,reuse?,cheaper?,model_tier}"
+    ],
+    "dependencies": [
+      "_expected_value,_success_probability",
+      "_account_roi"
+    ],
+    "KPIs": [
+      "approval_rate",
+      "reuse_savings",
+      "roi_multiple"
+    ],
+    "business_owner": "CEO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "150ms"
+  },
+  {
+    "name": "ceo.daily_tick",
+    "department": "ceo",
+    "manager": "worker",
+    "reports_to": "runner bootstrap",
+    "purpose": "Daily CEO review: snapshot ROI, allocate budgets, write recommendations",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 70,
+    "source_files": [
+      "pipeline/workers/departments/ceo.py"
+    ],
+    "tools": [
+      "roi_snapshots",
+      "capital_allocation",
+      "ceo_recommendations"
+    ],
+    "memory": [],
+    "events": [
+      "ceo_day_start",
+      "ceo_day_done"
+    ],
+    "inputs": [],
+    "outputs": [
+      "capital_allocation rows, ceo_recommendations rows"
+    ],
+    "dependencies": [
+      "_snapshot_roi,_allocate_budgets,_write_recommendations"
+    ],
+    "KPIs": [
+      "allocations_made",
+      "recommendations_generated"
+    ],
+    "business_owner": "CEO",
+    "workflows": [
+      "daily_ceo_review",
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "2s"
+  },
+  {
+    "name": "ceo.allocate_budgets",
+    "department": "ceo",
+    "manager": "worker",
+    "reports_to": "ceo.daily_tick",
+    "purpose": "Per-account budget allocation: scale winners, pause losers, cap cold starts",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 70,
+    "source_files": [
+      "pipeline/workers/departments/ceo.py"
+    ],
+    "tools": [
+      "capital_allocation"
+    ],
+    "memory": [
+      "roi_snapshots"
+    ],
+    "events": [
+      "alloc"
+    ],
+    "inputs": [],
+    "outputs": [
+      "capital_allocation rows"
+    ],
+    "dependencies": [
+      "_account_roi,_losing_streak"
+    ],
+    "KPIs": [
+      "budget_utilization"
+    ],
+    "business_owner": "CEO",
+    "workflows": [
+      "daily_ceo_review"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "1s"
+  },
+  {
+    "name": "ceo.reuse_search",
+    "department": "ceo",
+    "manager": "worker",
+    "reports_to": "ceo.decide",
+    "purpose": "Search asset_library for proven reusable content",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 30,
+    "source_files": [
+      "pipeline/workers/departments/ceo.py"
+    ],
+    "tools": [
+      "asset_library"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [
+      "action,account_id,topic"
+    ],
+    "outputs": [
+      "asset row or null"
+    ],
+    "dependencies": [
+      "_find_reusable"
+    ],
+    "KPIs": [
+      "reuse_rate"
+    ],
+    "business_owner": "CEO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "30ms"
+  },
+  {
+    "name": "ceo.record_outcome",
+    "department": "ceo",
+    "manager": "worker",
+    "reports_to": "distribution.publish",
+    "purpose": "Store successful content in asset_library for reuse (NOT CALLED YET)",
+    "status": "NOT CALLED",
+    "implemented": true,
+    "completion_percentage": 10,
+    "source_files": [
+      "pipeline/workers/departments/ceo.py"
+    ],
+    "tools": [
+      "asset_library"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [
+      "asset_type,content,niche,cost"
+    ],
+    "outputs": [
+      "asset_library row"
+    ],
+    "dependencies": [],
+    "KPIs": [
+      "library_size",
+      "reuse_count"
+    ],
+    "business_owner": "CEO",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "20ms"
+  },
+  {
+    "name": "portfolio.boot",
+    "department": "portfolio",
+    "manager": "worker",
+    "reports_to": "runner",
+    "purpose": "Bootstrap: kick off scout, first tick, CFO reports, killswitch check",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 80,
+    "source_files": [
+      "pipeline/workers/departments/portfolio.py"
+    ],
+    "tools": [],
+    "memory": [],
+    "events": [
+      "boot"
+    ],
+    "inputs": [],
+    "outputs": [
+      "enqueued jobs"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "COO",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "50ms"
+  },
+  {
+    "name": "portfolio.tick",
+    "department": "portfolio",
+    "manager": "worker",
+    "reports_to": "portfolio.boot / scheduled",
+    "purpose": "Pick active account (single-account mode), enqueue ideation",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/portfolio.py"
+    ],
+    "tools": [
+      "project_accounts"
+    ],
+    "memory": [],
+    "events": [
+      "tick"
+    ],
+    "inputs": [],
+    "outputs": [
+      "editorial.ideate enqueued"
+    ],
+    "dependencies": [
+      "active_accounts",
+      "first_active_account"
+    ],
+    "KPIs": [
+      "accounts_active"
+    ],
+    "business_owner": "COO",
+    "workflows": [
+      "content_pipeline",
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "200ms"
+  },
+  {
+    "name": "research.scout_run",
+    "department": "research",
+    "manager": "worker",
+    "reports_to": "portfolio.boot",
+    "purpose": "Refresh trend cache: Reddit/HN/Google News/YouTube/patterns (zero LLM cost)",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/research.py",
+      "pipeline/agent/scout.py"
+    ],
+    "tools": [
+      "trend_items"
+    ],
+    "memory": [],
+    "events": [
+      "scout_start",
+      "scout_done",
+      "scout_niche"
+    ],
+    "inputs": [],
+    "outputs": [
+      "trend_items rows"
+    ],
+    "dependencies": [
+      "agent.scout.run"
+    ],
+    "KPIs": [
+      "trends_scraped"
+    ],
+    "business_owner": "Head of Research",
+    "workflows": [
+      "content_pipeline",
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "5s"
+  },
+  {
+    "name": "editorial.ideate",
+    "department": "editorial",
+    "manager": "worker",
+    "reports_to": "portfolio.tick",
+    "purpose": "Niche-aware topic selection, write to board_items as ideas",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/editorial.py"
+    ],
+    "tools": [
+      "board_items",
+      "trend_items",
+      "strategist.plan"
+    ],
+    "memory": [
+      "brand context"
+    ],
+    "events": [
+      "ideate"
+    ],
+    "inputs": [
+      "target count,account_id"
+    ],
+    "outputs": [
+      "board_items status=idea, enqueued write_script jobs"
+    ],
+    "dependencies": [
+      "_pick_topics",
+      "strategist",
+      "scout.recent_trends"
+    ],
+    "KPIs": [
+      "topics_selected",
+      "niche_match_rate"
+    ],
+    "business_owner": "Editor In Chief",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "~$0.02",
+    "estimated_execution_time": "4s",
+    "missing": "ceo gate not wired"
+  },
+  {
+    "name": "editorial.plan_one",
+    "department": "editorial",
+    "manager": "worker",
+    "reports_to": "human desk",
+    "purpose": "Plan one post from a human-queued topic",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 70,
+    "source_files": [
+      "pipeline/workers/departments/editorial.py"
+    ],
+    "tools": [
+      "board_items"
+    ],
+    "memory": [],
+    "events": [
+      "plan"
+    ],
+    "inputs": [
+      "topic,account_id"
+    ],
+    "outputs": [
+      "board_item + write_script job"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Editor In Chief",
+    "workflows": [],
+    "estimated_cost_per_execution": "~$0.02",
+    "estimated_execution_time": "4s"
+  },
+  {
+    "name": "creative.write_script",
+    "department": "creative",
+    "manager": "worker",
+    "reports_to": "editorial.ideate/plan_one",
+    "purpose": "CEO-gated, call brain.write_script, grade, persist to board_items",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 85,
+    "source_files": [
+      "pipeline/workers/departments/creative.py",
+      "pipeline/agent/brain.py"
+    ],
+    "tools": [
+      "llm.chat",
+      "brand context",
+      "ceo_decide"
+    ],
+    "memory": [
+      "memory.grade_feedback"
+    ],
+    "events": [
+      "script_start",
+      "script_budget",
+      "ceo_deny",
+      "ceo_delay",
+      "ceo_reuse"
+    ],
+    "inputs": [
+      "topic,item_id,account_id"
+    ],
+    "outputs": [
+      "script on board_item, cqo.grade_script job enqueued"
+    ],
+    "dependencies": [
+      "agent.brain.write_script",
+      "common.ceo_decide"
+    ],
+    "KPIs": [
+      "scripts_written",
+      "approval_rate"
+    ],
+    "business_owner": "Head of Creative",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "~$0.04",
+    "estimated_execution_time": "15s"
+  },
+  {
+    "name": "creative.render",
+    "department": "creative",
+    "manager": "worker",
+    "reports_to": "????",
+    "purpose": "Build MP4 via visuals (Gemini+PIL) + composer (ffmpeg) + voice (TTS)",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 50,
+    "source_files": [
+      "pipeline/workers/departments/creative.py",
+      "pipeline/agent/visuals.py",
+      "pipeline/agent/composer.py",
+      "pipeline/agent/voice.py"
+    ],
+    "tools": [
+      "Gemini API",
+      "ffmpeg",
+      "ElevenLabs"
+    ],
+    "memory": [],
+    "events": [
+      "render_start",
+      "render_done"
+    ],
+    "inputs": [
+      "item_id,script,account_id"
+    ],
+    "outputs": [
+      "video_path enqueued to distribution.publish"
+    ],
+    "dependencies": [
+      "visuals.beat_frame",
+      "composer.render",
+      "voice"
+    ],
+    "KPIs": [
+      "render_success"
+    ],
+    "business_owner": "Head of Creative",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "~$0.04",
+    "estimated_execution_time": "60s",
+    "missing": "not enqueued automatically after cqo grade pass (GAP); AI video not supported; ceo gate not wired"
+  },
+  {
+    "name": "creative.render_video",
+    "department": "creative",
+    "manager": "NOT REGISTERED",
+    "reports_to": "creative.write_script",
+    "purpose": "Generate AI video via aisuite.generate_video (fal/kling/veo)",
+    "status": "NOT IMPLEMENTED",
+    "implemented": false,
+    "completion_percentage": 5,
+    "source_files": [
+      "pipeline/agentcore/aisuite.py"
+    ],
+    "tools": [
+      "fal.ai"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [
+      "prompt/image"
+    ],
+    "outputs": [
+      "mp4 path"
+    ],
+    "dependencies": [
+      "aisuite.generate_video"
+    ],
+    "KPIs": [],
+    "business_owner": "Head of Creative",
+    "workflows": [],
+    "estimated_cost_per_execution": "~$0.15-0.50",
+    "estimated_execution_time": "60-180s"
+  },
+  {
+    "name": "post.polish",
+    "department": "postprod",
+    "manager": "worker",
+    "reports_to": "creative.render",
+    "purpose": "Final polish: trimming, caption burn, audio normalize",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 30,
+    "source_files": [
+      "pipeline/workers/departments/postprod.py"
+    ],
+    "tools": [
+      "ffmpeg"
+    ],
+    "memory": [],
+    "events": [
+      "polish"
+    ],
+    "inputs": [
+      "video_path"
+    ],
+    "outputs": [
+      "final mp4"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Head of PostProd",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "5s"
+  },
+  {
+    "name": "brand_studio.generate",
+    "department": "brand_studio",
+    "manager": "worker",
+    "reports_to": "portfolio.tick (new accounts)",
+    "purpose": "Generate 13 brand docs for accounts missing them (one-time)",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/brand_studio.py",
+      "pipeline/agent/architect.py"
+    ],
+    "tools": [
+      "llm.chat"
+    ],
+    "memory": [
+      "account_documents"
+    ],
+    "events": [
+      "brand_start",
+      "brand_done"
+    ],
+    "inputs": [
+      "account_id"
+    ],
+    "outputs": [
+      "13 account_document rows"
+    ],
+    "dependencies": [
+      "agent.architect"
+    ],
+    "KPIs": [
+      "docs_generated"
+    ],
+    "business_owner": "Brand",
+    "workflows": [
+      "brand_onboarding"
+    ],
+    "estimated_cost_per_execution": "~$0.10/account one-time",
+    "estimated_execution_time": "30s",
+    "missing": "ceo gate not wired (one-time cost, acceptable)"
+  },
+  {
+    "name": "ops.heartbeat",
+    "department": "ops",
+    "manager": "worker",
+    "reports_to": "runner (scheduled every 30s via idempotency)",
+    "purpose": "Update worker_health so dashboard shows liveness",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 95,
+    "source_files": [
+      "pipeline/workers/departments/ops.py"
+    ],
+    "tools": [
+      "worker_health"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "worker_health row"
+    ],
+    "dependencies": [],
+    "KPIs": [
+      "uptime"
+    ],
+    "business_owner": "COO",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "5ms"
+  },
+  {
+    "name": "ops.snapshot",
+    "department": "ops",
+    "manager": "worker",
+    "reports_to": "runner (hourly)",
+    "purpose": "KPI snapshot for CEO scorecard",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 80,
+    "source_files": [
+      "pipeline/workers/departments/ops.py"
+    ],
+    "tools": [
+      "kpi_snapshots"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "kpi_snapshots rows"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "COO",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "100ms"
+  },
+  {
+    "name": "human_desk.sync",
+    "department": "human_desk",
+    "manager": "worker",
+    "reports_to": "runner (every 20s)",
+    "purpose": "Surface escalations (failures, wait_human jobs) to dashboard",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 60,
+    "source_files": [
+      "pipeline/workers/departments/human_desk.py",
+      "web/components/HumanDesk.tsx"
+    ],
+    "tools": [
+      "escalations"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "escalations rows"
+    ],
+    "dependencies": [],
+    "KPIs": [
+      "escalations_open"
+    ],
+    "business_owner": "Founder",
+    "workflows": [
+      "worker_bootstrap"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "100ms"
+  },
+  {
+    "name": "human_desk.rescan",
+    "department": "human_desk",
+    "manager": "worker",
+    "reports_to": "API trigger",
+    "purpose": "Force rescan of escalations",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 50,
+    "source_files": [
+      "pipeline/workers/departments/human_desk.py"
+    ],
+    "tools": [
+      "escalations"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Founder",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "50ms"
+  },
+  {
+    "name": "experiments.create_hook_test",
+    "department": "experiments",
+    "manager": "worker",
+    "reports_to": "cqo",
+    "purpose": "Create A/B hook experiment",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 25,
+    "source_files": [
+      "pipeline/workers/departments/experiments.py"
+    ],
+    "tools": [
+      "experiments"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "experiment row"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CTO",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "20ms"
+  },
+  {
+    "name": "experiments.decide",
+    "department": "experiments",
+    "manager": "worker",
+    "reports_to": "analytics",
+    "purpose": "Pick experiment winner based on metrics",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 25,
+    "source_files": [
+      "pipeline/workers/departments/experiments.py"
+    ],
+    "tools": [
+      "experiments",
+      "performance"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "winner"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CTO",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "20ms"
+  },
+  {
+    "name": "knowledge.summarize_day",
+    "department": "knowledge",
+    "manager": "worker",
+    "reports_to": "analytics",
+    "purpose": "End-of-day memory compaction",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 20,
+    "source_files": [
+      "pipeline/workers/departments/knowledge.py"
+    ],
+    "tools": [
+      "memory"
+    ],
+    "memory": [
+      "memory"
+    ],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "memory summary"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CKO",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "1s"
+  },
+  {
+    "name": "analytics.collect_metrics",
+    "department": "analytics",
+    "manager": "worker",
+    "reports_to": "distribution.publish (24h delay)",
+    "purpose": "Pull post performance metrics",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 25,
+    "source_files": [
+      "pipeline/workers/departments/analytics.py"
+    ],
+    "tools": [
+      "performance"
+    ],
+    "memory": [],
+    "events": [
+      "metrics_collected"
+    ],
+    "inputs": [
+      "item_id"
+    ],
+    "outputs": [
+      "performance row"
+    ],
+    "dependencies": [],
+    "KPIs": [
+      "views",
+      "likes",
+      "shares"
+    ],
+    "business_owner": "CMO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "1s",
+    "missing": "real social API pull"
+  },
+  {
+    "name": "analytics.post_mortem",
+    "department": "analytics",
+    "manager": "worker",
+    "reports_to": "ops (scheduled)",
+    "purpose": "Post-mortem on failed posts, learn lessons",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 15,
+    "source_files": [
+      "pipeline/workers/departments/analytics.py"
+    ],
+    "tools": [
+      "lessons"
+    ],
+    "memory": [
+      "lessons"
+    ],
+    "events": [],
+    "inputs": [],
+    "outputs": [
+      "lessons rows"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CMO",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "1s"
+  },
+  {
+    "name": "distribution.publish",
+    "department": "distribution",
+    "manager": "worker",
+    "reports_to": "creative.render",
+    "purpose": "Publish to IG/YT or dry-run; enqueue metrics + cross_promote",
+    "status": "partial",
+    "implemented": true,
+    "completion_percentage": 50,
+    "source_files": [
+      "pipeline/workers/departments/distribution.py",
+      "pipeline/agent/publishing.py"
+    ],
+    "tools": [
+      "IG Graph API",
+      "YouTube API"
+    ],
+    "memory": [],
+    "events": [
+      "publish_start",
+      "publish_done",
+      "publish_err"
+    ],
+    "inputs": [
+      "video_path,item_id,caption"
+    ],
+    "outputs": [
+      "board_items published, receipts, analytics job"
+    ],
+    "dependencies": [
+      "agent.publishing.publish"
+    ],
+    "KPIs": [
+      "publish_success",
+      "platforms_posted"
+    ],
+    "business_owner": "Head of Distribution",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0 (dry-run by default)",
+    "estimated_execution_time": "30s",
+    "missing": "TikTok; live-tested on IG/YT"
+  },
+  {
+    "name": "distribution.cross_promote",
+    "department": "distribution",
+    "manager": "worker",
+    "reports_to": "distribution.publish",
+    "purpose": "First-comment pin, SEO links, cross-post teasers",
+    "status": "stub",
+    "implemented": true,
+    "completion_percentage": 20,
+    "source_files": [
+      "pipeline/workers/departments/distribution.py"
+    ],
+    "tools": [],
+    "memory": [],
+    "events": [],
+    "inputs": [
+      "receipts,item_id"
+    ],
+    "outputs": [
+      "comments/links"
+    ],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Head of Distribution",
+    "workflows": [],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "1s"
+  },
+  {
+    "name": "monetization.inject",
+    "department": "monetization",
+    "manager": "worker",
+    "reports_to": "creative.render (pre-publish)",
+    "purpose": "Append 'link in bio' / #ad disclosure to caption",
+    "status": "implemented",
+    "implemented": true,
+    "completion_percentage": 75,
+    "source_files": [
+      "pipeline/workers/departments/monetization.py"
+    ],
+    "tools": [
+      "project_accounts.affiliate_urls,sponsor"
+    ],
+    "memory": [],
+    "events": [
+      "inject"
+    ],
+    "inputs": [
+      "captions,item_id,account_id"
+    ],
+    "outputs": [
+      "augmented caption"
+    ],
+    "dependencies": [],
+    "KPIs": [
+      "disclosure_compliance"
+    ],
+    "business_owner": "CRO",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "$0",
+    "estimated_execution_time": "10ms"
+  },
+  {
+    "name": "monetization.scan_inbox",
+    "department": "monetization",
+    "manager": "worker",
+    "reports_to": "(scheduled)",
+    "purpose": "Scan sponsor inbox / affiliate network for deals (NOT IMPLEMENTED)",
+    "status": "NOT IMPLEMENTED",
+    "implemented": false,
+    "completion_percentage": 5,
+    "source_files": [
+      "pipeline/workers/departments/monetization.py"
+    ],
+    "tools": [],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CRO",
+    "workflows": [],
+    "estimated_cost_per_execution": "?",
+    "estimated_execution_time": "?"
+  },
+  {
+    "name": "sales.outreach",
+    "department": "sales",
+    "manager": "none",
+    "reports_to": "none",
+    "purpose": "Automated sponsor outreach",
+    "status": "NOT IMPLEMENTED",
+    "implemented": false,
+    "completion_percentage": 0,
+    "source_files": [],
+    "tools": [],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "CRO",
+    "workflows": [],
+    "estimated_cost_per_execution": "n/a",
+    "estimated_execution_time": "n/a"
+  },
+  {
+    "name": "legal.compliance_scan",
+    "department": "legal",
+    "manager": "none",
+    "reports_to": "none",
+    "purpose": "FTC #ad, copyright, DMCA checks",
+    "status": "NOT IMPLEMENTED",
+    "implemented": false,
+    "completion_percentage": 0,
+    "source_files": [],
+    "tools": [],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Legal",
+    "workflows": [],
+    "estimated_cost_per_execution": "n/a",
+    "estimated_execution_time": "n/a"
+  },
+  {
+    "name": "community.reply",
+    "department": "community",
+    "manager": "none",
+    "reports_to": "none",
+    "purpose": "Reply to comments/DMs",
+    "status": "NOT IMPLEMENTED",
+    "implemented": false,
+    "completion_percentage": 0,
+    "source_files": [],
+    "tools": [],
+    "memory": [],
+    "events": [],
+    "inputs": [],
+    "outputs": [],
+    "dependencies": [],
+    "KPIs": [],
+    "business_owner": "Community",
+    "workflows": [],
+    "estimated_cost_per_execution": "n/a",
+    "estimated_execution_time": "n/a"
+  },
+  {
+    "name": "creative.tts",
+    "department": "creative",
+    "manager": "worker",
+    "reports_to": "creative.render",
+    "purpose": "Voiceover via aisuite.tts (ElevenLabs/Gemini/OpenAI)",
+    "status": "legacy",
+    "implemented": true,
+    "completion_percentage": 40,
+    "source_files": [
+      "pipeline/agent/voice.py"
+    ],
+    "tools": [
+      "ElevenLabs"
+    ],
+    "memory": [],
+    "events": [],
+    "inputs": [
+      "script"
+    ],
+    "outputs": [
+      "mp3"
+    ],
+    "dependencies": [
+      "agent.voice"
+    ],
+    "KPIs": [],
+    "business_owner": "Head of Creative",
+    "workflows": [
+      "content_pipeline"
+    ],
+    "estimated_cost_per_execution": "~$0.003",
+    "estimated_execution_time": "5s",
+    "note": "legacy voice.py used; aisuite.tts not wired"
+  }
+]

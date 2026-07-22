@@ -1,0 +1,1280 @@
+{
+  "version": "5.5-CEO",
+  "phase": "Phase 3 (v5.5) \u2014 Production Optimization & Autonomous Evolution",
+  "schema_version_target": "5.5",
+  "completion_percentage": 34,
+  "last_audit": "2026-07-20",
+  "departments": [
+    {
+      "name": "cfo",
+      "file": "pipeline/workers/departments/finance.py",
+      "status": "implemented",
+      "completion": 85,
+      "jobs": [
+        "cfo.preflight",
+        "cfo.daily_report",
+        "cfo.killswitch_check"
+      ]
+    },
+    {
+      "name": "cqo",
+      "file": "pipeline/workers/departments/cqo.py",
+      "status": "implemented",
+      "completion": 80,
+      "jobs": [
+        "cqo.grade_script"
+      ]
+    },
+    {
+      "name": "risk",
+      "file": "pipeline/workers/departments/risk.py",
+      "status": "implemented",
+      "completion": 40,
+      "jobs": [
+        "risk.scan_content"
+      ],
+      "missing": "real content-policy API (OpenAI moderation, Sightengine)"
+    },
+    {
+      "name": "ceo",
+      "file": "pipeline/workers/departments/ceo.py",
+      "status": "implemented",
+      "completion": 40,
+      "jobs": [
+        "ceo.decide",
+        "ceo.daily_tick",
+        "ceo.allocate_budgets",
+        "ceo.reuse_search",
+        "ceo.record_outcome"
+      ],
+      "missing": "gated on creative.write_script only; _store_asset never called; revenue hardcoded 0"
+    },
+    {
+      "name": "portfolio",
+      "file": "pipeline/workers/departments/portfolio.py",
+      "status": "implemented",
+      "completion": 75,
+      "jobs": [
+        "portfolio.boot",
+        "portfolio.tick"
+      ]
+    },
+    {
+      "name": "research",
+      "file": "pipeline/workers/departments/research.py",
+      "status": "implemented",
+      "completion": 70,
+      "jobs": [
+        "research.scout_run"
+      ],
+      "missing": "niche-targeted scouting per active account not fully isolated"
+    },
+    {
+      "name": "editorial",
+      "file": "pipeline/workers/departments/editorial.py",
+      "status": "implemented",
+      "completion": 75,
+      "jobs": [
+        "editorial.ideate",
+        "editorial.plan_one"
+      ],
+      "missing": "ceo gate not wired on ideate"
+    },
+    {
+      "name": "creative",
+      "file": "pipeline/workers/departments/creative.py",
+      "status": "partial",
+      "completion": 50,
+      "jobs": [
+        "creative.write_script",
+        "creative.render"
+      ],
+      "missing": "creative.render_video job; render step not auto-enqueued after grade_pass; ceo gate only on write_script"
+    },
+    {
+      "name": "postprod",
+      "file": "pipeline/workers/departments/postprod.py",
+      "status": "partial",
+      "completion": 40,
+      "jobs": [
+        "post.polish"
+      ],
+      "missing": "premium caption burn-in (word-by-word kinetic); upscale; AI video edit"
+    },
+    {
+      "name": "brand_studio",
+      "file": "pipeline/workers/departments/brand_studio.py",
+      "status": "implemented",
+      "completion": 75,
+      "jobs": [
+        "brand_studio.generate"
+      ],
+      "missing": "regeneration on edit / performance feedback loop"
+    },
+    {
+      "name": "ops",
+      "file": "pipeline/workers/departments/ops.py",
+      "status": "implemented",
+      "completion": 80,
+      "jobs": [
+        "ops.heartbeat",
+        "ops.snapshot"
+      ]
+    },
+    {
+      "name": "human_desk",
+      "file": "pipeline/workers/departments/human_desk.py",
+      "status": "partial",
+      "completion": 60,
+      "jobs": [
+        "human_desk.sync",
+        "human_desk.rescan"
+      ],
+      "missing": "approval buttons wire-through verified end-to-end"
+    },
+    {
+      "name": "experiments",
+      "file": "pipeline/workers/departments/experiments.py",
+      "status": "partial",
+      "completion": 40,
+      "jobs": [
+        "experiments.create_hook_test",
+        "experiments.decide"
+      ],
+      "missing": "real winner selection, variant analytics, prompt evolution"
+    },
+    {
+      "name": "knowledge",
+      "file": "pipeline/workers/departments/knowledge.py",
+      "status": "partial",
+      "completion": 30,
+      "jobs": [
+        "knowledge.summarize_day"
+      ],
+      "missing": "RAG, embeddings, cross-account knowledge graph"
+    },
+    {
+      "name": "analytics",
+      "file": "pipeline/workers/departments/analytics.py",
+      "status": "partial",
+      "completion": 35,
+      "jobs": [
+        "analytics.collect_metrics",
+        "analytics.post_mortem"
+      ],
+      "missing": "real social-API metrics pull; only placeholder from performance table"
+    },
+    {
+      "name": "distribution",
+      "file": "pipeline/workers/departments/distribution.py",
+      "status": "partial",
+      "completion": 45,
+      "jobs": [
+        "distribution.publish",
+        "distribution.cross_promote"
+      ],
+      "missing": "TikTok publisher; YouTube not live-tested; scheduling"
+    },
+    {
+      "name": "monetization",
+      "file": "pipeline/workers/departments/monetization.py",
+      "status": "partial",
+      "completion": 25,
+      "jobs": [
+        "monetization.inject",
+        "monetization.scan_inbox"
+      ],
+      "missing": "affiliate rotation; sponsor inbox; digital products"
+    },
+    {
+      "name": "sales",
+      "file": null,
+      "status": "NOT IMPLEMENTED",
+      "completion": 0,
+      "missing": "sponsor outreach, deal desk"
+    },
+    {
+      "name": "legal",
+      "file": null,
+      "status": "NOT IMPLEMENTED",
+      "completion": 0,
+      "missing": "FTC #ad, content licensing, DMCA"
+    },
+    {
+      "name": "community",
+      "file": null,
+      "status": "NOT IMPLEMENTED",
+      "completion": 0,
+      "missing": "comment reply, DM"
+    },
+    {
+      "name": "infra",
+      "file": null,
+      "status": "NOT IMPLEMENTED",
+      "completion": 0,
+      "missing": "multi-Railway-service split"
+    }
+  ],
+  "agents": [
+    {
+      "name": "cfo.preflight",
+      "status": "implemented",
+      "completion": 85,
+      "file": "pipeline/workers/departments/finance.py",
+      "cost": "$0",
+      "est_time": "50ms"
+    },
+    {
+      "name": "cfo.daily_report",
+      "status": "implemented",
+      "completion": 60,
+      "file": "pipeline/workers/departments/finance.py",
+      "cost": "$0",
+      "est_time": "500ms"
+    },
+    {
+      "name": "cfo.killswitch_check",
+      "status": "implemented",
+      "completion": 90,
+      "file": "pipeline/workers/departments/finance.py",
+      "cost": "$0",
+      "est_time": "20ms"
+    },
+    {
+      "name": "cqo.grade_script",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/cqo.py",
+      "cost": "~$0.025/grade",
+      "est_time": "8s"
+    },
+    {
+      "name": "risk.scan_content",
+      "status": "stub",
+      "completion": 20,
+      "file": "pipeline/workers/departments/risk.py",
+      "cost": "$0",
+      "est_time": "10ms"
+    },
+    {
+      "name": "ceo.decide",
+      "status": "partial",
+      "completion": 45,
+      "file": "pipeline/workers/departments/ceo.py",
+      "cost": "$0",
+      "est_time": "150ms",
+      "missing": "gated on write_script only; reuse library empty"
+    },
+    {
+      "name": "ceo.daily_tick",
+      "status": "implemented",
+      "completion": 70,
+      "file": "pipeline/workers/departments/ceo.py",
+      "cost": "$0",
+      "est_time": "2s"
+    },
+    {
+      "name": "ceo.allocate_budgets",
+      "status": "implemented",
+      "completion": 70,
+      "file": "pipeline/workers/departments/ceo.py",
+      "cost": "$0",
+      "est_time": "1s"
+    },
+    {
+      "name": "ceo.reuse_search",
+      "status": "partial",
+      "completion": 30,
+      "file": "pipeline/workers/departments/ceo.py",
+      "missing": "library empty"
+    },
+    {
+      "name": "ceo.record_outcome",
+      "status": "NOT CALLED",
+      "completion": 10,
+      "file": "pipeline/workers/departments/ceo.py",
+      "missing": "never invoked after publish"
+    },
+    {
+      "name": "portfolio.boot",
+      "status": "implemented",
+      "completion": 80,
+      "file": "pipeline/workers/departments/portfolio.py"
+    },
+    {
+      "name": "portfolio.tick",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/portfolio.py"
+    },
+    {
+      "name": "research.scout_run",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/research.py",
+      "cost": "$0",
+      "est_time": "5s"
+    },
+    {
+      "name": "editorial.ideate",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/editorial.py",
+      "cost": "~$0.02/topic",
+      "est_time": "4s",
+      "missing": "ceo gate not wired"
+    },
+    {
+      "name": "editorial.plan_one",
+      "status": "implemented",
+      "completion": 70,
+      "file": "pipeline/workers/departments/editorial.py"
+    },
+    {
+      "name": "creative.write_script",
+      "status": "implemented",
+      "completion": 85,
+      "file": "pipeline/workers/departments/creative.py",
+      "cost": "~$0.04/script",
+      "est_time": "15s"
+    },
+    {
+      "name": "creative.render",
+      "status": "partial",
+      "completion": 50,
+      "file": "pipeline/workers/departments/creative.py",
+      "cost": "~$0.04/video (static frames)",
+      "est_time": "60s",
+      "missing": "not enqueued by cqo pass; AI video not supported"
+    },
+    {
+      "name": "post.polish",
+      "status": "stub",
+      "completion": 30,
+      "file": "pipeline/workers/departments/postprod.py"
+    },
+    {
+      "name": "brand_studio.generate",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/brand_studio.py",
+      "cost": "~$0.10/account one-time",
+      "est_time": "30s"
+    },
+    {
+      "name": "ops.heartbeat",
+      "status": "implemented",
+      "completion": 95,
+      "file": "pipeline/workers/departments/ops.py"
+    },
+    {
+      "name": "ops.snapshot",
+      "status": "implemented",
+      "completion": 80,
+      "file": "pipeline/workers/departments/ops.py"
+    },
+    {
+      "name": "human_desk.sync",
+      "status": "partial",
+      "completion": 60,
+      "file": "pipeline/workers/departments/human_desk.py"
+    },
+    {
+      "name": "human_desk.rescan",
+      "status": "partial",
+      "completion": 50,
+      "file": "pipeline/workers/departments/human_desk.py"
+    },
+    {
+      "name": "experiments.create_hook_test",
+      "status": "stub",
+      "completion": 25,
+      "file": "pipeline/workers/departments/experiments.py"
+    },
+    {
+      "name": "experiments.decide",
+      "status": "stub",
+      "completion": 25,
+      "file": "pipeline/workers/departments/experiments.py"
+    },
+    {
+      "name": "knowledge.summarize_day",
+      "status": "stub",
+      "completion": 20,
+      "file": "pipeline/workers/departments/knowledge.py"
+    },
+    {
+      "name": "analytics.collect_metrics",
+      "status": "stub",
+      "completion": 25,
+      "file": "pipeline/workers/departments/analytics.py",
+      "missing": "no real social API call"
+    },
+    {
+      "name": "analytics.post_mortem",
+      "status": "stub",
+      "completion": 15,
+      "file": "pipeline/workers/departments/analytics.py"
+    },
+    {
+      "name": "distribution.publish",
+      "status": "partial",
+      "completion": 50,
+      "file": "pipeline/workers/departments/distribution.py",
+      "cost": "$0 (dry run by default)",
+      "missing": "TikTok; YT/IG untested live"
+    },
+    {
+      "name": "distribution.cross_promote",
+      "status": "stub",
+      "completion": 20,
+      "file": "pipeline/workers/departments/distribution.py"
+    },
+    {
+      "name": "monetization.inject",
+      "status": "implemented",
+      "completion": 75,
+      "file": "pipeline/workers/departments/monetization.py",
+      "cost": "$0",
+      "note": "caption link-in-bio injection only"
+    },
+    {
+      "name": "monetization.scan_inbox",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5,
+      "file": "pipeline/workers/departments/monetization.py"
+    },
+    {
+      "name": "creative.render_video",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5,
+      "file": "pipeline/agentcore/aisuite.py (generate_video exists but no job)",
+      "note": "aisuite has fal/kling/veo polling; no worker job calls it"
+    },
+    {
+      "name": "creative.tts",
+      "status": "legacy",
+      "completion": 40,
+      "file": "pipeline/agent/voice.py",
+      "note": "legacy voice.py used; aisuite.tts not wired"
+    }
+  ],
+  "workflows": [
+    {
+      "name": "worker_bootstrap",
+      "status": "implemented",
+      "completion": 90,
+      "trigger": "worker start",
+      "steps": [
+        "portfolio.boot",
+        "research.scout_run",
+        "portfolio.tick",
+        "cfo.daily_report",
+        "cfo.killswitch_check",
+        "ceo.daily_tick",
+        "ops.heartbeat",
+        "ops.snapshot",
+        "human_desk.sync"
+      ]
+    },
+    {
+      "name": "content_pipeline",
+      "status": "partial",
+      "completion": 55,
+      "trigger": "portfolio.tick",
+      "steps": [
+        "research.scout_run",
+        "editorial.ideate",
+        "creative.write_script (ceo_gated)",
+        "cqo.grade_script",
+        "RENDER_STEP_MISSING",
+        "distribution.publish",
+        "analytics.collect_metrics"
+      ],
+      "missing": "automatic render enqueue after grade pass"
+    },
+    {
+      "name": "daily_ceo_review",
+      "status": "implemented",
+      "completion": 70,
+      "trigger": "daily + boot",
+      "steps": [
+        "snapshot_roi",
+        "allocate_budgets",
+        "write_recommendations"
+      ],
+      "missing": "revenue data"
+    },
+    {
+      "name": "brand_onboarding",
+      "status": "implemented",
+      "completion": 70,
+      "trigger": "new account",
+      "steps": [
+        "brand_studio.generate",
+        "13 brand docs saved"
+      ]
+    },
+    {
+      "name": "human_approval",
+      "status": "partial",
+      "completion": 50,
+      "trigger": "wait_human jobs",
+      "steps": [
+        "human_desk.sync",
+        "escalations",
+        "HUMAN approve/reject"
+      ],
+      "missing": "approval resolution propagation fully tested"
+    },
+    {
+      "name": "video_generation",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5,
+      "trigger": "none yet",
+      "steps": [
+        "aisuite.generate_video (code exists but no job)"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "name": "event-driven job queue",
+      "status": "implemented",
+      "completion": 85,
+      "files": [
+        "pipeline/agentcore/jobs.py",
+        "pipeline/agentcore/worker.py",
+        "pipeline/agentcore/bus.py"
+      ]
+    },
+    {
+      "name": "niche-aware editorial",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "pipeline/workers/departments/editorial.py",
+        "pipeline/agent/brain.py",
+        "pipeline/agent/scout.py"
+      ]
+    },
+    {
+      "name": "niche-correct hashtags/visuals",
+      "status": "implemented",
+      "completion": 85,
+      "files": [
+        "pipeline/agent/brain.py"
+      ]
+    },
+    {
+      "name": "pause/resume without rejecting",
+      "status": "implemented",
+      "completion": 90,
+      "files": [
+        "web/app/api/projects/[pid]/accounts/[aid]/route.ts"
+      ]
+    },
+    {
+      "name": "wallet live spend (run_ledger)",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "web/app/api/wallet/route.ts",
+        "pipeline/agentcore/ledger.py"
+      ]
+    },
+    {
+      "name": "hard budget cap",
+      "status": "implemented",
+      "completion": 85,
+      "files": [
+        "pipeline/agentcore/ledger.py",
+        "pipeline/agent/orchestrator.py",
+        "pipeline/workers/departments/creative.py"
+      ]
+    },
+    {
+      "name": "black chat bubble fix",
+      "status": "implemented",
+      "completion": 95,
+      "files": [
+        "web/app/layout.tsx"
+      ]
+    },
+    {
+      "name": "business plan page /b/[aid]",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "web/app/b/[aid]/page.tsx",
+        "web/app/api/business/[aid]/route.ts"
+      ]
+    },
+    {
+      "name": "AI provider wallets live balance",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "web/app/api/providers/balance/route.ts",
+        "web/components/ProviderBalances.tsx"
+      ]
+    },
+    {
+      "name": "auto-fallback between LLM providers",
+      "status": "implemented",
+      "completion": 90,
+      "files": [
+        "pipeline/agent/llm.py"
+      ]
+    },
+    {
+      "name": "74-model provider catalog (aisuite)",
+      "status": "partial",
+      "completion": 60,
+      "files": [
+        "pipeline/agentcore/aisuite.py",
+        "pipeline/agentcore/providers_catalog.json"
+      ],
+      "missing": "not wired into legacy llm.py/visuals.py"
+    },
+    {
+      "name": "/dashboard/models admin picker",
+      "status": "partial",
+      "completion": 70,
+      "files": [
+        "web/app/dashboard/models/page.tsx",
+        "web/app/api/ai-models/route.ts"
+      ],
+      "note": "UI saves to settings; legacy code doesn't read it yet"
+    },
+    {
+      "name": "ceo ROI gate",
+      "status": "partial",
+      "completion": 45,
+      "files": [
+        "pipeline/workers/departments/ceo.py",
+        "pipeline/workers/common.py"
+      ],
+      "note": "wired to creative.write_script only"
+    },
+    {
+      "name": "asset reuse library",
+      "status": "partial",
+      "completion": 35,
+      "files": [
+        "pipeline/workers/departments/ceo.py"
+      ],
+      "note": "table + find logic exist; _store_asset never called"
+    },
+    {
+      "name": "capital allocation (per-account budgets)",
+      "status": "partial",
+      "completion": 55,
+      "files": [
+        "pipeline/workers/departments/ceo.py"
+      ],
+      "note": "allocations written; remaining_account_budget() exists; not enforced at every spend point"
+    },
+    {
+      "name": "ceo recommendations",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "web/app/dashboard/ceo-v2/page.tsx",
+        "web/app/api/ceo-decisions/route.ts"
+      ]
+    },
+    {
+      "name": "executive decision audit trail",
+      "status": "implemented",
+      "completion": 80,
+      "files": [
+        "web/app/dashboard/ceo-v2/page.tsx",
+        "web/app/api/ceo-decisions/route.ts"
+      ]
+    },
+    {
+      "name": "roi_snapshots",
+      "status": "partial",
+      "completion": 35,
+      "files": [
+        "pipeline/workers/departments/ceo.py"
+      ],
+      "note": "revenue_usd hardcoded 0 until monetization wired"
+    },
+    {
+      "name": "video generation (AI)",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5
+    },
+    {
+      "name": "TikTok publisher",
+      "status": "NOT IMPLEMENTED",
+      "completion": 0
+    },
+    {
+      "name": "revenue tracking (affiliate/sponsor/product)",
+      "status": "NOT IMPLEMENTED",
+      "completion": 10
+    },
+    {
+      "name": "real analytics (social API metrics)",
+      "status": "NOT IMPLEMENTED",
+      "completion": 15
+    },
+    {
+      "name": "prompt evolution loop",
+      "status": "NOT IMPLEMENTED",
+      "completion": 10
+    },
+    {
+      "name": "multi-worker horizontal scaling",
+      "status": "NOT IMPLEMENTED",
+      "completion": 0
+    },
+    {
+      "name": "RLS / multi-tenant SaaS",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5
+    },
+    {
+      "name": "human-desk e2e wiring",
+      "status": "partial",
+      "completion": 55
+    },
+    {
+      "name": "Stripe billing for SaaS",
+      "status": "stub",
+      "completion": 20,
+      "files": [
+        "web/app/api/checkout/route.ts",
+        "web/app/api/stripe-webhook/route.ts"
+      ]
+    }
+  ],
+  "database": [
+    {
+      "table": "jobs",
+      "status": "active",
+      "completion": 95
+    },
+    {
+      "table": "agent_events",
+      "status": "active",
+      "completion": 90
+    },
+    {
+      "table": "memory",
+      "status": "active",
+      "completion": 70
+    },
+    {
+      "table": "lessons",
+      "status": "active",
+      "completion": 40,
+      "note": "written but not read by learning loop"
+    },
+    {
+      "table": "experiments",
+      "status": "active",
+      "completion": 40
+    },
+    {
+      "table": "escalations",
+      "status": "active",
+      "completion": 60
+    },
+    {
+      "table": "worker_health",
+      "status": "active",
+      "completion": 90
+    },
+    {
+      "table": "kpi_snapshots",
+      "status": "active",
+      "completion": 70
+    },
+    {
+      "table": "trend_items",
+      "status": "active",
+      "completion": 75
+    },
+    {
+      "table": "account_documents",
+      "status": "active",
+      "completion": 85
+    },
+    {
+      "table": "board_items",
+      "status": "active",
+      "completion": 80
+    },
+    {
+      "table": "run_ledger",
+      "status": "active",
+      "completion": 80,
+      "note": "provider_label added v5.4"
+    },
+    {
+      "table": "project_accounts",
+      "status": "active",
+      "completion": 85
+    },
+    {
+      "table": "projects",
+      "status": "active",
+      "completion": 70
+    },
+    {
+      "table": "settings",
+      "status": "active",
+      "completion": 90
+    },
+    {
+      "table": "wallets",
+      "status": "stub",
+      "completion": 30,
+      "note": "demo wallet"
+    },
+    {
+      "table": "wallet_transactions",
+      "status": "stub",
+      "completion": 30,
+      "note": "demo topups"
+    },
+    {
+      "table": "profiles",
+      "status": "active",
+      "completion": 50
+    },
+    {
+      "table": "waitlist",
+      "status": "active",
+      "completion": 60
+    },
+    {
+      "table": "performance",
+      "status": "partial",
+      "completion": 30,
+      "note": "written by publish receipts; real metrics not pulled"
+    },
+    {
+      "table": "content_grades",
+      "status": "active",
+      "completion": 65
+    },
+    {
+      "table": "task_progress",
+      "status": "legacy",
+      "completion": 20,
+      "note": "v1 table; v5 uses jobs"
+    },
+    {
+      "table": "account_posts",
+      "status": "partial",
+      "completion": 30
+    },
+    {
+      "table": "user_connections",
+      "status": "partial",
+      "completion": 40
+    },
+    {
+      "table": "entitlements",
+      "status": "stub",
+      "completion": 10
+    },
+    {
+      "table": "brand_profiles",
+      "status": "legacy",
+      "completion": 20
+    },
+    {
+      "table": "mcp_connections",
+      "status": "stub",
+      "completion": 20
+    },
+    {
+      "table": "affiliate_links",
+      "status": "partial",
+      "completion": 30
+    },
+    {
+      "table": "affiliate_clicks",
+      "status": "NOT USED",
+      "completion": 5
+    },
+    {
+      "table": "marketplace_agents",
+      "status": "NOT USED",
+      "completion": 5
+    },
+    {
+      "table": "agent_leads",
+      "status": "NOT USED",
+      "completion": 5
+    },
+    {
+      "table": "memory_entries",
+      "status": "legacy",
+      "completion": 20
+    },
+    {
+      "table": "exec_decisions",
+      "status": "v5.5 NEW",
+      "completion": 85
+    },
+    {
+      "table": "roi_snapshots",
+      "status": "v5.5 NEW",
+      "completion": 50,
+      "note": "revenue=0 placeholder"
+    },
+    {
+      "table": "asset_library",
+      "status": "v5.5 NEW",
+      "completion": 35,
+      "note": "_store_asset not called"
+    },
+    {
+      "table": "capital_allocation",
+      "status": "v5.5 NEW",
+      "completion": 75
+    },
+    {
+      "table": "ceo_recommendations",
+      "status": "v5.5 NEW",
+      "completion": 85
+    },
+    {
+      "view": "v_account_brief",
+      "status": "active",
+      "completion": 90
+    }
+  ],
+  "apis": [
+    {
+      "route": "/admin/seed-demo",
+      "status": "active"
+    },
+    {
+      "route": "/ai-models",
+      "status": "active"
+    },
+    {
+      "route": "/business/[aid]",
+      "status": "active"
+    },
+    {
+      "route": "/ceo",
+      "status": "active"
+    },
+    {
+      "route": "/ceo-decisions",
+      "status": "active"
+    },
+    {
+      "route": "/checkout",
+      "status": "active"
+    },
+    {
+      "route": "/connections",
+      "status": "active"
+    },
+    {
+      "route": "/human",
+      "status": "active"
+    },
+    {
+      "route": "/mcp",
+      "status": "active"
+    },
+    {
+      "route": "/mcp/tokens",
+      "status": "active"
+    },
+    {
+      "route": "/me/profile",
+      "status": "active"
+    },
+    {
+      "route": "/memory",
+      "status": "active"
+    },
+    {
+      "route": "/progress",
+      "status": "active"
+    },
+    {
+      "route": "/projects",
+      "status": "active"
+    },
+    {
+      "route": "/projects/[pid]/accounts",
+      "status": "active"
+    },
+    {
+      "route": "/projects/[pid]/accounts/[aid]",
+      "status": "active"
+    },
+    {
+      "route": "/projects/[pid]/chat",
+      "status": "active"
+    },
+    {
+      "route": "/projects/[pid]/console",
+      "status": "active"
+    },
+    {
+      "route": "/projects/[pid]/generate",
+      "status": "active"
+    },
+    {
+      "route": "/proof",
+      "status": "active"
+    },
+    {
+      "route": "/providers/balance",
+      "status": "active"
+    },
+    {
+      "route": "/stripe-webhook",
+      "status": "active"
+    },
+    {
+      "route": "/studio",
+      "status": "active"
+    },
+    {
+      "route": "/waitlist",
+      "status": "active"
+    },
+    {
+      "route": "/wallet",
+      "status": "active"
+    },
+    {
+      "route": "/wallet/topup",
+      "status": "active"
+    },
+    {
+      "route": "/workers",
+      "status": "active"
+    },
+    {
+      "route": "/workspace/events",
+      "status": "active"
+    }
+  ],
+  "memory": [
+    {
+      "name": "agentcore.memory",
+      "status": "wrapper",
+      "completion": 60,
+      "file": "pipeline/agentcore/memory.py"
+    },
+    {
+      "name": "agent.memory",
+      "status": "active",
+      "completion": 60,
+      "file": "pipeline/agent/memory.py",
+      "missing": "embeddings"
+    },
+    {
+      "name": "lessons table",
+      "status": "partial",
+      "completion": 30
+    }
+  ],
+  "dashboards": [
+    {
+      "route": "/dashboard",
+      "status": "active",
+      "completion": 70
+    },
+    {
+      "route": "/dashboard/workspace",
+      "status": "active",
+      "completion": 75
+    },
+    {
+      "route": "/dashboard/console",
+      "status": "active",
+      "completion": 85
+    },
+    {
+      "route": "/dashboard/models",
+      "status": "active",
+      "completion": 70,
+      "note": "model choice not wired to inference"
+    },
+    {
+      "route": "/dashboard/ceo",
+      "status": "legacy v1",
+      "completion": 60
+    },
+    {
+      "route": "/dashboard/ceo-v2",
+      "status": "active v5.5",
+      "completion": 85
+    },
+    {
+      "route": "/dashboard/wallet",
+      "status": "active",
+      "completion": 65
+    },
+    {
+      "route": "/dashboard/performance",
+      "status": "partial",
+      "completion": 30
+    },
+    {
+      "route": "/dashboard/projects/...",
+      "status": "active",
+      "completion": 75
+    },
+    {
+      "route": "/b/[aid]",
+      "status": "active",
+      "completion": 80
+    }
+  ],
+  "analytics": [
+    {
+      "name": "kpi_snapshots hourly",
+      "status": "active",
+      "completion": 75
+    },
+    {
+      "name": "roi_snapshots daily",
+      "status": "partial",
+      "completion": 45
+    },
+    {
+      "name": "run_ledger cost tracking",
+      "status": "active",
+      "completion": 80
+    },
+    {
+      "name": "provider_label on ledger",
+      "status": "active",
+      "completion": 80
+    },
+    {
+      "name": "real social metrics pull",
+      "status": "NOT IMPLEMENTED",
+      "completion": 5
+    },
+    {
+      "name": "revenue tracking",
+      "status": "NOT IMPLEMENTED",
+      "completion": 10
+    }
+  ],
+  "business_plans": [
+    {
+      "name": "13-doc brand_studio",
+      "status": "active",
+      "completion": 80,
+      "files": [
+        "pipeline/workers/departments/brand_studio.py",
+        "pipeline/agent/architect.py"
+      ]
+    },
+    {
+      "name": "business plan page /b/[aid]",
+      "status": "active",
+      "completion": 80
+    },
+    {
+      "name": "tone/identity warning when duplicate",
+      "status": "active",
+      "completion": 90
+    }
+  ],
+  "tests": [
+    {
+      "name": "agentcore primitives",
+      "file": "pipeline/tests/test_core.py",
+      "count": 14,
+      "status": "passing"
+    },
+    {
+      "name": "v5 worker registration",
+      "file": "pipeline/tests/test_v5_worker.py",
+      "count": 4,
+      "status": "passing"
+    },
+    {
+      "name": "integration tests",
+      "count": 0,
+      "status": "missing"
+    },
+    {
+      "name": "e2e tests",
+      "count": 0,
+      "status": "missing"
+    },
+    {
+      "name": "CEO gate tests",
+      "count": 0,
+      "status": "missing"
+    },
+    {
+      "name": "publisher tests",
+      "count": 0,
+      "status": "missing"
+    }
+  ],
+  "todo": [
+    "Wire aisuite.py into agent/llm.py and agent/visuals.py so /dashboard/models actually controls inference",
+    "Enqueue creative.render after cqo.grade_script passes (render handoff gap)",
+    "Add creative.render_video job using aisuite.generate_video (fal/kling/veo)",
+    "Gate ceo_decide on remaining 5 spend points (ideate, render, tts, video, brand_studio)",
+    "Call ceo._store_asset after successful publish to populate asset library",
+    "Integrate real revenue signals (affiliate pixel, Stripe webhook, sponsorship logging)",
+    "Add TikTok publisher",
+    "Wire real social API metrics into analytics.collect_metrics",
+    "Fix remaining_account_budget enforcement at every spend point",
+    "Write integration & e2e tests (target 60% coverage)",
+    "End-to-end profitable post verification on IG",
+    "Add word-by-word kinetic captions (premium caption burn)",
+    "Prompt evolution loop (lessons -> prompt tweaks)"
+  ],
+  "known_issues": [
+    "aisuite catalog not wired to legacy code paths (UI model picker non-functional)",
+    "creative.render not auto-enqueued after grade pass",
+    "revenue_usd hardcoded 0 in roi_snapshots",
+    "asset_library empty because _store_asset never called",
+    "CEO gate on creative.write_script only; other 5 spend points ungated",
+    "TikTok publisher missing",
+    "Only 18 tests (~8% coverage)",
+    "middleware.ts uses deprecated Next.js convention (warning in build)",
+    "Web uses inline styles; no design system",
+    "Black-bubble theme fix duplicated between inline script and theme-fix.ts",
+    "Web package.json version stuck at 1.4.1",
+    "Provider balance API hits providers on every dashboard refresh (no cache)"
+  ],
+  "technical_debt": [
+    "Legacy agent/ package (~140KB) is strangler-fig wrapped; needs consolidation",
+    "No DB migrations framework; raw SQL files only",
+    "Single-process worker; no horizontal scaling",
+    "No dead-letter queue for failed jobs",
+    "RLS disabled on all pipeline tables (acceptable single-tenant; blocker for SaaS)",
+    "No websockets; polling for events"
+  ],
+  "statistics": {
+    "total_python_files": 76,
+    "total_tsx_files": 41,
+    "total_ts_files": 38,
+    "total_sql_files": 17,
+    "registered_jobs": 32,
+    "total_database_tables": 39,
+    "total_api_routes": 29,
+    "total_web_pages": 22,
+    "total_tests": 18,
+    "test_pass_rate": "18/18",
+    "boot_check_modules": 68,
+    "models_in_catalog": 74
+  }
+}
