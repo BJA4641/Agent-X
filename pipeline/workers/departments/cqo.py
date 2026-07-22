@@ -84,6 +84,16 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
     if passed:
         bus.agent("cqo", f"✅ script PASSED — {overall:.1f}/10. Moving to render.",
                   "success", "cqo_pass", job_id=job.id)
+        # v5.8.2 LEARNING: record what worked so future drafts reuse it.
+        try:
+            from agentcore import memory as _m2
+            _m2.add_lesson("grade_pass",
+                f"PASSED {overall:.1f}/10 — hook \"{(script.get('hook') or '')[:90]}\" "
+                f"on topic \"{(job.payload.get('topic') or script.get('title') or '')[:90]}\"",
+                account_id=account_id, project_id=project_id,
+                metadata={"overall": overall, "scores": scores, "item_id": item_id})
+        except Exception:
+            pass
         # Chain into render
         job_of(w, "creative.render", {
             "item_id": item_id, "script": script, "style": job.payload.get("style", "cinemagraph"),
@@ -94,6 +104,15 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
     # Failed — rewrite or kill
     bus.agent("cqo", f"❌ script FAILED — {overall:.1f}/10. {fix[:120]}",
               "warn", "cqo_fail", job_id=job.id)
+    # v5.8.2 LEARNING: record the concrete failure so writers stop repeating it.
+    try:
+        from agentcore import memory as _m2
+        _m2.add_lesson("grade_fail",
+            f"FAILED {overall:.1f}/10 on \"{(job.payload.get('topic') or script.get('title') or '')[:90]}\" — fix: {fix[:200]}",
+            account_id=account_id, project_id=project_id,
+            metadata={"overall": overall, "scores": scores, "item_id": item_id})
+    except Exception:
+        pass
     if rewrite_attempt < MAX_REWRITES:
         bus.agent("cqo", f"requesting rewrite ({rewrite_attempt+1}/{MAX_REWRITES})",
                   "info", "cqo_rewrite", job_id=job.id)

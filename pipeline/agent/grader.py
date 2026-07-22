@@ -99,6 +99,12 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
 
     prompt = GRADER_PROMPT.format(
         memory=mem, past_feedback=past or "none", trends=trends, content=content)
+    # v5.8.2: the judge reads its expert rubric playbook (skills/cqo/SKILL.md)
+    try:
+        from agentcore import skills as _sk
+        prompt += _sk.skill_block("cqo")
+    except Exception:
+        pass
 
     verdict = _default_verdict()
     _gate = llm.ready() and ledger.budget_ok(0.015)

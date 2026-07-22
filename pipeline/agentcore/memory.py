@@ -112,3 +112,55 @@ def lessons_for(*, topic: str = None, scope: str = None, subject_id=None,
         return (q.order("confidence", desc=True).limit(limit).execute().data or [])
     except Exception:
         return []
+
+
+# ------------------------------------------------------------------ v5.8.2
+# LESSONS: the actual learning loop. Every grade verdict and every human
+# approve/reject writes a lesson row (role starts with "lesson."); writers
+# and strategists read the freshest lessons back into their prompts, so the
+# system genuinely improves from each task instead of starting cold.
+
+def add_lesson(kind: str, content: str, *, account_id=None, project_id=None,
+               niche: str = "", metadata: dict = None) -> dict:
+    md = dict(metadata or {})
+    if niche:
+        md["niche"] = niche
+    return add(role=f"lesson.{kind}"[:80], content=content,
+               account_id=account_id, project_id=project_id, metadata=md)
+
+
+def lessons_block(*, account_id=None, niche: str = "", limit: int = 5) -> str:
+    """Prompt-ready block of the most recent lessons (account-scoped first,
+    then niche-tagged, then global). Empty string when nothing learned yet."""
+    sb = _sb()
+    if not sb:
+        return ""
+    rows: list = []
+    try:
+        if account_id:
+            q = (sb.table("memory").select("role,content,metadata")
+                 .like("role", "lesson.%").eq("account_id", str(account_id))
+                 .order("created_at", desc=True).limit(limit))
+            rows = q.execute().data or []
+        if len(rows) < limit:
+            q = (sb.table("memory").select("role,content,metadata")
+                 .like("role", "lesson.%")
+                 .order("created_at", desc=True).limit(limit * 3))
+            for r in (q.execute().data or []):
+                if len(rows) >= limit:
+                    break
+                if r in rows:
+                    continue
+                md = r.get("metadata") or {}
+                if niche and md.get("niche") and md.get("niche") != niche:
+                    continue
+                rows.append(r)
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    lines = "\n".join(f"- [{r['role'].split('.',1)[-1]}] {r['content'][:220]}"
+                       for r in rows[:limit])
+    return ("\n\n=== LESSONS LEARNED (from past grades & founder decisions — "
+            "do not repeat these mistakes; reuse what worked) ===\n"
+            f"{lines}\n=== END LESSONS ===\n")

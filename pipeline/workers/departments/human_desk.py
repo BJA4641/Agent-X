@@ -61,8 +61,69 @@ def sync(w: Worker, job: Job, ctx: AgentContext):
     if added:
         bus.agent("human_desk", f"👤 {added} escalation(s) awaiting founder review",
                   "warn", "desk_summary", job_id=job.id)
+
+    # v5.8.2 CONTENT BRIDGE — the missing link that meant NOTHING ever rendered:
+    # Studio's Approve button only flips board_items.status to 'approved';
+    # no one ever picked those up. This sweep turns founder approvals into
+    # real render jobs, and logs approve/reject decisions as lessons.
+    try:
+        _approved_sweep(w, job, sb, bus)
+    except Exception as e:
+        bus.agent("human_desk", f"approved-sweep error: {str(e)[:120]}", "warn",
+                  "sweep_err", job_id=job.id)
+
     w.queue.complete(job, {"ok": True, "synced": added})
     _reschedule(w)
+
+
+def _approved_sweep(w: Worker, job: Job, sb, bus, max_renders: int = 2):
+    """1) Enqueue creative.render for founder-approved items that have no video
+       yet (idempotent — one render job per item, ever).
+       2) Write a lesson for every fresh approve/reject so the brain learns
+       the founder's taste."""
+    if sb is None:
+        return
+    rows = (sb.table("board_items").select("id,status,topic,payload,account_id")
+            .in_("status", ["approved", "rejected"])
+            .order("updated_at", desc=True).limit(25).execute().data) or []
+    renders = 0
+    for it in rows:
+        payload = it.get("payload") or {}
+        item_id = it.get("id")
+        # --- (2) founder-decision lessons, once per item
+        if not payload.get("lesson_logged"):
+            try:
+                from agentcore import memory as _m
+                hook = ((payload.get("script") or {}).get("hook") or "")[:90]
+                _m.add_lesson(
+                    "human_" + it["status"],
+                    f"Founder {it['status'].upper()}: \"{(it.get('topic') or '')[:90]}\""
+                    + (f" (hook: \"{hook}\")" if hook else ""),
+                    account_id=it.get("account_id"),
+                    niche=(payload.get("niche") or ""),
+                    metadata={"item_id": item_id})
+                payload["lesson_logged"] = True
+                sb.table("board_items").update({"payload": payload}).eq("id", item_id).execute()
+            except Exception:
+                pass
+        # --- (1) approved + scripted + not yet rendered → render job
+        if (it["status"] == "approved" and renders < max_renders
+                and (payload.get("script") or {}).get("beats")
+                and not payload.get("video_path")
+                and not payload.get("render_enqueued")):
+            from ..common import job_of as _job_of
+            _job_of(w, "creative.render",
+                    {"item_id": item_id, "script": payload.get("script"),
+                     "style": payload.get("style")},
+                    account_id=it.get("account_id"),
+                    idempotency_key=f"render:{item_id}",
+                    priority=Priority.HIGH)
+            payload["render_enqueued"] = True
+            sb.table("board_items").update({"payload": payload}).eq("id", item_id).execute()
+            bus.agent("human_desk",
+                      f"🎬 founder approved \"{(it.get('topic') or '')[:60]}\" — render queued",
+                      "success", "approve_to_render", job_id=job.id, item_id=item_id)
+            renders += 1
 
 
 def rescan(w: Worker, job: Job, ctx: AgentContext):

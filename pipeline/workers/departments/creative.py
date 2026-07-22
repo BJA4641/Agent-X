@@ -225,10 +225,23 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
               "script_start", job_id=job.id, item_id=item_id)
 
     try:
+        # v5.8.2: council writes (free models debate), CQO verifies (one paid
+        # Claude call). verify=False kills the legacy double-grading inside
+        # brain; allow_demo=False means "no model" delays instead of shipping
+        # template junk.
         script = _brain.write_script(
             topic, item_id=item_id, account_id=account_id, project_id=project_id,
             grade_feedback=job.payload.get("grade_feedback", ""),
+            verify=False, allow_demo=False,
         )
+    except RuntimeError as e:
+        # No model could write (free tiers + fallback all down) — delay 30 min,
+        # do NOT fabricate content.
+        bus.agent("brain", f"⏸ no model available to write — retrying in 30m ({str(e)[:80]})",
+                  "warn", "script_no_model", job_id=job.id, item_id=item_id)
+        w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 1800,
+                                  "error": f"no model: {str(e)[:150]}"})
+        return
     except Exception as e:
         traceback.print_exc()
         w.fail_job(job, f"brain.write_script failed: {e}", fatal=False)

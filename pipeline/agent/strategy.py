@@ -58,8 +58,16 @@ _ROTATION = [
     "Turn any PDF into a study coach with AI",
 ]
 
-def plan(n: int = None) -> list:
+_PLAN_CACHE: dict = {}   # (utc_day, niche) -> topics  — v5.8.2: strategy ran 412
+                         # PAID calls/day for identical plans; now 1 FREE call/day/niche.
+
+def plan(n: int = None, niche: str = "", account_name: str = "") -> list:
     n = n or config.BATCH_SIZE
+    import time as _t
+    _key = (_t.strftime("%Y-%m-%d", _t.gmtime()), (niche or "").strip().lower())
+    _hit = _PLAN_CACHE.get(_key)
+    if _hit:
+        return _hit[:n]
     recent = [i["topic"] for i in board.list()][-20:]
     reported = [i for i in board.list("reported")]
     ranked = sorted(reported, key=lambda i: -_views(i))
@@ -71,16 +79,34 @@ def plan(n: int = None) -> list:
                   .replace("{losers}", "; ".join(losers) or "none yet").replace("{trends}", "; ".join(trends()) or "none available").replace("{proven}", "; ".join(competitors()) or "none configured")
                   .replace("{recent}", "; ".join(recent)))
         try:
-            text, cost, mlabel = llm.chat(prompt, max_tokens=400)
+            # v5.8.2: strategy NEVER pays. Free council chat only; if no free
+            # provider responds we fall to the $0 rotation below.
+            if niche:
+                prompt += f"\nACCOUNT NICHE: {niche} — every topic must serve this niche."
+            try:
+                from agentcore import skills as _sk
+                prompt += _sk.skill_block("editorial")
+            except Exception:
+                pass
+            try:
+                from agentcore import memory as _cm
+                prompt += _cm.lessons_block(niche=niche)
+            except Exception:
+                pass
+            from agentcore import council as _council
+            text, cost, mlabel = _council.free_chat(prompt, max_tokens=400)
             raw = json.loads(text[text.find("{"): text.rfind("}") + 1])["topics"][:n]
             topics = [t if isinstance(t, dict) else {"topic": t, "bucket": "proven"} for t in raw]
             ledger.record("strategy", model=mlabel, prompt_version=version, cost_usd=cost)
+            _PLAN_CACHE[_key] = topics
             return topics
         except Exception as e:
             ledger.record("strategy", ok=False, detail=str(e))
     fresh = [t for t in _ROTATION if t not in recent] or _ROTATION
     ledger.record("strategy", model="rotation", cost_usd=0)
-    return [{"topic": t, "bucket": "proven"} for t in fresh[:n]]
+    out = [{"topic": t, "bucket": "proven"} for t in fresh[:n]]
+    _PLAN_CACHE[_key] = out
+    return out
 
 def _views(item):
     m = item["payload"].get("metrics", {})

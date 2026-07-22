@@ -61,7 +61,7 @@ def ceo_decide(w: Worker, job: Job, ctx: AgentContext):
       { action, department, account_id, estimated_cost_usd, item_id?, context? }
     Returns (writes job.result with decision + reason).
     """
-    sb = w.sb
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()  # v5.8.2 FIX: Worker has no .sb
     bus = ctx.deps["bus"]
     p = job.payload or {}
     action     = p.get("action", "unknown")
@@ -202,7 +202,8 @@ def _record(sb, w, job, account_id, dept, action, est_cost, decision):
 # ---------------------------------------------------------------- DAILY TICK
 def ceo_daily_tick(w: Worker, job: Job, ctx: AgentContext):
     """Run once/day: compute ROI, allocate budgets, write recommendations."""
-    sb = w.sb; bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()  # v5.8.2 FIX: Worker has no .sb
+    bus = ctx.deps["bus"]
     bus.agent("ceo", "👔 starting daily CEO review", "info", "ceo_day_start", job_id=job.id)
     try:
         _snapshot_roi(sb)
@@ -215,20 +216,22 @@ def ceo_daily_tick(w: Worker, job: Job, ctx: AgentContext):
 
 
 def ceo_allocate_budgets(w: Worker, job: Job, ctx: AgentContext):
-    _allocate_budgets(w.sb, ctx.deps["bus"])
+    _sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()  # v5.8.2 FIX
+    _allocate_budgets(_sb, ctx.deps["bus"])
     w.queue.complete(job, {"ok": True})
 
 
 def ceo_reuse_search(w: Worker, job: Job, ctx: AgentContext):
     p = job.payload or {}
-    asset = _find_reusable(w.sb, p.get("action",""), p.get("account_id"), topic=p.get("topic",""))
+    _sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()  # v5.8.2 FIX
+    asset = _find_reusable(_sb, p.get("action",""), p.get("account_id"), topic=p.get("topic",""))
     w.queue.complete(job, {"ok": True, "asset": asset})
 
 
 def ceo_record_outcome(w: Worker, job: Job, ctx: AgentContext):
     """After an action finishes, update the asset_library (if reusable) and record ROI."""
     p = job.payload or {}
-    sb = w.sb
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()  # v5.8.2 FIX
     bus = ctx.deps["bus"]
     try:
         if p.get("store_asset") and p.get("asset_type"):

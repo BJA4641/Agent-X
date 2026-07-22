@@ -38,7 +38,8 @@ _DEMO_SCRIPT = {
 
 
 def write_script(topic: str, item_id=None, account_id=None, project_id=None,
-                 grade_feedback: str = "") -> dict:
+                 grade_feedback: str = "", verify: bool = True,
+                 allow_demo: bool = True) -> dict:
     """Write a script with full brand/memory/trend context and grade it.
     Rewrites up to grader.MAX_ATTEMPTS times if score < MIN_GRADE.
 
@@ -94,21 +95,48 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
     script = None
     final_verdict = None
 
+    # v5.8.2 COUNCIL: free models draft + debate; Claude never called here.
+    # Skill playbook + learned lessons ride into the prompt.
+    def _prompt_with_context():
+        base = _fill()
+        try:
+            from agentcore import skills as _sk
+            base += _sk.skill_block("creative")
+        except Exception:
+            pass
+        try:
+            from agentcore import memory as _cm
+            base += _cm.lessons_block(account_id=account_id, niche=account_niche)
+        except Exception:
+            pass
+        return base
+
     if llm.ready() and ledger.budget_ok(EST_COST):
         try:
-            text, cost, mlabel = llm.chat(_fill(), max_tokens=1800)
+            from agentcore import council as _council
+            text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
             script = json.loads(text[text.find("{"): text.rfind("}")+1])
             ledger.record("brain", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
         except Exception as e:
             ledger.record("brain", prompt_version=version, ok=False, detail=str(e)[:300], item_id=item_id)
 
     if not script:
+        if not allow_demo:
+            # v5.8.2: never ship template junk into the real pipeline. Caller
+            # (creative dept) delays the job and retries when models are back.
+            raise RuntimeError("writer: no model produced a script (council+fallback failed)")
         script = json.loads(json.dumps(_DEMO_SCRIPT))
         script["title"] = topic[:60]
 
     script = _normalize_script(script, topic, account_id=account_id, account_niche=account_niche)
 
     # === GRADER LOOP ===
+    # v5.8.2: when the v5 department flow calls us (verify=False), CQO is the
+    # single paid Claude judge — skip this legacy internal grade+rewrite loop
+    # (it double-charged every script).
+    if not verify:
+        script["grade"] = {"deferred_to": "cqo"}
+        return script
     attempts = 0
     verdict = grader_mod.grade_post(script, account_id=account_id, project_id=project_id,
                                      item_id=item_id, brand_context=brand)
