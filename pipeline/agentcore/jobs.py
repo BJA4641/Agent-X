@@ -60,9 +60,17 @@ class JobQueue:
         return jobs
 
     def _find_by_idempotency(self, key: str) -> Optional[Job]:
+        """v5.6.1 FIX: only PENDING work blocks re-enqueue. The old version let a
+        DONE job with the same key block its own successor — every self-scheduling
+        chain (ops.heartbeat, ops.snapshot, human_desk.sync) died right after boot
+        because the successor's 30s/1h time-bucket key collided with the job that
+        had just finished 4 seconds earlier. One heartbeat per boot, forever —
+        which is why audits kept calling a LIVE worker dead."""
         try:
             res = (self._table().select("*").eq("idempotency_key", key)
-                   .not_.eq("status", JobStatus.FAILED.value).limit(1).execute())
+                   .in_("status", [JobStatus.QUEUED.value, JobStatus.CLAIMED.value,
+                                    JobStatus.IN_PROGRESS.value, JobStatus.WAIT_HUMAN.value])
+                   .limit(1).execute())
             if res.data:
                 return self._from_row(res.data[0])
         except Exception:

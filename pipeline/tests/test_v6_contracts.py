@@ -162,6 +162,65 @@ def test_circuit_breaker_trips_after_identical_failures():
     assert w._fail_streaks["publisher.post"]["n"] == 1
 
 
+# ---------------------------------------------------------------- idempotency contract
+
+class _IdemTable:
+    """Fake jobs table: one stored row with a DONE status + given key."""
+    def __init__(self, key, status):
+        self.row = {"id": "old", "job_type": "ops.heartbeat", "status": status,
+                    "idempotency_key": key, "payload": {}, "priority": 50,
+                    "attempts": 0, "max_attempts": 2}
+        self.inserted = []
+        self._match = None
+
+    # query chain
+    def select(self, *a, **k): return self
+    def eq(self, col, val):
+        self._match = (self.row if col == "idempotency_key"
+                       and val == self.row["idempotency_key"] else None)
+        return self
+    def in_(self, col, vals):
+        if self._match and self._match.get(col) not in vals:
+            self._match = None
+        return self
+    def not_(self): return self
+    def limit(self, n): return self
+    def execute(self):
+        return types.SimpleNamespace(data=[self._match] if self._match else [])
+    def insert(self, row):
+        self.inserted.append(row); return self
+
+
+def _mk_queue(table):
+    from agentcore.jobs import JobQueue
+    q = JobQueue.__new__(JobQueue)
+    q._sb = lambda: types.SimpleNamespace(table=lambda name: table)
+    q._bus = types.SimpleNamespace(emit=lambda *a, **k: None,
+                                    agent=lambda *a, **k: None)
+    return q
+
+
+def test_done_job_does_not_block_reenqueue():
+    """v5.6.1: the heartbeat-killer. A DONE job sharing the idempotency key
+    must NOT block enqueueing the successor (this froze worker_health forever)."""
+    from agentcore.models import Job
+    table = _IdemTable("hb:agentx-v5:12345", "done")
+    q = _mk_queue(table)
+    q.enqueue(Job(job_type="ops.heartbeat", payload={},
+                  idempotency_key="hb:agentx-v5:12345"))
+    assert table.inserted, "successor must be inserted when prior job is done"
+
+
+def test_queued_job_still_blocks_duplicate():
+    """Idempotency must still dedupe genuinely pending work."""
+    from agentcore.models import Job
+    table = _IdemTable("tick:999", "queued")
+    q = _mk_queue(table)
+    q.enqueue(Job(job_type="portfolio.tick", payload={},
+                  idempotency_key="tick:999"))
+    assert not table.inserted, "queued duplicate must NOT be re-inserted"
+
+
 # ---------------------------------------------------------------- eleven env contract
 
 def test_eleven_key_accepts_both_env_names(monkeypatch):
