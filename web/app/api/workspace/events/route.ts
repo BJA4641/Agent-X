@@ -20,7 +20,21 @@ export async function GET() {
       console.warn("[workspace/events] error:", error.message);
       return NextResponse.json({ events: [], error: error.message });
     }
-    return NextResponse.json({ events: data || [] });
+    // v5.10.5 REQ-SPEND-DISPLAY: the workspace summed events[].cost_usd, but
+    // agent_events has no cost column — costs live in run_ledger. The Spend card
+    // therefore read $0.000 while the ledger held $1.27. Return the real figures.
+    let spend = { today_usd: 0, all_time_usd: 0, paid_calls_today: 0 };
+    try {
+      const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
+      const { data: led } = await sb.from("run_ledger")
+        .select("cost_usd, created_at, model").gte("created_at", startOfDay.toISOString());
+      const rows = led || [];
+      spend.today_usd = rows.reduce((a: number, r: any) => a + Number(r.cost_usd || 0), 0);
+      spend.paid_calls_today = rows.filter((r: any) => Number(r.cost_usd || 0) > 0).length;
+      const { data: all } = await sb.from("run_ledger").select("cost_usd");
+      spend.all_time_usd = (all || []).reduce((a: number, r: any) => a + Number(r.cost_usd || 0), 0);
+    } catch { /* spend is best-effort; the feed must still render */ }
+    return NextResponse.json({ events: data || [], spend });
   } catch (e: any) {
     return NextResponse.json({ events: [] });
   }

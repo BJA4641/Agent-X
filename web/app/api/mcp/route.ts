@@ -145,6 +145,30 @@ function buildToolsList() {
         }
       },
       {
+        name: "agentx.diagnostics",
+        description: "One-shot health snapshot: worker version + heartbeat age, free-model ladder (usable/dropped rungs), last escalation verdict, cost per published post, and today's spend. Use this FIRST when something looks wrong.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
+        name: "agentx.failures",
+        description: "Recent failures with FULL error text: failed jobs and error/critical agent events. Use to find which agent broke and why.",
+        inputSchema: { type: "object", properties: {
+          limit: { type: "number", description: "max rows per category (default 15)" },
+          agent: { type: "string", description: "optional: filter events to one agent, e.g. brain, cqo, cfo" } } },
+      },
+      {
+        name: "agentx.agent_chatter",
+        description: "The agent conversation log, optionally filtered by agent or action. This is what the agents 'say' to each other as they work.",
+        inputSchema: { type: "object", properties: {
+          limit: { type: "number" }, agent: { type: "string" },
+          action: { type: "string" }, since_minutes: { type: "number" } } },
+      },
+      {
+        name: "agentx.pipeline_state",
+        description: "Where every board item and job currently sits — counts by status, plus what is queued and in flight. Answers 'why is nothing publishing'.",
+        inputSchema: { type: "object", properties: {} },
+      },
+      {
         name: "agentx.trends",
         description: "Browse currently-trending content ideas across the web for your niche.",
         inputSchema: {
@@ -248,6 +272,86 @@ async function runTool(name: string, params: any, userId: string) {
       { onConflict: "tenant_id,key" });
     if (error) throw error;
     return { kill_switch: on };
+  }
+
+  if (name === "agentx.diagnostics") {
+    const out: any = {};
+    const { data: wh } = await sb.from("worker_health").select("*");
+    out.workers = (wh || []).map((r: any) => ({
+      id: r.worker_id, version: r.version, host: r.host,
+      heartbeat_age_s: Math.round(Date.now() / 1000 - Number(r.last_heartbeat_at || 0)),
+      jobs_completed: r.jobs_completed, jobs_failed: r.jobs_failed,
+    }));
+    const { data: st } = await sb.from("settings").select("key,value")
+      .in("key", ["free_ladder_report", "escalation_last", "heartbeat_pulse",
+                  "cost_per_post", "kill_switch", "cost_mode", "sla_status"]);
+    for (const row of st || []) out[(row as any).key] = (row as any).value;
+    const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
+    const { data: led } = await sb.from("run_ledger").select("cost_usd,model")
+      .gte("created_at", startOfDay.toISOString());
+    const rows = led || [];
+    out.spend_today_usd = Number(rows.reduce((a: number, r: any) => a + Number(r.cost_usd || 0), 0).toFixed(4));
+    const byModel: Record<string, number> = {};
+    for (const r of rows) byModel[(r as any).model || "?"] = (byModel[(r as any).model || "?"] || 0) + Number((r as any).cost_usd || 0);
+    out.spend_by_model = byModel;
+    return out;
+  }
+
+  if (name === "agentx.failures") {
+    const limit = Math.min(Number(params?.limit) || 15, 50);
+    const jobsQ = sb.from("jobs").select("job_type,error,attempts,created_at")
+      .eq("status", "failed").order("created_at", { ascending: false }).limit(limit);
+    const { data: failedJobs } = await jobsQ;
+    let evQ = sb.from("agent_events").select("agent,action,status,message,created_at")
+      .in("status", ["error", "critical", "warn"])
+      .order("created_at", { ascending: false }).limit(limit);
+    if (params?.agent) evQ = evQ.eq("agent", String(params.agent));
+    const { data: errEvents } = await evQ;
+    return {
+      failed_jobs: (failedJobs || []).map((j: any) => ({
+        job_type: j.job_type, attempts: j.attempts, at: j.created_at,
+        error: String(j.error || ""),          // FULL text, deliberately untruncated
+      })),
+      error_events: (errEvents || []).map((e: any) => ({
+        agent: e.agent, action: e.action, status: e.status,
+        at: e.created_at, message: String(e.message || ""),
+      })),
+    };
+  }
+
+  if (name === "agentx.agent_chatter") {
+    const limit = Math.min(Number(params?.limit) || 50, 200);
+    let q = sb.from("agent_events").select("agent,action,status,message,created_at,item_id,job_id")
+      .order("created_at", { ascending: false }).limit(limit);
+    if (params?.agent) q = q.eq("agent", String(params.agent));
+    if (params?.action) q = q.eq("action", String(params.action));
+    if (params?.since_minutes) {
+      const since = new Date(Date.now() - Number(params.since_minutes) * 60000).toISOString();
+      q = q.gte("created_at", since);
+    }
+    const { data } = await q;
+    return { count: (data || []).length, events: data || [] };
+  }
+
+  if (name === "agentx.pipeline_state") {
+    const out: any = {};
+    const { data: board } = await sb.from("board_items").select("status");
+    const bc: Record<string, number> = {};
+    for (const r of board || []) bc[(r as any).status] = (bc[(r as any).status] || 0) + 1;
+    out.board_by_status = bc;
+    const { data: jobs } = await sb.from("jobs").select("status,job_type");
+    const jc: Record<string, number> = {};
+    const qt: Record<string, number> = {};
+    for (const r of jobs || []) {
+      jc[(r as any).status] = (jc[(r as any).status] || 0) + 1;
+      if ((r as any).status === "queued") qt[(r as any).job_type] = (qt[(r as any).job_type] || 0) + 1;
+    }
+    out.jobs_by_status = jc;
+    out.queued_by_type = qt;
+    const { data: acc } = await sb.from("project_accounts").select("handle,status,paused,posts_per_day");
+    out.accounts = (acc || []).map((a: any) => ({
+      handle: a.handle, status: a.status, paused: a.paused, posts_per_day: a.posts_per_day }));
+    return out;
   }
 
   if (name === "agentx.trends") {

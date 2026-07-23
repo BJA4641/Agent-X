@@ -53,6 +53,9 @@ function pipelineStatus(events: Evt[]): {label:string;color:string} {
 
 export default function WorkspacePage() {
   const [events, setEvents] = useState<Evt[]>([]);
+  // v5.10.5 REQ-SPEND-DISPLAY: spend now comes from the server (run_ledger),
+  // not from summing a cost column that agent_events never had.
+  const [spendInfo, setSpendInfo] = useState<{ today_usd: number; all_time_usd: number; paid_calls_today: number } | null>(null);
   const [filter, setFilter] = useState<string>("all");
   const [command, setCommand] = useState("");
   const [sending, setSending] = useState(false);
@@ -66,6 +69,7 @@ export default function WorkspacePage() {
       const r = await fetch("/api/workspace/events?limit=200", { cache: "no-store" });
       if (r.ok) {
         const j = await r.json();
+        if (j?.spend) setSpendInfo(j.spend);      // v5.10.5 real spend from run_ledger
         const list = Array.isArray(j?.events) ? j.events : [];
         if (list.length > 0) {
           setEvents(list);
@@ -115,7 +119,9 @@ export default function WorkspacePage() {
   const roster = Object.keys(AGENT_META).filter(a => a !== "you" && a !== "digest");
   const agents = [...Array.from(seen), ...roster.filter(a => !seen.has(a))];
   const shown = filter === "all" ? events : events.filter(e=>e.agent===filter);
-  const spend = events.reduce((a,e)=>a+Number(e.cost_usd||0),0);
+  // v5.10.5: server-supplied, from run_ledger. The old client-side reduce summed
+  // events[].cost_usd — a column agent_events does not have — so it was always 0.
+  const spend = spendInfo?.today_usd ?? 0;
   const errors = events.filter(e=>e.status==="error").length;
   const status = pipelineStatus(events);
 
