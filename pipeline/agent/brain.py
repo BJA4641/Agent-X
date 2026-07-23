@@ -130,13 +130,16 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
             script = json.loads(text[text.find("{"): text.rfind("}")+1])
             ledger.record("brain", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
         except Exception as e:
-            ledger.record("brain", prompt_version=version, ok=False, detail=str(e)[:300], item_id=item_id)
+            _write_err = str(e)[:400]
+            ledger.record("brain", prompt_version=version, ok=False, detail=_write_err, item_id=item_id)
 
     if not script:
         if not allow_demo:
-            # v5.8.2: never ship template junk into the real pipeline. Caller
-            # (creative dept) delays the job and retries when models are back.
-            raise RuntimeError("writer: no model produced a script (council+fallback failed)")
+            # v5.9.3: surface the ACTUAL reason. The old generic sentence
+            # ("council+fallback failed") hid three different provider errors
+            # behind one line and cost hours of guessing.
+            _why = locals().get("_write_err") or "no provider attempted"
+            raise RuntimeError(f"writer: no script — {_why}")
         script = json.loads(json.dumps(_DEMO_SCRIPT))
         script["title"] = topic[:60]
 

@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.9.2"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.9.3"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 INVENTORY_KEYS = [
@@ -91,6 +91,19 @@ def _write_provider_inventory(rt, version: str):
 def main():
     rt = get_runtime()
     _write_provider_inventory(rt, VERSION)
+    # v5.9.3: an ops.heartbeat job left in_progress by a killed container broke
+    # the heartbeat chain FOREVER (each heartbeat enqueues the next one), so the
+    # dashboard reported "worker is not beating" about a perfectly healthy
+    # worker. Reap orphans at boot.
+    try:
+        sb0 = rt.deps.get("supabase") and rt.deps["supabase"]()
+        if sb0 is not None:
+            sb0.table("jobs").update({"status": "queued", "claimed_at": None}) \
+               .eq("status", "in_progress").lt("scheduled_for", time.time() - 300).execute()
+            print("  reaped orphaned in_progress jobs")
+    except Exception as e:
+        print(f"  orphan reap skipped: {e}")
+
     worker = Worker(rt.queue, name="agentx-v5", poll_interval=2.5)
     worker.set_deps(**rt.deps)
     register_all(worker)

@@ -53,9 +53,13 @@ _PREF = {
 }
 
 def _live_models():
+    # v5.9.3: this used an undefined runtime helper — the AttributeError was
+    # swallowed, so model discovery silently never applied.
     try:
-        from agentcore import runtime
-        sb = runtime.supabase()
+        from agentcore import costmode as _cm
+        sb = _cm._sb()
+        if sb is None:
+            return {}
         row = (sb.table("settings").select("value").eq("key", "provider_models")
                .limit(1).execute().data)
         return ((row or [{}])[0].get("value") or {}).get("models") or {}
@@ -79,8 +83,10 @@ def _resolve(provider: str, wanted: str, live: dict) -> str:
 # so the roster follows the leaderboard without a redeploy.
 def _order():
     try:
-        from agentcore import runtime
-        sb = runtime.supabase()
+        from agentcore import costmode as _cm
+        sb = _cm._sb()
+        if sb is None:
+            return _FREE_ORDER
         row = (sb.table("settings").select("value").eq("key", "free_council_models")
                .limit(1).execute().data)
         models = ((row or [{}])[0].get("value") or {}).get("models") or []
@@ -163,22 +169,20 @@ def free_chat(prompt: str, max_tokens: int = 800):
 
 
 def _report_council_failure(detail: str):
-    """Write the per-provider reasons where a human can actually see them."""
+    """Write the per-provider reasons where a human can actually see them.
+    v5.9.3: previously called two runtime helpers that were never defined, so
+    every report vanished into an except block. Uses costmode._sb() now."""
+    print(f"[council] ALL FREE MODELS FAILED -> {detail}")
     try:
-        from agentcore import runtime, config as _cfg
-        sb = runtime.supabase()
-        sb.table("settings").upsert(
-            {"tenant_id": _cfg.TENANT_ID, "key": "council_last_failure",
-             "value": {"at": time.time(), "detail": detail[:1200]}},
-            on_conflict="tenant_id,key").execute()
-    except Exception:
-        pass
-    try:
-        from agentcore import runtime
-        runtime.bus().agent("brain", f"⚠️ every free model failed — {detail[:220]}",
-                            "error", "council_failed")
-    except Exception:
-        pass
+        from agentcore import costmode as _cm
+        sb = _cm._sb()
+        if sb is not None:
+            sb.table("settings").upsert(
+                {"tenant_id": _cm._tenant(), "key": "council_last_failure",
+                 "value": {"at": time.time(), "detail": detail[:1200]}},
+                on_conflict="tenant_id,key").execute()
+    except Exception as e:
+        print(f"[council] could not record failure: {e}")
 
 
 def debate(prompt: str, max_tokens: int = 1800):
@@ -187,6 +191,7 @@ def debate(prompt: str, max_tokens: int = 1800):
     Returns (text, 0.0, label)."""
     provs = _providers()
     if not provs:
+        _report_council_failure("no usable free provider (check keys and cooldowns)")
         raise RuntimeError("council: no free providers configured")
 
     t0 = time.time()
