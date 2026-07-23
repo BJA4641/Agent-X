@@ -216,11 +216,35 @@ def free_chat(prompt: str, max_tokens: int = 800):
                            + ("; ".join(dropped) if dropped else "ladder itself was empty"))
     errors = []
     for prov, model in provs:
+        # v5.10.1 REQ-RATELIMIT-1: pace the call. If this provider's bucket is
+        # dry for longer than the cap, skip to the NEXT rung instead of sleeping
+        # — a ladder with 5 rungs should route around a busy one, not queue on it.
+        try:
+            from agentcore import ratelimit as _rl
+            ok, waited = _rl.acquire(prov)
+            if not ok:
+                errors.append(f"{prov}/{model}: rate-limited locally, "
+                              f"next token in {waited:.1f}s — skipped to next rung")
+                continue
+        except Exception:
+            pass
         try:
             text, label = _call_free(prov, model, prompt, max_tokens)
+            try:
+                from agentcore import ratelimit as _rl2
+                _rl2.note_success(prov)
+            except Exception:
+                pass
             return text, 0.0, f"free:{label}"
         except Exception as e:
-            errors.append(f"{prov}/{model}: {str(e)[:160]}")
+            msg = str(e)
+            if "429" in msg or "rate limit" in msg.lower() or "too many requests" in msg.lower():
+                try:
+                    from agentcore import ratelimit as _rl3
+                    _rl3.note_rate_limited(prov)
+                except Exception:
+                    pass
+            errors.append(f"{prov}/{model}: {msg[:160]}")
             continue
     # v5.9.6 REQ-DIAG-1: include the rungs that were never even ATTEMPTED.
     # Without this, a ladder silently narrowed to 2 looks identical to a

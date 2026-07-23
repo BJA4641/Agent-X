@@ -218,6 +218,11 @@ def _publish_ladder(sb, bus, job):
     try:
         from agentcore.council import ladder_report
         rep = ladder_report()
+        try:
+            from agentcore import ratelimit as _rl
+            rep["rate_limits"] = _rl.snapshot()
+        except Exception:
+            pass
         sb.table("settings").upsert(
             {"tenant_id": os.environ.get("TENANT_ID", "me"),
              "key": "free_ladder_report", "value": rep},

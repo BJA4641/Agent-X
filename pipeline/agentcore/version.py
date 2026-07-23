@@ -20,14 +20,18 @@ from __future__ import annotations
 import json
 import os
 
-_FALLBACK = "5.9.8"
+# NOT a version — a marker. If this string ever reaches the dashboard it means
+# the canonical file did not reach the container, which is itself the bug.
+_FALLBACK = "unknown-no-version-file"
 
 
 # Canonical file lives in web/ so the Next.js build can always resolve it
 # (a repo-root file would be outside the Vercel root directory and break the
 # build). Python is the flexible reader, so Python does the searching.
-_CANDIDATES = ("../../../web/version.json", "../../web/version.json",
-               "../../../version.json", "../../version.json", "../version.json")
+_CANDIDATES = ("../../version.json",          # worker image: /app/version.json
+               "../../../web/version.json",    # repo checkout
+               "../../web/version.json",
+               "../../../version.json", "../version.json")
 
 
 def _read() -> str:

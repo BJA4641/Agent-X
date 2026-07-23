@@ -1,4 +1,4 @@
 {
-  "version": "5.10.0",
+  "version": "5.10.1",
   "note": "SINGLE SOURCE OF TRUTH for the Agent-X version. Python (agentcore.version) and the web layer (/api/version) both read this file. Bump it here and nowhere else."
 }

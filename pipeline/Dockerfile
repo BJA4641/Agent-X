@@ -17,6 +17,12 @@ RUN rm -rf /app/* /app/.* 2>/dev/null || true
 COPY pipeline/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# v5.10.1 REQ-VERSION-2: the canonical version file must reach the worker image.
+# Without it agentcore.version fell back to a hardcoded constant, so the worker
+# reported 5.9.8 forever while 5.10.0 was actually running — the exact class of
+# bug REQ-VERSION-1 was meant to end.
+COPY web/version.json ./version.json
+
 # Copy prompts first (rarely change) then pipeline code.
 COPY prompts/ ../prompts/
 COPY pipeline/ .
