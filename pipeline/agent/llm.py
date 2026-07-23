@@ -114,9 +114,36 @@ def _call(prov, model, prompt, max_tokens):
     if prov == "gemini":
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                f"?key={config.get('GEMINI_API_KEY')}")
-        body = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"maxOutputTokens": max_tokens}}
-        data = _post(url, body, {})
-        text = "".join(p.get("text", "") for p in data["candidates"][0]["content"]["parts"])
+        # v5.9.2: Gemini 2.5+ THINKS by default and the reasoning tokens come out
+        # of maxOutputTokens. With a small budget the model spends it all thinking,
+        # returns finishReason=MAX_TOKENS and a candidate with NO "parts" key —
+        # the old line then died on KeyError and the council reported only
+        # "council+fallback failed". Disable thinking for drafting work and give
+        # the answer real headroom.
+        body = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "maxOutputTokens": max(max_tokens, 2048),
+                "temperature": 0.9,
+                "thinkingConfig": {"thinkingBudget": 0},
+            },
+        }
+        try:
+            data = _post(url, body, {})
+        except Exception as e:
+            # thinkingConfig is rejected by older models -> retry without it
+            body["generationConfig"].pop("thinkingConfig", None)
+            data = _post(url, body, {})
+        cands = data.get("candidates") or []
+        if not cands:
+            raise RuntimeError(f"gemini {model}: no candidates "
+                               f"({str(data.get('promptFeedback'))[:120]})")
+        cand = cands[0]
+        parts = ((cand.get("content") or {}).get("parts")) or []
+        text = "".join(p.get("text", "") for p in parts)
+        if not text.strip():
+            raise RuntimeError(f"gemini {model}: empty text "
+                               f"(finishReason={cand.get('finishReason')})")
         return text, 0.0, f"gemini:{model}"
     if prov == "openrouter":
         data = _post("https://openrouter.ai/api/v1/chat/completions",

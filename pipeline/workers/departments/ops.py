@@ -70,7 +70,10 @@ def heartbeat(w: Worker, job: Job, ctx: AgentContext):
     }
     if sb:
         try:
-            sb.table("worker_health").upsert(row).execute()
+            # v5.9.2: no on_conflict target meant a changed worker_id could
+            # write a second row (or fail) while jobs kept running — the
+            # dashboard then said "worker is not beating" about a live worker.
+            sb.table("worker_health").upsert(row, on_conflict="worker_id").execute()
         except Exception as e:
             bus.agent("infrastructure", f"heartbeat write failed: {str(e)[:120]}", "warn",
                       "hb_err", job_id=job.id)

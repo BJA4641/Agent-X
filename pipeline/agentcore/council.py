@@ -140,16 +140,45 @@ def _call_free(prov: str, model: str, prompt: str, max_tokens: int):
 
 def free_chat(prompt: str, max_tokens: int = 800):
     """Single free-model call with rotation across free providers on failure.
-    Returns (text, 0.0, label). Raises RuntimeError if no free provider works."""
-    last = None
-    for prov, model in _providers():
+    Returns (text, 0.0, label). Raises RuntimeError if no free provider works.
+
+    v5.9.2: the old version kept only the LAST exception, so a three-provider
+    failure surfaced as one opaque line and cost hours of guesswork. Every
+    provider's own error is now reported."""
+    provs = _providers()
+    if not provs:
+        raise RuntimeError("no free provider configured (need GEMINI/GROQ/OPENROUTER key "
+                           "with a usable state)")
+    errors = []
+    for prov, model in provs:
         try:
             text, label = _call_free(prov, model, prompt, max_tokens)
             return text, 0.0, f"free:{label}"
         except Exception as e:
-            last = e
+            errors.append(f"{prov}/{model}: {str(e)[:160]}")
             continue
-    raise RuntimeError(f"no free provider available: {last}")
+    detail = " | ".join(errors)
+    _report_council_failure(detail)
+    raise RuntimeError(f"no free provider available -> {detail}")
+
+
+def _report_council_failure(detail: str):
+    """Write the per-provider reasons where a human can actually see them."""
+    try:
+        from agentcore import runtime, config as _cfg
+        sb = runtime.supabase()
+        sb.table("settings").upsert(
+            {"tenant_id": _cfg.TENANT_ID, "key": "council_last_failure",
+             "value": {"at": time.time(), "detail": detail[:1200]}},
+            on_conflict="tenant_id,key").execute()
+    except Exception:
+        pass
+    try:
+        from agentcore import runtime
+        runtime.bus().agent("brain", f"⚠️ every free model failed — {detail[:220]}",
+                            "error", "council_failed")
+    except Exception:
+        pass
 
 
 def debate(prompt: str, max_tokens: int = 1800):
@@ -162,15 +191,19 @@ def debate(prompt: str, max_tokens: int = 1800):
 
     t0 = time.time()
     candidates = []           # [(label, text)]
+    draft_errors = []
     for prov, model in provs[:2]:
         try:
             text, label = _call_free(prov, model, prompt, max_tokens)
             candidates.append((label, text))
-        except Exception:
+        except Exception as e:
+            draft_errors.append(f"{prov}/{model}: {str(e)[:160]}")
             traceback.print_exc()
             continue
     if not candidates:
-        raise RuntimeError("council: all free drafts failed")
+        detail = " | ".join(draft_errors) if draft_errors else "no providers"
+        _report_council_failure(detail)
+        raise RuntimeError(f"council: all free drafts failed -> {detail}")
 
     # Judge/merger = a provider different from candidate A when possible.
     judge_pool = provs[1:] + provs[:1]
