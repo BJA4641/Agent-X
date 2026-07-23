@@ -79,6 +79,44 @@ def account_deadline_utc(acct: dict, day=None) -> float:
 _TENANT = os.environ.get("TENANT_ID", "me")
 
 
+# v5.9.7 REQ-SLASTAGE-1 (DEC-031) — back-planned stage budgets.
+# A single end-of-day deadline is not actionable: by the time it breaches it is
+# already too late. Each stage therefore carries its own deadline, derived by
+# subtracting the remaining stages' budgets from the account's publish deadline.
+# fair_claim_order (v5.9.5) already pulls deadline-urgent jobs first, so
+# stamping these turns the existing fairness mechanism into SLA enforcement.
+STAGE_BUDGETS_MIN = {
+    "editorial.ideate":       5,
+    "editorial.plan_one":     5,
+    "editorial.plan_carousel": 5,
+    "creative.write_script": 15,
+    "creative.write_carousel": 15,
+    "cqo.grade_script":      15,
+    "creative.render":       30,
+    "postprod.finish":       15,
+    "monetization.inject":    5,
+    "human_desk.sync":       20,
+    "distribution.publish":  10,
+}
+# Order matters: everything AFTER a stage still has to fit before the deadline.
+STAGE_ORDER = ["editorial.ideate", "editorial.plan_one", "creative.write_script",
+               "cqo.grade_script", "creative.render", "postprod.finish",
+               "monetization.inject", "distribution.publish"]
+
+
+def stage_deadline(job_type: str, publish_deadline_utc: float) -> float:
+    """Deadline for one stage = publish deadline minus every downstream budget.
+
+    Pure function (unit-tested). Unknown job types return the publish deadline
+    unchanged, which is correct-but-loose rather than wrong.
+    """
+    if job_type not in STAGE_ORDER:
+        return publish_deadline_utc
+    idx = STAGE_ORDER.index(job_type)
+    downstream = sum(STAGE_BUDGETS_MIN.get(t, 0) for t in STAGE_ORDER[idx + 1:])
+    return publish_deadline_utc - downstream * 60
+
+
 def register(w: Worker):
     w.register("sla.plan_day", plan_day)
     w.register("sla.monitor", monitor)
@@ -240,6 +278,34 @@ def monitor(w: Worker, job: Job, ctx: AgentContext):
                 except Exception:
                     pass
 
+        # ---- 4b) REQ-SLASTAGE-1: stamp per-stage deadlines on queued jobs that
+        #          do not have one yet. One central place beats touching every
+        #          spawn site, and fair_claim_order does the rest.
+        stamped = 0
+        for acct in (active_accounts(sb) or []):
+            try:
+                dl = account_deadline_utc(acct)
+                rows = (sb.table("jobs").select("id,job_type")
+                        .eq("status", "queued").eq("account_id", str(acct["id"]))
+                        .is_("deadline", "null").limit(200).execute().data) or []
+                for r in rows:
+                    sd = stage_deadline(r.get("job_type", ""), dl)
+                    sb.table("jobs").update({"deadline": sd}).eq("id", r["id"]).execute()
+                    stamped += 1
+            except Exception:
+                continue
+        if stamped:
+            bus.agent("coo", f"⏱️ stamped stage deadlines on {stamped} queued job(s)",
+                      "info", "sla_stamp", job_id=job.id)
+
+        # ---- 4c) REQ-COSTPOST-1: the ROI denominator. Cost optimisation is
+        #          meaningless without it — v5.9.5 cut spend 83% while producing
+        #          nothing, which reads as success on every cost metric.
+        try:
+            _write_cost_per_post(sb, bus, job)
+        except Exception:
+            pass
+
         # ---- 5) stuck-job self-heal (crash recovery between reboots)
         try:
             res = (sb.table("jobs")
@@ -267,3 +333,42 @@ def monitor(w: Worker, job: Job, ctx: AgentContext):
             idempotency_key=f"slamon:{int(nxt // SLA_MONITOR_INTERVAL_S)}")
     w.queue.enqueue(j)
     w.queue.complete(job, {"ok": True, "accounts": len(status_out["accounts"])})
+
+
+def _write_cost_per_post(sb, bus, job):
+    """settings.cost_per_post — spend today / posts published today, plus the
+    all-time figure. Written every monitor pass so the founder can see whether
+    cost control is producing value or just suppressing output (REQ-COSTPOST-1)."""
+    start = _dt.datetime.combine(_dt.date.today(), _dt.time.min).isoformat() + "Z"
+    try:
+        led = sb.table("run_ledger").select("cost_usd").gte("created_at", start).execute()
+        spend_today = sum(float(x.get("cost_usd") or 0) for x in (led.data or []))
+    except Exception:
+        spend_today = 0.0
+    try:
+        pub_today = int((sb.table("board_items").select("id", count="exact")
+                         .eq("status", "published").gte("created_at", start)
+                         .execute()).count or 0)
+    except Exception:
+        pub_today = 0
+    try:
+        led_all = sb.table("run_ledger").select("cost_usd").execute()
+        spend_all = sum(float(x.get("cost_usd") or 0) for x in (led_all.data or []))
+        pub_all = int((sb.table("board_items").select("id", count="exact")
+                       .eq("status", "published").execute()).count or 0)
+    except Exception:
+        spend_all, pub_all = 0.0, 0
+    payload = {
+        "spend_today_usd": round(spend_today, 4),
+        "published_today": pub_today,
+        "cost_per_post_today": round(spend_today / pub_today, 4) if pub_today else None,
+        "spend_all_time_usd": round(spend_all, 4),
+        "published_all_time": pub_all,
+        "cost_per_post_all_time": round(spend_all / pub_all, 4) if pub_all else None,
+        "at": int(time.time()),
+    }
+    _put_setting(sb, "cost_per_post", payload)
+    if pub_today:
+        bus.agent("cfo", f"💵 cost per published post today: ${payload['cost_per_post_today']:.4f} "
+                         f"({pub_today} post(s), ${spend_today:.2f})",
+                  "info", "cost_per_post", job_id=job.id)

@@ -64,6 +64,44 @@ they unblock in hours. But it must not slip past Phase 1: **approved content tha
 
 ---
 
+## 2B · PHASE-5 ITEMS — NOW SCORED (closes gap G-4)
+
+| ID | Task | BV | TC | RR/OE | CoD | JS | **WSJF** |
+|---|---|---|---|---|---|---|---|
+| REQ-CIRCUIT-ACCT | Per-account circuit breakers (a poisoned account trips only its own lane) | 5 | 1 | 8 | 14 | 8 | **1.8** |
+| REQ-RENDER-REGION | Multi-region render capacity | 3 | 1 | 3 | 7 | 8 | **0.9** |
+| REQ-ONBOARD-AUTO | Automated brand onboarding (self-serve new account → producing) | 8 | 2 | 5 | 15 | 8 | **1.9** |
+| REQ-MODEL-NICHE | Learned per-niche model selection | 5 | 1 | 5 | 11 | 8 | **1.4** |
+
+All four rank below every Phase 0–3 item, confirming the roadmap sequencing: they are insurance against
+scale problems that do not exist at 2 active accounts.
+
+## 2C · FULL IMPACT SCORING FOR EVERY TIER (closes gap G-3)
+
+| ID | Business Impact | Engineering Impact | Complexity | ROI |
+|---|---|---|---|---|
+| REQ-AUTOAPPROVE-1 | High — removes the founder from every publish path (the Phase-1 throughput ceiling) | Approval-policy gate; fails closed on error | Low | Very High |
+| REQ-SLASTAGE-1 | High — converts v5.9.5 fairness into real SLA enforcement | One central stamping site, no spawn-site changes | Low | Very High |
+| REQ-COSTPOST-1 | High — supplies the ROI denominator cost control never had | Read-only aggregation | Trivial | Very High |
+| REQ-PUB-TOKENS | Extreme — approved content still cannot post | Token storage + refresh + per-platform quirks | High | High (blocked on founder) |
+| REQ-RATELIMIT-1 | High — prevents 429 storms that worsen under threads | Semaphores + shared token bucket | Medium | High |
+| REQ-PARALLEL-1 | Extreme at scale — SLA unreachable single-threaded | Thread-safe clients, bus context, per-lane pools | Medium-High | Very High |
+| REQ-LANES-1 | Medium — OOM protection at 512MB | Lane classification on spawn | Low | High |
+| REQ-CHAIN-1 | Medium — cadence fixes currently diluted ~4× | Single-chain guard | Low | Medium |
+| REQ-OVERHEAD-2 | Medium — reclaims 97% of queue capacity | Ops job consolidation | Medium | Medium |
+| REQ-SCALE-WORKERS | High at scale | Config + heartbeat dedupe | Low | Medium (costs money) |
+| REQ-PREP-REDESIGN | High — 103 idle accounts compound inventory | Prep governor + decay classification + grading | Medium | High |
+| REQ-PREP-PROMOTE | Medium — instant production on unpause | Promotion + staleness refresh | Low | Medium |
+| REQ-LEARN-1 | Medium — ETA accuracy | Rolling percentile store | Medium | Low until output exists |
+| REQ-BUDGET-2 | Medium — founder visibility of the $25 cap | Web layer only | Low | Medium |
+| REQ-SLA-UI | Medium — makes SLA state legible | Web layer only | Low | Medium |
+| REQ-WEB-404 | **High — three sidebar links 404 today; founder-visible breakage** | 3 Next.js pages + data wiring | Low-Medium | High |
+| REQ-PAYOUT-1 | Medium — affiliate payouts are manual | Connect onboarding + webhooks | Medium | Medium |
+| REQ-DEADCODE-1 | Low direct, high clarity | Removes a shadow codebase | Medium | Medium |
+| REQ-ISOLATION-1 | High at 500 brands | Schema change, migration risk | High | Low now, High later |
+| REQ-TRADEMARK | High — blocks marketing spend | None (legal) | Medium | High |
+| REQ-MCP-CLAIMS | Medium — honesty policy | None | Low | Medium |
+
 ## 3 · CATEGORIZED WORK
 
 ### 🔴 CRITICAL — immediately (Batch #2 / v5.9.6)

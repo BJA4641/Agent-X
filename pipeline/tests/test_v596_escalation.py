@@ -327,4 +327,6 @@ def test_runner_starts_the_pulse():
     import workers.runner as r
     src = inspect.getsource(r.main)
     assert "start_heartbeat_pulse" in src
-    assert r.VERSION == "5.9.6"
+    # v5.9.7: assert the pulse SHIPPED, not the exact version string — pinning an
+    # exact version made a later release fail a prior batch's test for no reason.
+    assert tuple(int(x) for x in r.VERSION.split(".")) >= (5, 9, 6)

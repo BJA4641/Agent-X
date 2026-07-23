@@ -163,11 +163,19 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
                 metadata={"overall": overall, "scores": scores, "item_id": item_id})
         except Exception:
             pass
+        # v5.9.7 REQ-AUTOAPPROVE-1: opt-in removal of the human gate for
+        # high-scoring drafts. OFF by default — see auto_approve_decision.
+        auto = False
+        try:
+            auto = _maybe_auto_approve(w, sb, bus, job, item_id, overall, scores, script)
+        except Exception as e:
+            bus.agent("cqo", f"auto-approve check errored ({str(e)[:80]}) — human gate kept",
+                      "warn", "auto_approve_err", job_id=job.id)
         # Chain into render
         job_of(w, "creative.render", {
             "item_id": item_id, "script": script, "style": job.payload.get("style", "cinemagraph"),
         }, parent=job, priority=job.priority)
-        w.queue.complete(job, {"ok": True, "quality": qg.model_dump()})
+        w.queue.complete(job, {"ok": True, "quality": qg.model_dump(), "auto_approved": auto})
         return
 
     # Failed — rewrite or kill
@@ -258,3 +266,75 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
         except Exception:
             pass
     w.queue.complete(job, {"ok": False, "rejected": True, "quality": qg.model_dump()})
+
+
+# ------------------------------------------------- v5.9.7 REQ-AUTOAPPROVE-1
+
+AUTO_APPROVE_DEFAULT_MIN = 8.5   # deliberately strict: well above SHIP_FLOOR (7.0)
+
+
+def auto_approve_decision(*, enabled: bool, overall: float, min_score: float,
+                          dimension_scores: dict, min_dim: float,
+                          risk_flags: list = None) -> tuple:
+    """Pure, testable gate for skipping the human approval step.
+
+    Design stance (DEC-038): autonomous publishing is OFF by default. Removing
+    the founder from the publish path is a safety decision, not a throughput
+    tweak, so it must be opted into explicitly per tenant and it holds content
+    to a materially higher bar than the normal ship floor.
+
+    Returns (approve: bool, reason: str).
+    """
+    if not enabled:
+        return False, "auto-approve disabled (human gate active)"
+    if risk_flags:
+        return False, f"risk flags present: {', '.join(map(str, risk_flags[:3]))}"
+    if overall < min_score:
+        return False, f"score {overall:.1f} below auto-approve bar {min_score:.1f}"
+    dims = [float(v) for v in (dimension_scores or {}).values()]
+    if dims and min(dims) < min_dim:
+        return False, f"weakest dimension {min(dims):.1f} below {min_dim:.1f}"
+    return True, f"score {overall:.1f} >= {min_score:.1f}, all dimensions >= {min_dim:.1f}"
+
+
+def _auto_approve_config(sb) -> tuple:
+    """settings.auto_approve = {"on": true, "min_score": 8.5}. Default: OFF."""
+    if sb is None:
+        return False, AUTO_APPROVE_DEFAULT_MIN
+    try:
+        row = (sb.table("settings").select("value").eq("key", "auto_approve")
+               .limit(1).execute().data)
+        v = (row or [{}])[0].get("value") or {}
+        return bool(v.get("on") is True), float(v.get("min_score") or AUTO_APPROVE_DEFAULT_MIN)
+    except Exception:
+        return False, AUTO_APPROVE_DEFAULT_MIN
+
+
+def _maybe_auto_approve(w, sb, bus, job, item_id, overall, scores, script) -> bool:
+    """Flip a passed item straight to 'approved' when the tenant has opted in
+    and the score clears the higher bar. Returns True if approved."""
+    enabled, min_score = _auto_approve_config(sb)
+    risk = []
+    try:
+        payload = (script or {}).get("risk_flags") or []
+        risk = list(payload) if isinstance(payload, (list, tuple)) else []
+    except Exception:
+        risk = []
+    ok, reason = auto_approve_decision(
+        enabled=enabled, overall=float(overall or 0), min_score=min_score,
+        dimension_scores={k: float(v) for k, v in (scores or {}).items()},
+        min_dim=MIN_DIM, risk_flags=risk)
+    if not ok:
+        if enabled:
+            bus.agent("human_desk", f"🖐️ held for founder review — {reason}", "info",
+                      "auto_approve_held", job_id=job.id, item_id=item_id)
+        return False
+    try:
+        from ..common import board_patch
+        board_patch(sb, item_id, status="approved")
+    except Exception:
+        return False
+    bus.agent("human_desk", f"🤖 AUTO-APPROVED — {reason}. Founder review skipped per "
+                            f"settings.auto_approve; render proceeds.",
+              "success", "auto_approved", job_id=job.id, item_id=item_id)
+    return True
