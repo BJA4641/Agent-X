@@ -41,6 +41,15 @@ def heartbeat(w: Worker, job: Job, ctx: AgentContext):
     except Exception:
         __version__ = "5.1"
     version = job.payload.get("version", "5.1")
+    # v5.8.4 FIX: the heartbeat chain self-schedules through the persistent
+    # queue, so job.payload carried a STALE version forever across deploys
+    # (dashboard showed 5.7.0 while newer code was live). Read the live
+    # constant instead — payload is only a fallback.
+    try:
+        from workers.runner import VERSION as _live_v
+        version = _live_v
+    except Exception:
+        pass
     started = job.payload.get("started_at", time.time())
     in_flight = 0
     if sb:
