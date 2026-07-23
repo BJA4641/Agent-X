@@ -55,3 +55,26 @@ def test_free_only_beats_policy(monkeypatch):
                         lambda: {"paid_art": True, "paid_thinking": True})
     monkeypatch.setattr(costmode, "may_spend", lambda usd: False)   # free_only / budget gone
     assert costmode.may_spend_on("image", 0.10) is False
+
+
+# ---- v5.9.1 model-name resolution (stale ids killed every draft) ----
+def test_council_resolves_stale_model_name():
+    from agentcore import council
+    live = {"gemini": ["gemini-3.6-flash", "gemini-3-pro", "gemini-3.1-flash-lite"]}
+    # the hardcoded 2.5 name is gone -> must fall through to a live flash model
+    got = council._resolve("gemini", "gemini-2.5-flash", live)
+    assert got in live["gemini"] and "flash" in got, got
+
+def test_council_keeps_name_when_still_served():
+    from agentcore import council
+    live = {"gemini": ["gemini-2.5-flash", "gemini-3.6-flash"]}
+    assert council._resolve("gemini", "gemini-2.5-flash", live) == "gemini-2.5-flash"
+
+def test_council_passthrough_without_discovery():
+    from agentcore import council
+    assert council._resolve("gemini", "gemini-2.5-flash", {}) == "gemini-2.5-flash"
+
+def test_openrouter_prefers_free_routes():
+    from agentcore import council
+    live = {"openrouter": ["anthropic/claude-x", "google/gemma-4-31b-it:free"]}
+    assert council._resolve("openrouter", "dead/model:free", live).endswith(":free")

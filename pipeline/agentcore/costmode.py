@@ -331,3 +331,13 @@ def mark_audit_done(summary: str = "") -> None:
             on_conflict="tenant_id,key").execute()
     except Exception:
         pass
+
+
+def free_text_available() -> bool:
+    """True when at least one FREE text provider is usable right now.
+    Callers use this to skip paid-budget gates entirely: if a free model can do
+    the job, no budget check should ever be able to block it."""
+    for p in ("gemini", "groq", "openrouter"):
+        if has_key(p) and provider_state(p) == "ok":
+            return True
+    return False

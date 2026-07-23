@@ -42,7 +42,40 @@ _FREE_ORDER = [
     ("openrouter", "openai/gpt-oss-20b:free"),
 ]
 
-# Overridable from settings.free_council_models (written by research.arena_scout)
+# v5.9.1 — resolve model names against what the vendor ACTUALLY serves.
+# providers.probe writes settings.provider_models with the live ID list; we
+# match our preference by prefix so "gemini-2.5-flash" gracefully becomes
+# whatever flash model exists today instead of failing every single draft.
+_PREF = {
+    "gemini":     ["flash-latest", "3.6-flash", "3-flash", "2.5-flash", "flash"],
+    "groq":       ["llama-3.3-70b", "llama-3.1-70b", "llama-4", "llama"],
+    "openrouter": [":free"],
+}
+
+def _live_models():
+    try:
+        from agentcore import runtime
+        sb = runtime.supabase()
+        row = (sb.table("settings").select("value").eq("key", "provider_models")
+               .limit(1).execute().data)
+        return ((row or [{}])[0].get("value") or {}).get("models") or {}
+    except Exception:
+        return {}
+
+
+def _resolve(provider: str, wanted: str, live: dict) -> str:
+    """Return `wanted` if the vendor still serves it, else the best live match."""
+    ids = live.get(provider) or []
+    if not ids or wanted in ids:
+        return wanted
+    for frag in _PREF.get(provider, []):
+        for mid in ids:
+            if frag in mid:
+                return mid
+    return wanted            # nothing matched — let the call fail loudly
+
+
+# Overridable from settings.free_council_models (written by strategy.arena_scout)
 # so the roster follows the leaderboard without a redeploy.
 def _order():
     try:
@@ -74,10 +107,12 @@ _CRITIQUE_INSTRUCTIONS = (
 
 
 def _providers():
-    """Free providers whose API keys are actually configured AND not in cooldown."""
+    """Free providers with a key, not in cooldown, resolved to a LIVE model id."""
     from agent import llm as _llm
+    live = _live_models()
     out = []
     for (p, m) in _order():
+        m = _resolve(p, m, live)
         if not _llm._has_key(p):
             continue
         try:

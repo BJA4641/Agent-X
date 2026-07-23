@@ -216,8 +216,12 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
                     return
             except Exception: pass
     # Legacy budget check (belt-and-suspenders)
-    if not (_cm.may_spend_on('image', 0.05) and hard_budget_ok(next_cost_usd=0.05)):
-        bus.agent("cfo", f"⏸ budget too low for script (${remaining_budget():.3f} left) — delaying",
+    # v5.9.1: writing a script is THINKING, not art. Under the spend policy it
+    # runs on the free council at $0, so a paid-budget gate must not be able to
+    # stop it. (v5.8.8 mislabelled this 'image'; labelling it 'text' would have
+    # returned False and delayed every script by an hour, forever.)
+    if not _cm.free_text_available() and not hard_budget_ok(next_cost_usd=0.05):
+        bus.agent("cfo", f"⏸ no free model and budget too low for script (${remaining_budget():.3f} left) — delaying",
                   "warn", "script_budget", job_id=job.id)
         w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
                                   "error": f"budget delay: ${remaining_budget():.3f} left"})

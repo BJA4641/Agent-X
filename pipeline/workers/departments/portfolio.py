@@ -92,6 +92,7 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         bus.agent("ceo", f"👔 tick — account: {acct.get('name','?')} (@{acct.get('handle','?')})",
                   "info", "tick_account", job_id=job.id, account_id=acct["id"])
 
+        _sweep_stale_ideas(w, bus, sb, acct, job)
         inflight = _count_inflight(sb, acct["id"])
         target = int(acct.get("posts_per_day") or POSTS_PER_DAY_DEFAULT)
         bus.agent("coo", f"in-flight for @{acct.get('handle','?')}: {inflight}/{MAX_INFLIGHT_PER_ACCOUNT}, daily target {target}",
@@ -245,13 +246,67 @@ def _count_inflight(sb, account_id) -> int:
         # v5.6 P0 FIX: the old chain .eq("status","idea").or_("status.eq.drafted,...")
         # combined as AND in supabase-py -> matched ZERO rows -> the in-flight cap
         # NEVER engaged -> ideation flooded 7,307 items. in_() is the correct filter.
-        res = (sb.table("board_items")
-               .select("id", count="exact")
-               .in_("status", ["idea", "drafted", "approved", "scheduled"])
-               .execute())
-        # Can't easily filter by account_id because legacy board_items don't
-        # have account_id columns in all deployments; count globally and cap
-        # conservatively.
-        return int(res.count or 0)
+        # v5.9.1 DEADLOCK FIX. This counted the WHOLE board but compared the
+        # result against MAX_INFLIGHT_PER_ACCOUNT (a per-account limit). Four
+        # stale ideas therefore blocked every account forever:
+        #     "in-flight for @glowup.daily: 4/2 — no new reels this tick"
+        # board_items does have account_id in this deployment, so scope it.
+        q = (sb.table("board_items").select("id", count="exact")
+             .in_("status", ["idea", "drafted", "approved", "scheduled"]))
+        if account_id:
+            try:
+                res = q.eq("account_id", str(account_id)).execute()
+                return int(res.count or 0)
+            except Exception:
+                pass          # legacy rows without account_id -> global fallback
+        return int(q.execute().count or 0)
     except Exception:
         return 0
+
+
+STALE_IDEA_HOURS = 2
+
+def _sweep_stale_ideas(w, bus, sb, acct, job):
+    """v5.9.1 — un-stick the board.
+
+    An `idea` is created by editorial.ideate, which immediately enqueues
+    editorial.plan_one to draft it. If that chain dies (crash, circuit breaker,
+    kill switch mid-flight) the idea sits at `idea` forever, counts against the
+    in-flight cap, and the account is blocked permanently — no error, no event,
+    just silence. Four such ideas from 12:03 held both live accounts all day.
+
+    Any idea older than STALE_IDEA_HOURS gets ONE re-planning attempt; if it has
+    already been retried, it is cleared so it stops occupying a slot."""
+    if sb is None:
+        return
+    try:
+        import datetime as _dt
+        cutoff = (_dt.datetime.utcnow() - _dt.timedelta(hours=STALE_IDEA_HOURS)).isoformat() + "Z"
+        rows = (sb.table("board_items").select("id,payload,created_at")
+                .eq("status", "idea").eq("account_id", str(acct["id"]))
+                .lt("created_at", cutoff).limit(10).execute().data) or []
+    except Exception:
+        return
+    for r in rows:
+        payload = dict(r.get("payload") or {})
+        topic = payload.get("topic") or payload.get("title") or ""
+        if payload.get("replan_attempted"):
+            try:
+                sb.table("board_items").update({"status": "cleared"}).eq("id", r["id"]).execute()
+            except Exception:
+                pass
+            bus.agent("coo", f"🧹 cleared stale idea after a failed re-plan — \"{topic[:60]}\" "
+                             f"(it was holding an in-flight slot)",
+                      "warn", "idea_cleared", job_id=job.id, item_id=r["id"])
+            continue
+        payload["replan_attempted"] = True
+        try:
+            sb.table("board_items").update({"payload": payload}).eq("id", r["id"]).execute()
+        except Exception:
+            pass
+        job_of(w, "editorial.plan_one",
+               {"item_id": r["id"], "topic": topic, "bucket": payload.get("bucket", "trend")},
+               parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
+               priority=Priority.HIGH)
+        bus.agent("coo", f"♻️ re-planning stale idea (>{STALE_IDEA_HOURS}h at 'idea') — \"{topic[:60]}\"",
+                  "info", "idea_replan", job_id=job.id, item_id=r["id"])

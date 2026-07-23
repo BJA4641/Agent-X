@@ -64,7 +64,9 @@ PROBES = {
                    lambda k: {"Authorization": f"Bearer {k}"}, "validate", None),
     "replicate":  ("https://api.replicate.com/v1/account",
                    lambda k: {"Authorization": f"Bearer {k}"}, "validate", None),
-    "fal":        ("https://fal.run/health",
+    # fal has no documented status endpoint; the queue root answers auth
+    # correctly (401 for a bad key, 4xx-but-authenticated otherwise).
+    "fal":        ("https://queue.fal.run/fal-ai/flux/schnell/requests/status",
                    lambda k: {"Authorization": f"Key {k}"}, "validate", None),
     "deepgram":   ("https://api.deepgram.com/v1/projects",
                    lambda k: {"Authorization": f"Token {k}"}, "validate", None),
@@ -92,7 +94,13 @@ def _key(provider: str) -> str:
     return ""
 
 
+UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/126.0 Safari/537.36")
+
 def _get(url: str, headers: dict):
+    # v5.9.1: several vendors (groq via Cloudflare) reject urllib's default
+    # User-Agent with code 1010 and we reported it as a dead key.
+    headers = {"User-Agent": UA, "Accept": "application/json", **(headers or {})}
     req = urllib.request.Request(url, headers=headers, method="GET")
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
         return r.status, r.read().decode("utf-8", "replace")
@@ -124,6 +132,33 @@ def _parse(name: str, body: str):
     return None, None, {}
 
 
+def _extract_models(provider: str, body: str) -> list:
+    """v5.9.1 — record which model IDs the vendor ACTUALLY serves today.
+
+    The writer died with "council+fallback failed" while every key validated:
+    the council was asking for `gemini-2.5-flash`, a name two generations stale.
+    Hardcoded model IDs rot. Discover them instead."""
+    try:
+        d = json.loads(body)
+    except Exception:
+        return []
+    out = []
+    try:
+        if provider == "gemini":
+            for m in d.get("models", []):
+                name = (m.get("name") or "").split("/")[-1]
+                methods = m.get("supportedGenerationMethods") or m.get("supportedActions") or []
+                if name and (not methods or "generateContent" in methods):
+                    out.append(name)
+        else:                                   # OpenAI-compatible /v1/models
+            for m in d.get("data", []):
+                if m.get("id"):
+                    out.append(m["id"])
+    except Exception:
+        return []
+    return sorted(set(out))[:120]
+
+
 def probe_one(provider: str) -> dict:
     """Never raises. Returns a truthful record of what we could and could not learn."""
     key = _key(provider)
@@ -141,9 +176,11 @@ def probe_one(provider: str) -> dict:
     try:
         code, body = _get(url, hdr(key))
         amount, unit, extra = (_parse(parser, body) if parser else (None, None, {}))
+        models = _extract_models(provider, body)
         costmode.mark_ok(provider)
         rec = {"provider": provider, "linked": True, "status": "ok", "http": code,
-               "balance": amount, "unit": unit, "role": role, "extra": extra}
+               "balance": amount, "unit": unit, "role": role, "extra": extra,
+               "models": models}
         if kind == "validate":
             rec["note"] = "key valid — vendor exposes no balance endpoint, check their dashboard"
         elif amount is None:
@@ -152,7 +189,6 @@ def probe_one(provider: str) -> dict:
             rec["note"] = "live balance"
         if amount is not None and amount <= 0:
             rec["status"] = "out_of_credit"
-            costmode.mark_error(provider, 402, "probe: zero balance")
         return rec
     except urllib.error.HTTPError as e:
         detail = ""
@@ -160,7 +196,13 @@ def probe_one(provider: str) -> dict:
             detail = e.read().decode("utf-8", "replace")[:200]
         except Exception:
             pass
-        state = costmode.mark_error(provider, e.code, detail)
+        # v5.9.1: DO NOT call costmode.mark_error here. The probe is diagnostic;
+        # a wrong endpoint or a Cloudflare block would otherwise cooldown a
+        # perfectly good provider for 24h and silently shrink the free council.
+        # Only real production call failures (aisuite/council) set cooldowns.
+        state = costmode._classify(e.code, detail)
+        if state == "dead_key" and "permission" in (detail or "").lower():
+            state = "needs_scope"      # key works, token just lacks a read scope
         return {"provider": provider, "linked": True, "status": state or f"http_{e.code}",
                 "http": e.code, "balance": None, "unit": None, "role": role,
                 "note": (detail or str(e))[:180]}
@@ -207,6 +249,17 @@ def probe(w: Worker, job: Job, ctx: AgentContext):
                 {"tenant_id": _tenant(), "key": "provider_status",
                  "value": {"providers": results, "checked_at": time.time(),
                            "cost_mode": costmode.mode()}},
+                on_conflict="tenant_id,key").execute()
+        except Exception:
+            pass
+
+    # v5.9.1: publish the live model list so the council stops guessing names.
+    catalog = {p: r.get("models") or [] for p, r in results.items() if r.get("models")}
+    if sb is not None and catalog:
+        try:
+            sb.table("settings").upsert(
+                {"tenant_id": _tenant(), "key": "provider_models",
+                 "value": {"models": catalog, "checked_at": time.time()}},
                 on_conflict="tenant_id,key").execute()
         except Exception:
             pass
