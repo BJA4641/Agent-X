@@ -859,19 +859,16 @@ def _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
             grade_feedback=job.payload.get("grade_feedback", ""),
             verify=False, allow_demo=False, force_paid=True,
         )
-    except TypeError:
-        # brain build without force_paid support — fall back to a plain call,
-        # which still routes paid now that free providers are marked unusable.
-        try:
-            script = _brain.write_script(
-                topic, item_id=item_id, account_id=account_id, project_id=project_id,
-                grade_feedback=job.payload.get("grade_feedback", ""),
-                verify=False, allow_demo=False,
-            )
-        except Exception as e2:
-            bus.agent("brain", f"paid escalation failed too: {str(e2)[:120]}", "error",
-                      "escalate_failed", job_id=job.id, item_id=item_id)
-            return None
+    except TypeError as te:
+        # v5.10.3: this used to retry WITHOUT force_paid — i.e. re-run the exact
+        # free council that had just failed — and then report "paid escalation
+        # failed too". That silent degrade is what made an approved escalation
+        # produce zero paid calls. A missing force_paid is now a loud build error.
+        bus.agent("brain", f"🛑 escalation could not spend: brain.write_script does not "
+                           f"accept force_paid ({str(te)[:80]}). Deploy is stale — "
+                           f"v5.10.3+ required.", "error", "escalate_unsupported",
+                  job_id=job.id, item_id=item_id)
+        return None
     except Exception as e:
         bus.agent("brain", f"paid escalation failed: {str(e)[:120]}", "error",
                   "escalate_failed", job_id=job.id, item_id=item_id)

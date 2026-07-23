@@ -236,3 +236,43 @@ def test_backoff_release_targets_only_no_model_waits():
     assert '"no model" not in err' in src
     assert "creative.write_script" in src
     assert "ladder_is_healthy" in src
+
+
+# ------------------------------------------------- v5.10.3 REQ-ESCALATE-2
+
+def test_brain_accepts_force_paid():
+    """The gate called write_script(force_paid=True); brain did not accept it,
+    so every approved escalation TypeError'd into a free retry. Never again."""
+    import inspect
+    from agent.brain import write_script
+    assert "force_paid" in inspect.signature(write_script).parameters
+
+
+def test_force_paid_routes_to_the_paid_client_not_the_council():
+    import inspect
+    from agent import brain
+    src = inspect.getsource(brain.write_script)
+    i_force = src.index("if force_paid:")
+    i_paid = src.index("llm.chat(", i_force)
+    i_council_else = src.index("_council.debate(", i_force)
+    assert i_paid < i_council_else, "force_paid must bypass the free council"
+
+
+def test_escalation_no_longer_degrades_to_a_free_retry():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr._escalate_to_paid)
+    assert "escalate_unsupported" in src
+    # the old silent-degrade retry must be gone
+    assert src.count("_brain.write_script(") == 1, \
+        "exactly ONE write attempt in the escalation path — the second was the bug"
+
+
+def test_escalation_still_respects_every_guard():
+    from workers.departments.creative import escalation_allowed
+    base = dict(free_only=False, daily_remaining=9.0, account_month_remaining=9.0,
+                est_cost=0.02, sla_state="behind", produced_today=0, enabled=True)
+    assert escalation_allowed(kill_switch_on=True, **base)[0] is False
+    assert escalation_allowed(kill_switch_on=False, **{**base, "free_only": True})[0] is False
+    assert escalation_allowed(kill_switch_on=False, **{**base, "account_month_remaining": 0.0})[0] is False
+    assert escalation_allowed(kill_switch_on=False, **base)[0] is True

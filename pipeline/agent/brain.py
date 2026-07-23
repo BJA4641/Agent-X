@@ -39,7 +39,7 @@ _DEMO_SCRIPT = {
 
 def write_script(topic: str, item_id=None, account_id=None, project_id=None,
                  grade_feedback: str = "", verify: bool = True,
-                 allow_demo: bool = True) -> dict:
+                 allow_demo: bool = True, force_paid: bool = False) -> dict:
     """Write a script with full brand/memory/trend context and grade it.
     Rewrites up to grader.MAX_ATTEMPTS times if score < MIN_GRADE.
 
@@ -123,7 +123,22 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
             # fallback burned $0.41 of Claude on 2026-07-23 when groq/openrouter
             # rate-limited. Now: council or nothing — the job delays and retries
             # when free models are back. Set ALLOW_PAID_WRITER=1 to override.
-            if config.get("ALLOW_PAID_WRITER") == "1":
+            if force_paid:
+                # v5.10.3 REQ-ESCALATE-2 — THE missing rung.
+                #
+                # v5.8.6 made writing FREE-ONLY (correct at the time: a paid
+                # fallback had burned $0.41 of Claude unattended). v5.9.6 then
+                # added an escalation GATE in creative.py — but the gate called
+                # brain.write_script(force_paid=True), brain did not accept that
+                # kwarg, the TypeError fallback re-ran the SAME free council, and
+                # the log said "paid escalation failed too".
+                #
+                # Result: escalation_last recorded {"allowed": true} while not one
+                # paid call was ever made. Permission was granted and never spent.
+                # This branch is that spend. Every guard still ran upstream —
+                # kill switch, cost mode, daily budget, $25/account cap, CEO gate.
+                text, cost, mlabel = llm.chat(_prompt_with_context(), max_tokens=1800)
+            elif config.get("ALLOW_PAID_WRITER") == "1":
                 text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
             else:
                 text, cost, mlabel = _council.debate(_prompt_with_context(), max_tokens=1800)
