@@ -31,9 +31,9 @@ import os, time, traceback
 
 # Free provider order: (provider_key_in_agent_llm, model)
 _FREE_ORDER = [
+    ("gemini",     "gemini-2.5-flash"),          # most generous free tier — FIRST
     ("groq",       "llama-3.3-70b-versatile"),
     ("openrouter", "moonshotai/kimi-k2:free"),
-    ("gemini",     "gemini-2.5-flash"),
 ]
 
 _CRITIQUE_INSTRUCTIONS = (

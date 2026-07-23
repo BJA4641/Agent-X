@@ -114,7 +114,14 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
     if llm.ready() and ledger.budget_ok(EST_COST):
         try:
             from agentcore import council as _council
-            text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
+            # v5.8.6: writing is FREE-ONLY. debate_or_chat's paid llm.chat
+            # fallback burned $0.41 of Claude on 2026-07-23 when groq/openrouter
+            # rate-limited. Now: council or nothing — the job delays and retries
+            # when free models are back. Set ALLOW_PAID_WRITER=1 to override.
+            if config.get("ALLOW_PAID_WRITER") == "1":
+                text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
+            else:
+                text, cost, mlabel = _council.debate(_prompt_with_context(), max_tokens=1800)
             script = json.loads(text[text.find("{"): text.rfind("}")+1])
             ledger.record("brain", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
         except Exception as e:

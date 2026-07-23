@@ -71,7 +71,7 @@ REWRITE the script completely. Return the SAME strict JSON shape as a fresh scri
 
 
 def grade_post(script: dict, account_id=None, project_id=None, post_id=None, item_id=None,
-               brand_context: dict = None) -> dict:
+               brand_context: dict = None, force_claude: bool = False) -> dict:
     """Returns {'passed':bool, 'scores':{...}, 'overall':float, 'notes':str, 'fix':str, 'attempts_made':int}"""
     content = json.dumps({
         "hook": script.get("hook"),
@@ -117,8 +117,27 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
         verdict["fix"] = "hold for human review"
     if _gate:
         try:
-            text, cost, mlabel = llm.chat(prompt, max_tokens=500)
-            ledger.record("grader", model=mlabel, cost_usd=cost, item_id=item_id)
+            # v5.8.6 FREE-FIRST GRADING (founder mandate: Anthropic = final audit only).
+            #   normal attempts  → free council model grades ($0)
+            #   force_claude     → one paid Claude call, used ONLY by the CQO
+            #                      final-audit step on the winning script.
+            text = cost = mlabel = None
+            if force_claude:
+                from agentcore import aisuite as _ais
+                text, _meta = _ais.generate_text(prompt, model="claude-sonnet-4-5",
+                                                 max_tokens=500)
+                cost, mlabel = float(_meta.get("cost_usd") or 0), _meta.get("model", "claude-sonnet-4-5")
+                ledger.record("grader.final_audit", model=mlabel, cost_usd=cost, item_id=item_id)
+            else:
+                try:
+                    from agentcore import council as _council
+                    text, cost, mlabel = _council.free_chat(prompt, max_tokens=500)
+                except Exception:
+                    if config.get("ALLOW_PAID_GRADER") == "1":
+                        text, cost, mlabel = llm.chat(prompt, max_tokens=500)
+                    else:
+                        raise  # no free grader + paid not allowed → skipped verdict below
+                ledger.record("grader", model=mlabel, cost_usd=cost, item_id=item_id)
             parsed = json.loads(text[text.find("{"): text.rfind("}")+1])
             scores = {k: _clamp(int(parsed.get(k, 5)), 1, 10)
                       for k in ("hook","visuals","pacing","audio","caption","cta")}
@@ -132,7 +151,16 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
             }
         except Exception as e:
             ledger.record("grader", ok=False, detail=str(e)[:300], item_id=item_id)
-            verdict = _default_verdict(str(e))
+            # v5.8.6: "no free provider available" is NOT a content failure —
+            # park the draft honestly instead of emitting fail-safe scores
+            # that would trigger rewrites of a possibly fine script.
+            if "no free provider" in str(e).lower():
+                verdict = _default_verdict(str(e))
+                verdict["skipped"] = True
+                verdict["notes"] = "grader skipped — free models unavailable (rate limits?)"
+                verdict["fix"] = "hold for human review"
+            else:
+                verdict = _default_verdict(str(e))
 
     # Save to DB + memory
     _save_grade(verdict, post_id, item_id)
@@ -170,7 +198,15 @@ def rewrite_script(previous_script: dict, verdict: dict, topic: str,
     if not (llm.ready() and ledger.budget_ok(0.025)):
         return previous_script
     try:
-        text, cost, mlabel = llm.chat(prompt, max_tokens=1800)
+        # v5.8.6: rewrites are free-council work too; paid only if explicitly allowed.
+        try:
+            from agentcore import council as _council
+            text, cost, mlabel = _council.free_chat(prompt, max_tokens=1800)
+        except Exception:
+            if config.get("ALLOW_PAID_WRITER") == "1":
+                text, cost, mlabel = llm.chat(prompt, max_tokens=1800)
+            else:
+                raise
         ledger.record("brain_rewrite", model=mlabel, cost_usd=cost)
         parsed = json.loads(text[text.find("{"): text.rfind("}")+1])
         return parsed

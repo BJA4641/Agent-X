@@ -91,6 +91,10 @@ def test_brain_verify_false_skips_internal_grader(monkeypatch):
                    '{"voiceover":"d","visual_prompt":"cat eating"}],'
                    '"cta":"follow"}')
     from agentcore import council as _c
+    # v5.8.6: brain calls council.debate directly (no paid fallback);
+    # mock both entry points so the test survives either routing mode.
+    monkeypatch.setattr(_c, "debate",
+                        lambda p, max_tokens=1800: (fake_script, 0.0, "council:test"))
     monkeypatch.setattr(_c, "debate_or_chat",
                         lambda prompt, max_tokens=1800: (fake_script, 0.0, "council:test"))
     graded = {"called": False}

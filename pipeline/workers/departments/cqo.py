@@ -14,6 +14,60 @@ from ..common import job_of
 
 MAX_REWRITES = 2  # hard cap — matches user's "stop burning money on failures" mandate
 PASS_THRESHOLD = 8.0
+SHIP_FLOOR = 7.0  # v5.8.5: after max rewrites, SHIP the best attempt if >= this.
+
+
+def _claude_final_audit(w, script, item_id, account_id, project_id, job):
+    """v5.8.6 — the ONLY place Anthropic is spent in the content loop.
+
+    Free models write, debate and grade every attempt. When a script is about
+    to ship (passed or ship-best), Claude runs ONE verification pass (~$0.01).
+      returns ("ok", verdict)    Claude agrees → render
+              ("veto", verdict)  Claude scores it < SHIP_FLOOR → park for human
+              ("skip", None)     audit off / no key / audit errored → render anyway
+    Fail-open by design: an audit outage must never stall production."""
+    try:
+        from agent import config as _cfg
+        if not _cfg.get("ANTHROPIC_API_KEY"):
+            return "skip", None
+        sb = w.deps.get("supabase") and w.deps["supabase"]()
+        if sb:
+            row = sb.table("settings").select("value").eq("key", "claude_final_audit").limit(1).execute().data
+            if row and str((row[0].get("value") or {}).get("on", True)).lower() in ("false", "0"):
+                return "skip", None
+        from agent import grader as _g2
+        v = _g2.grade_post(script, account_id=account_id, project_id=project_id,
+                           item_id=item_id, force_claude=True)
+        if v.get("skipped"):
+            return "skip", None
+        overall = float(v.get("overall") or 0)
+        if overall < SHIP_FLOOR:
+            return "veto", v
+        return "ok", v
+    except Exception as e:
+        bus.agent("cqo", f"final audit errored ({str(e)[:80]}) — shipping on free-council grade", 
+                  "warn", "cqo_audit_error", job_id=job.id)
+        return "skip", None
+
+
+def _park_vetoed(w, sb, item_id, script, verdict, job):
+    """Claude vetoed the ship — park as drafted with the audit notes for a human."""
+    bus.agent("cqo", f"🛑 CLAUDE FINAL AUDIT VETO — {float(verdict.get('overall') or 0):.1f}/10: "
+                     f"{(verdict.get('fix') or '')[:120]} — parked for human review.",
+              "warn", "cqo_audit_veto", job_id=job.id)
+    if sb and item_id:
+        try:
+            row = sb.table("board_items").select("payload").eq("id", item_id).limit(1).execute().data
+            payload = dict((row and row[0].get("payload")) or {})
+            payload["script"] = script
+            payload["claude_audit"] = {"overall": verdict.get("overall"),
+                                       "notes": verdict.get("notes"), "fix": verdict.get("fix")}
+            sb.table("board_items").update({"status": "drafted", "payload": payload}).eq("id", item_id).execute()
+        except Exception:
+            pass
+    w.queue.complete(job, {"ok": True, "audit_veto": True, "parked": "drafted"})
+                  # Money spent on drafts must produce output — only truly weak
+                  # content (<7.0 on every attempt) is thrown away.
 MIN_DIM = 6
 
 
@@ -82,6 +136,14 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
     )
 
     if passed:
+        # v5.8.6: ONE Claude verification before money is spent on rendering.
+        decision, audit = _claude_final_audit(w, script, item_id, account_id, project_id, job)
+        if decision == "veto":
+            _park_vetoed(w, sb, item_id, script, audit, job)
+            return
+        if decision == "ok":
+            bus.agent("cqo", f"🔏 Claude final audit: {float(audit.get('overall') or 0):.1f}/10 — confirmed.",
+                      "success", "cqo_audit_ok", job_id=job.id)
         bus.agent("cqo", f"✅ script PASSED — {overall:.1f}/10. Moving to render.",
                   "success", "cqo_pass", job_id=job.id)
         # v5.8.2 LEARNING: record what worked so future drafts reuse it.
@@ -113,6 +175,11 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
             metadata={"overall": overall, "scores": scores, "item_id": item_id})
     except Exception:
         pass
+    # v5.8.5: remember the BEST attempt so far — it travels with the rewrite chain.
+    prev_best = float(job.payload.get("best_overall") or 0)
+    best_script, best_overall = (script, overall) if overall >= prev_best else \
+        (job.payload.get("best_script") or script, prev_best)
+
     if rewrite_attempt < MAX_REWRITES:
         bus.agent("cqo", f"requesting rewrite ({rewrite_attempt+1}/{MAX_REWRITES})",
                   "info", "cqo_rewrite", job_id=job.id)
@@ -124,8 +191,41 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
             "previous_script": script,
             "grade_feedback": fix,
             "rewrite_attempt": rewrite_attempt + 1,
+            "best_script": best_script,
+            "best_overall": best_overall,
         }, parent=job, priority=job.priority)
         w.queue.complete(job, {"ok": False, "retried": True, "quality": qg.model_dump()})
+        return
+
+    # v5.8.5 SHIP-BEST: rewrites exhausted. If the best attempt cleared the ship
+    # floor, PUBLISH IT instead of torching the money already spent. A 7.8/10
+    # reel that ships beats a perfect reel that never exists — volume creates
+    # the feedback data the grader itself needs to get better.
+    if best_overall >= SHIP_FLOOR:
+        # v5.8.6: Claude gets the final word on ship-best too — one call.
+        decision, audit = _claude_final_audit(w, best_script, item_id, account_id, project_id, job)
+        if decision == "veto":
+            _park_vetoed(w, sb, item_id, best_script, audit, job)
+            return
+        bus.agent("cqo", f"🚢 SHIP-BEST — best attempt {best_overall:.1f}/10 clears the "
+                          f"{SHIP_FLOOR:.0f} floor after {rewrite_attempt+1} tries. Rendering it.",
+                  "success", "cqo_ship_best", job_id=job.id)
+        try:
+            from agentcore import memory as _m3
+            _m3.add_lesson("grade_pass",
+                f"SHIPPED-AT-{best_overall:.1f}/10 (below the {PASS_THRESHOLD:.0f} bar, above the "
+                f"{SHIP_FLOOR:.0f} floor) — topic \"{(job.payload.get('topic') or best_script.get('title') or '')[:90]}\"",
+                account_id=account_id, project_id=project_id,
+                metadata={"overall": best_overall, "shipped_below_bar": True, "item_id": item_id})
+        except Exception:
+            pass
+        job_of(w, "creative.render", {
+            "item_id": item_id, "script": best_script,
+            "style": job.payload.get("style", "cinemagraph"),
+            "shipped_at_grade": best_overall,
+        }, parent=job, priority=job.priority)
+        w.queue.complete(job, {"ok": True, "shipped_best": True, "grade": best_overall,
+                               "quality": qg.model_dump()})
         return
 
     # Hard reject — no more retries. Record and kill.

@@ -22,11 +22,49 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.8.4"  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.8.6"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+
+
+INVENTORY_KEYS = [
+    # LLM / text
+    "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "GROQ_API_KEY",
+    "OPENROUTER_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "XAI_API_KEY",
+    "TOGETHER_API_KEY", "FIREWORKS_API_KEY", "COHERE_API_KEY",
+    # image / video
+    "FAL_KEY", "REPLICATE_API_TOKEN", "STABILITY_API_KEY", "BFL_API_KEY",
+    "IDEOGRAM_API_KEY", "RECRAFT_API_KEY", "GOAPI_KEY",
+    # voice / audio
+    "ELEVENLABS_API_KEY", "CARTESIA_API_KEY", "PLAYHT_API_KEY", "DEEPGRAM_API_KEY",
+    # publishing
+    "IG_ACCESS_TOKEN", "IG_USER_ID", "YT_API_KEY", "YOUTUBE_API_KEY", "YT_TOKEN_JSON",
+    "TIKTOK_ACCESS_TOKEN", "X_API_KEY", "LINKEDIN_ACCESS_TOKEN",
+]
+
+def _write_provider_inventory(rt, version: str):
+    """v5.8.5: publish which API keys the WORKER process actually has (presence
+    only, never values) so the dashboard can show ground truth instead of
+    guessing from Vercel's separate environment."""
+    try:
+        sb = rt.deps.get("supabase") and rt.deps["supabase"]()
+        if sb is None:
+            return
+        tenant = os.environ.get("TENANT_ID", "me")
+        keys = {k: bool(os.environ.get(k)) for k in INVENTORY_KEYS}
+        sb.table("settings").upsert({
+            "tenant_id": tenant, "key": "provider_inventory",
+            "value": {"checked_at": time.time(), "worker_version": version,
+                      "keys": keys,
+                      "present": sorted([k for k, v in keys.items() if v]),
+                      "missing": sorted([k for k, v in keys.items() if not v])},
+        }, on_conflict="tenant_id,key").execute()
+        print(f"  provider inventory: {sum(keys.values())}/{len(keys)} keys present -> settings.provider_inventory")
+    except Exception as e:
+        print(f"  provider inventory failed (non-fatal): {e}")
 
 
 def main():
     rt = get_runtime()
+    _write_provider_inventory(rt, VERSION)
     worker = Worker(rt.queue, name="agentx-v5", poll_interval=2.5)
     worker.set_deps(**rt.deps)
     register_all(worker)
