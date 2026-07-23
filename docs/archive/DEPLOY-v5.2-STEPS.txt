@@ -1,0 +1,79 @@
+================================================================
+Agent-X v5.2 — Phase 3 continued (SQL fix + Brand Studio + Monetization + Human Desk UI)
+================================================================
+
+STEP 1 — RUN SQL FIRST (fixes the "column ts does not exist" error)
+-------------------------------------------------------------------
+In Supabase → SQL Editor, open + run:
+    db/v5.2_PRODUCTION.sql
+
+This is a FULL replacement for v5.0/v5.1 migrations. It is safe to run on
+ANY state (clean DB, v4.x, partially-applied v5.0 that failed mid-way,
+v5.1). The "column ts does not exist" bug is fixed by adding ALL columns
+to agent_events BEFORE creating any indexes on them.
+
+VERIFY it worked:
+    select value from settings where key='schema_version';
+    -- expects: {"v":5.2,"applied_at_epoch":...}
+
+If you see that row, the schema is correct.
+
+STEP 2 — UPLOAD CODE
+--------------------
+Download Agent-X-v5.2-UPGRADE.zip, unzip, and REPLACE these in your repo:
+  pipeline/                 (full overwrite)
+  web/app/api/ceo/          (CEO scorecard API)
+  web/app/api/human/        (human desk API)
+  web/app/api/workers/      (worker liveness API)
+  web/app/dashboard/ceo/    (CEO scorecard page)
+  web/components/HumanDesk.tsx  (NEW — inline approval widget)
+  web/components/Sidebar.tsx    (adds CEO scorecard link)
+  web/app/dashboard/workspace/page.tsx (adds HumanDesk above feed)
+  db/v5.2_PRODUCTION.sql
+
+Git commit + push. Vercel redeploys web. Railway redeploys worker.
+
+STEP 3 — VERIFY
+---------------
+Railway logs should show:
+    Agent-X v5.2 pipeline ONLINE (Phase 3 optimized)
+      autothrottle: ON (reserves 10% of budget, delays low-priority work)
+      heartbeat:   every 30s → worker_health
+      kpi snapshot: every 1h → kpi_snapshots
+      human desk:  every 20s → escalations
+      brand studio: auto-generates Brand Bible for new accounts
+      monetize:    affiliate/sponsor disclosure injection enabled
+      handlers:    26 jobs
+
+Then:
+  1. Visit your website → Admin sidebar → "👔 CEO scorecard" (/dashboard/ceo).
+     Expect green/red worker dots, budget bar, queue counts.
+  2. Visit /dashboard/workspace. If any agent escalated a decision to you
+     (e.g., a risky sponsor hook), a yellow "👤 Your approval needed"
+     panel appears at the top with Approve / Reject buttons.
+  3. If you have a NEW project_account without a brand_bible, the
+     architect will auto-draft the 13-document brand bible before any
+     content is produced.
+
+WHAT'S NEW IN v5.2 (since v5.1)
+================================
+1. SQL FIX — "column ts does not exist" error is gone. Every ADD COLUMN
+   IF NOT EXISTS runs BEFORE create table / create index.
+2. BRAND STUDIO DEPARTMENT — when an account lacks a brand_bible, the
+   architect (or a structured-LLM fallback) generates the full 13-doc
+   Brand Bible into account_documents + the brand_bible column BEFORE
+   editorial starts producing content. New accounts can be resumed with
+   one click and autonomously onboard.
+3. MONETIZATION DEPARTMENT — called after Risk, before Publish. Injects
+   "links in bio" and #ad disclosure when the account has affiliate_urls
+   or an active sponsor. Chains cleanly through the pipeline.
+4. HUMAN DESK UI — inline yellow approval panel directly on /dashboard/
+  /workspace with Approve/Reject buttons (no separate page required).
+5. 26 total job types (up from 24).
+6. 68 modules boot-check clean, 18/18 tests passing.
+
+ROLLBACK
+========
+Railway CMD: `python cli.py loop --interval 60` (legacy v4)
+         or `python cli.py worker` (v5.0 baseline)
+No SQL rollback needed (additive).

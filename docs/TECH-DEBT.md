@@ -18,8 +18,10 @@ absorbed into "later".
 | TD-11 | Paused-prep depth cap is 5 outlines with no notion of "complete" | v5.9.5 minimal implementation | Prep stops far short of useful inventory; no decay classification | Redesign per DEC-032 | 🟡 REQ-PREP-REDESIGN, Phase 3 |
 | TD-12 | Error strings historically truncated at 150 chars | Pre-v5.9.6 | **Directly caused a multi-session diagnostic failure** — the provider list was cut mid-word, hiding which rungs were attempted | Widened to 900 chars in v5.9.6; audit other truncations | ✅ fixed for the writer, 🟡 audit elsewhere |
 
-| TD-13 | Sidebar advertises three modules whose pages were never built (`/dashboard/store`, `/digital`, `/affiliate`) | Sidebar shipped ahead of its pages | Founder clicks a menu item and gets a 404; modules look "missing" when they were only ever links | Build the three pages | 🟡 REQ-WEB-404, Batch 3 |
+| TD-13 | Sidebar advertised three modules whose pages were never built | Sidebar shipped ahead of its pages | Founder clicked a menu item and got a 404; modules looked "missing" when they were only ever links | Build the three pages | ✅ closed in v5.9.8 |
 | TD-14 | A test pinned `VERSION == "5.9.6"` exactly, so the next release failed a prior batch's test | v5.9.6 test authoring | False CI red on every version bump | Loosened to a floor comparison in v5.9.7; no exact version pins | ✅ fixed |
+
+| TD-15 | Version now has one canonical file but two readers with different resolution rules (TS import vs Python path search) | v5.9.8 REQ-VERSION-1 | If the repo layout changes, Python's candidate-path list needs updating or it silently falls back to a constant | Add a CI assertion that Python-resolved version == web/version.json (test added in v5.9.8) | ✅ guarded by test |
 
 ## Debt principles adopted (DEC-037)
 1. Debt is recorded when it is *created*, including in the release that creates it (see TD-06).

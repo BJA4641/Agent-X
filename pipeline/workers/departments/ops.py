@@ -46,11 +46,18 @@ def heartbeat(w: Worker, job: Job, ctx: AgentContext):
     # queue, so job.payload carried a STALE version forever across deploys
     # (dashboard showed 5.7.0 while newer code was live). Read the live
     # constant instead — payload is only a fallback.
+    # v5.9.8 REQ-VERSION-1: read the SINGLE source of truth. The payload value is
+    # frozen at whichever boot started this heartbeat chain, so across a deploy it
+    # reported a stale version about a freshly-updated worker.
     try:
-        from workers.runner import VERSION as _live_v
+        from agentcore.version import VERSION as _live_v
         version = _live_v
     except Exception:
-        pass
+        try:
+            from workers.runner import VERSION as _live_v
+            version = _live_v
+        except Exception:
+            pass
     started = job.payload.get("started_at", time.time())
     in_flight = 0
     if sb:

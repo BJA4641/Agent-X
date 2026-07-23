@@ -1,0 +1,117 @@
+================================================================
+Agent-X v5.0 — BLUEPRINT WORKER DEPLOY STEPS
+Phase 2 — Full Migration (event-driven, department-organized worker)
+================================================================
+
+Step 1 — UPLOAD new code to GitHub
+----------------------------------
+1. Download the zip: Agent-X-v5.0-UPGRADE.zip
+2. Unzip it. You get a pipeline/ folder, a db/ folder, and this file.
+3. In your local Agent-X repo (clone of BJA4641/Agent-X), REPLACE:
+     - pipeline/  (overwrite everything inside)
+     - db/v5.0_WORKER_MIGRATION.sql  (add new file)
+4. Git add/commit/push to main.
+5. Railway auto-deploys from main. The new Dockerfile CMD runs
+   `python cli.py worker` (the v5 engine). The legacy loop is still
+   available at `python cli.py loop` if you need to revert.
+
+Step 2 — RUN the new SQL in Supabase
+------------------------------------
+In Supabase → SQL Editor, open + run:
+     db/v5.0_WORKER_MIGRATION.sql
+You should see at the end:
+     v5.0 WORKER MIGRATION APPLIED ✓ — jobs + agent_events + memory + lessons tables ready.
+This is idempotent — safe to run twice.
+
+Step 3 — VERIFY the worker booted
+----------------------------------
+After Railway deploys:
+1. Open Railway logs for the `affectionate-purpose` worker.
+2. You should see:
+     ============================================================
+     Agent-X v5 pipeline ONLINE (blueprint-driven worker)
+       tenant:    me
+       budget:    $1.50
+       kill:      off
+       handlers:  ['analytics.collect_metrics', 'cfo.preflight',
+                   'cqo.grade_script', 'creative.render', ...]
+     ============================================================
+   And within seconds live agent chatter:
+     [⚙️ system] Agent-X v5 worker booted — blueprint online.
+     [👔 ceo] Standing by. Single active account. Budget hard-capped.
+     [🛡️ cqo] Quality gate armed — 8.0/10 min across all six dimensions.
+     [🔭 scout] 🔭 refreshing trend feeds ...
+     [👔 ceo] 👔 tick — active account: AI Tool Daily (...)
+
+Step 4 — Dashboard (agent-events sidebar)
+-----------------------------------------
+No web changes required — the new engine writes to the SAME agent_events
+table the v4 sidebar reads. You'll see the new emoji-coded department
+agents (👔 ceo, 🛡️ cqo, 💰 cfo, 🔭 scout, 📋 strategist, ✍️ brain,
+🎬 composer, 📤 publisher, 📊 analyst, 🚨 risk, etc.) in the feed.
+
+================================================================
+WHAT CHANGED IN v5 (Phase 2)
+================================================================
+
+* Single worker process runs ALL departments via a durable Postgres
+  JobQueue (SELECT ... FOR UPDATE pattern) instead of one monolithic
+  orchestrator.tick() loop. Jobs survive Railway restarts.
+* 18 production job types organized into 10 departments matching the
+  Phase 1 org chart:
+    K Finance         — cfo.preflight (hard budget/kill-switch BLOCK
+                        before any money is spent)
+    O Quality (CQO)   — cqo.grade_script (centralized 8.0/10 gate,
+                        MAX 2 rewrites, hard final-reject — NO MORE
+                        infinite retry loops)
+    P Risk            — risk.scan_content (financial/medical/spam
+                        claims + banned-phrase scan pre-publish)
+    A Portfolio Mgmt  — portfolio.tick (self-scheduling every 60s,
+                        picks the ONE active account, caps in-flight)
+    G Research        — research.scout_run (zero-cost live trends)
+    C Editorial       — editorial.ideate / plan_one (picks topics
+                        from strategy/scout/evergreen fallbacks so
+                        the queue is never empty)
+    D Creative        — creative.write_script (brain + inline draft
+                        grader) → cqo → creative.render (voice/frames/
+                        captions/music/SFX/final assembly — same
+                        proven ffmpeg pipeline)
+    E Post-Production — post.polish (file-size verifier, repurpose)
+    F Distribution    — distribution.publish (idempotent IG/YT),
+                        cross_promote
+    J Analytics       — analytics.collect_metrics (24h delayed),
+                        post_mortem → lessons learned
+    M Knowledge       — knowledge.summarize_day
+* Self-scheduling: portfolio.tick enqueues the NEXT portfolio.tick
+  before completing — even if Railway restarts, the queue resumes.
+* Budget/KillSwitch checked at the TOP of every workflow — if
+  exhausted, the job fatally-fails immediately, no LLM call, no
+  retries.
+* Every agent step:
+    - emits to the bus (visible in sidebar)
+    - records cost to run_ledger
+    - is wrapped in circuit breakers per LLM model
+    - has max_attempts=2 with exponential backoff
+    - writes failures to jobs table (no silent 73-failure blowups)
+
+================================================================
+IF YOU NEED TO ROLL BACK
+================================================================
+1. In Railway, set the start command back to:
+     python cli.py loop --interval 60
+2. No SQL rollback needed — the new tables/columns coexist peacefully.
+
+================================================================
+DAILY_BUDGET_USD
+================================================================
+Hard-coded default is $1.50. To change:
+  Method A: set env var DAILY_BUDGET_USD=2.00 on Railway (rebuilds).
+  Method B: in Supabase settings table upsert:
+            INSERT INTO settings(tenant_id,key,value) VALUES
+            ('me','daily_budget','{"usd":2.00}')
+            ON CONFLICT(tenant_id,key) DO UPDATE SET value='{"usd":2.00}';
+            Read live every tick, no redeploy needed.
+
+To PAUSE everything immediately (kill switch):
+  Method A: env KILL_SWITCH=1
+  Method B: settings row {key:'kill_switch',value:{"on":true}}

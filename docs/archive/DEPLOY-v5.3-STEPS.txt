@@ -1,0 +1,98 @@
+==========================================================
+ Agent-X v5.3 DEPLOY STEPS (UPDATED)
+ ==========================================================
+
+ This upgrade fixes 9 reported bugs and adds 2 new features:
+
+ FIXES:
+  1. Pause/Resume: "Stop work" no longer auto-rejects all ideas. In-flight
+     jobs are marked 'blocked' (resumable); ideas stay put.
+  2. Niche awareness: cat projects get cat topics, finance gets finance,
+     etc. Generic AI evergreens are skipped for non-AI niches.
+  3. Live spend: /api/wallet now reads run_ledger (real pipeline spend),
+     not demo topups.
+  4. Budget hard cap: legacy orchestrator.tick() + worker jobs pre-check
+     budget before starting; killswitch + autothrottle enforced.
+  5. Black chat bubbles: theme-fix.ts injected in <head> so white text on
+     near-black (#1a1a1a) bubbles is fixed BEFORE first paint.
+  6. SQL ordering bug fixed: CREATE TABLE runs before CREATE INDEX/ALTER
+     so "relation public.jobs does not exist" error is gone.
+  7. Visual content preview: /b/[aid] business-plan page shows all 13
+     brand docs + rendered videos inline.
+  8. Brand tone vs identity: warning shown on /b page when they match.
+  9. Cross-project business access: every project's business plan is
+     accessible via /b/[aid].
+
+ NEW FEATURES:
+  A. AI auto-fallback toggle in Developer console (default ON). When on,
+     agents automatically rotate Anthropic -> Gemini -> Groq -> OpenRouter
+     whenever a key is missing/out-of-credits/erroring. Production never
+     stops because of one dead wallet.
+  B. "AI provider wallets" panel on Developer console — live status and
+     balance/credit check for Anthropic, Google AI Studio (Gemini),
+     OpenRouter, Groq, Railway, ElevenLabs. Shows MTD spend per provider
+     and last-used timestamp. Requires RAILWAY_API_TOKEN to see Railway
+     credits (optional, read-only token from railway.app/account/tokens).
+
+ ==========================================================
+ STEP 1 — SUPABASE (run this SQL first!)
+ ==========================================================
+ 1. Open Supabase dashboard -> SQL Editor -> New Query.
+ 2. Open file:  db/v5.3_PRODUCTION.sql
+ 3. Paste the ENTIRE file, click Run. It is idempotent — safe to re-run.
+ 4. Verify with:  SELECT value FROM settings WHERE key='schema_version';
+    Expected result:  {"v": "5.3", "applied_at_epoch": ...}
+
+ ==========================================================
+ STEP 2 — ENVIRONMENT VARIABLES
+ ==========================================================
+ Required (already set if v5.x was running):
+   - ANTHROPIC_API_KEY
+   - GEMINI_API_KEY
+   - SUPABASE_URL  +  SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY)
+   - TENANT_ID = me
+   - DAILY_BUDGET_USD = 1.50 (or whatever you want)
+
+ Optional (enables extra balance panels):
+   - OPENROUTER_API_KEY   (free tier from openrouter.ai)
+   - GROQ_API_KEY         (free tier from console.groq.com)
+   - ELEVENLABS_API_KEY   (voiceovers)
+   - RAILWAY_API_TOKEN    (read-only token from railway.app/account/tokens
+                           — needed to show Railway credits live)
+   - RAILWAY_PROJECT_ID   (shows direct link to your project)
+
+ ==========================================================
+ STEP 3 — DEPLOY CODE
+ ==========================================================
+ A. Vercel (web frontend):
+    - Push the new web/ folder to your repo.
+    - Vercel auto-deploys on push.
+
+ B. Railway (python worker):
+    - Push the new pipeline/ folder + Dockerfile to your repo.
+    - Railway auto-redeploys. Dockerfile CMD is already `python cli.py worker`.
+    - Check deploy logs for "BOOT CHECK OK — all 68 modules imported cleanly."
+
+ ==========================================================
+ STEP 4 — VERIFY
+ ==========================================================
+ 1. Open  /dashboard/console  (Developer console — admin only).
+ 2. You should see:
+    - "Auto-fallback is ON" green banner under AI engine.
+    - "AI provider wallets" panel with per-provider LIVE status.
+    - Daily spend showing real $ from run_ledger.
+ 3. Go to any paused project, click "Resume this account" — ideas should
+    NOT auto-reject anymore; workers start generating niche-correct
+    topics.
+ 4. Open the AI chat — bubbles should be readable (no more black on black).
+ 5. Open /b/<account-id> for a project — should show business plan +
+    rendered posts.
+
+ TROUBLESHOOTING
+ - If worker says "no LLM provider succeeded": check at least one key
+   (ANTHROPIC_API_KEY or GEMINI_API_KEY) is set in Railway.
+ - If the AI provider wallets panel shows "NO KEY" for a provider you
+   want, add the env var to Vercel (web reads keys server-side; never
+   leaks them to the browser).
+ - If SQL fails on re-run: just re-run it. Every statement uses IF EXISTS
+   / IF NOT EXISTS so it's safe.

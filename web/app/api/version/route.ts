@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const WEB_VERSION = "5.9.4";
+// v5.9.8 REQ-VERSION-1: read the SINGLE source of truth (repo-root version.json)
+// instead of a hardcoded string. The old constant was never bumped after 5.9.4,
+// so the banner honestly reported "5.9.4" while 5.9.7 was live on the worker —
+// which made every deploy look like it had failed.
+import versionFile from "@/version.json";
+const WEB_VERSION = (versionFile as { version: string }).version;
 
 // GET /api/version — web + worker version & liveness at a glance
 export async function GET() {

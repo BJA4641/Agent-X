@@ -150,8 +150,10 @@ def test_cost_per_post_counts_published_only():
 # ------------------------------------------------- release integrity
 
 def test_version_bumped():
+    # v5.9.8: floor comparison, not an exact pin (TD-14 — exact pins made every
+    # later release fail an earlier batch's test).
     import workers.runner as r
-    assert r.VERSION == "5.9.7"
+    assert tuple(int(x) for x in r.VERSION.split(".")) >= (5, 9, 7)
 
 
 def test_prior_guarantees_still_hold():
@@ -165,3 +167,34 @@ def test_prior_guarantees_still_hold():
         produced_today=0, enabled=True)[0] is False
     from workers.departments import paused_prep as pp
     assert "free_chat" in inspect.getsource(pp)
+
+
+# ------------------------------------------------- v5.9.8 REQ-VERSION-1
+
+def test_single_version_source_resolves():
+    from agentcore.version import VERSION
+    assert VERSION and VERSION[0].isdigit()
+
+
+def test_runner_reads_the_single_source():
+    import workers.runner as r
+    from agentcore.version import VERSION
+    assert r.VERSION == VERSION, "runner must not carry its own version constant"
+
+
+def test_heartbeat_prefers_live_version_over_payload():
+    from workers.departments import ops
+    src = inspect.getsource(ops.heartbeat)
+    assert "agentcore.version" in src
+    idx_payload = src.index('job.payload.get("version"')
+    idx_live = src.index("agentcore.version")
+    assert idx_live > idx_payload, "live constant must OVERRIDE the frozen payload value"
+
+
+def test_web_and_python_share_one_version_file():
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..", "web", "version.json"))
+    assert os.path.exists(path), "web/version.json is the canonical source"
+    from agentcore.version import VERSION
+    assert json.load(open(path))["version"] == VERSION

@@ -1,0 +1,22 @@
+BATCH 2 — real docs + live platform hubs
+=========================================
+Upload via GitHub web UI (drag folders onto repo root — paths must match):
+
+  docs/AGENTS_ROSTER.md                      → REPLACES the dead 18-agent roster
+                                                (now documents the real 19 departments)
+  docs/DEPLOY.md                             → REPLACES stale deploy doc
+  web/components/PlatformHub.tsx             → NEW shared live platform hub
+  web/app/dashboard/instagram/page.tsx       → NEW: live accounts + posts + course
+  web/app/dashboard/youtube/page.tsx         → NEW: live accounts + posts + course
+  web/app/dashboard/tiktok/page.tsx          → REPLACES static page (adds live data
+                                                + restores the course/task tracker it
+                                                was accidentally hiding)
+
+OPTIONAL CLEANUP (delete via GitHub web UI when convenient):
+  All DEPLOY-v5.*-STEPS.txt / DEPLOY-v5-STEPS.txt / 00-DEPLOY-STEPS.txt files
+  in the repo root — docs/DEPLOY.md replaces them.
+
+VERIFY AFTER VERCEL REDEPLOYS:
+  Sidebar → Social platforms → Instagram / YouTube / TikTok each show:
+  your real accounts, latest pipeline posts, platform guidance, and the
+  course + task tracker. Empty sections say honestly that nothing ran yet.

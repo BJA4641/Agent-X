@@ -1,0 +1,226 @@
+================================================================
+ Agent-X v5.4 — API KEY SIGNUP TODO
+ Complete this list once; paste keys into Railway Variables.
+ FREE providers marked 🆓. Paid ones marked 💰 with signup credit.
+ You already have some (✅). Order matters — TOP of list gives most
+ value for least effort.
+================================================================
+
+ YOU ALREADY HAVE (no action needed)
+ -----------------------------------
+ [x] ANTHROPIC_API_KEY        — Claude Sonnet (paid, high quality)
+                                  console.anthropic.com
+ [x] GEMINI_API_KEY  ✅        — Google Gemini 2.5 (FREE text + FREE images + FREE TTS)
+                                  aistudio.google.com/apikey
+ [x] SUPABASE_URL
+ [x] SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY)
+ [x] TENANT_ID = me
+ [x] DAILY_BUDGET_USD = 1.50
+
+
+ PRIORITY 1 — ONE KEY UNLOCKS 20+ MODELS (do this first)
+ ----------------------------------------------------------------
+ [ ] FAL_KEY  💰 ($5 free credit on signup)
+     Unlocks: FLUX images, Veo3 video, Kling 2, Runway Gen-3, Pika,
+     Luma Dream Machine, Minimax Hailuo, Vidu Q1, LTX, Hunyuan,
+     CogVideoX, FLUX Kontext edit, FLUX Fill inpaint, video upscaler
+     Sign up: https://fal.ai/
+     → Dashboard → API Keys → "Add key" → copy the key starting with "fal_"
+     → Add to Railway as FAL_KEY
+     TIME: 3 minutes
+
+
+ PRIORITY 2 — BEST IMAGE QUALITY + SORA VIDEO
+ ----------------------------------------------------------------
+ [ ] OPENAI_API_KEY  💰 (pay as you go, no free tier, but you set hard budget)
+     Unlocks: GPT-4o, o3, GPT-4o-mini, GPT Image 2 (#1 on Arena image leaderboard),
+              DALL-E 3, Sora video, Whisper STT, OpenAI TTS
+     Sign up: https://platform.openai.com/api-keys
+     → Add a $5 credit to start
+     → Create a new secret key, copy it
+     → Add to Railway as OPENAI_API_KEY
+     TIME: 5 minutes
+
+
+ PRIORITY 3 — FREE/CHAT FALLBACKS (all free tiers)
+ ----------------------------------------------------------------
+ [ ] GROQ_API_KEY  🆓 completely free, very fast
+     Unlocks: Llama 3.3 70B, Llama 4, Mixtral (instant chat/script fallback)
+     Sign up: https://console.groq.com/keys
+     → Create API key → copy
+     → Add to Railway as GROQ_API_KEY
+     TIME: 1 minute
+
+ [ ] OPENROUTER_API_KEY  🆓 has free models (Kimi K2, Llama, Qwen)
+     Unlocks: 100+ models including free ones
+     Sign up: https://openrouter.ai/settings/keys
+     → Verify phone → Create key → copy (starts with sk-or-...)
+     → Add to Railway as OPENROUTER_API_KEY
+     TIME: 2 minutes
+
+ [ ] DEEPSEEK_API_KEY  🆓 cheap (R1 reasoning is amazing for strategy)
+     Unlocks: DeepSeek V3 chat, DeepSeek R1 reasoning
+     Sign up: https://platform.deepseek.com/api_keys
+     → Add $2 credit (cheap, $0.14/M tokens)
+     → Create key → copy
+     → Add to Railway as DEEPSEEK_API_KEY
+     TIME: 2 minutes
+
+
+ PRIORITY 4 — IMAGE QUALITY (optional, top-10 ranked)
+ ----------------------------------------------------------------
+ [ ] BFL_API_KEY  💰 (Black Forest Labs — FLUX.2 direct)
+     Unlocks: FLUX.2 Max (#3 Arena), FLUX.2 Pro, FLUX.2 Dev (very high quality images)
+     Sign up: https://api.us1.bfl.ai/auth
+     → Buy $5 in credits
+     → API key on dashboard
+     → Add to Railway as BFL_API_KEY
+     TIME: 3 minutes
+
+ [ ] IDEOGRAM_API_KEY  💰 (best text-in-image)
+     Unlocks: Ideogram 3 — best at rendering readable text on images
+     Sign up: https://ideogram.ai/api
+     → Free tier: 25 images/day
+     → Create key → copy
+     → Add to Railway as IDEOGRAM_API_KEY
+     TIME: 2 minutes
+
+ [ ] STABILITY_API_KEY  💰 (Stable Diffusion 3.5 Ultra)
+     Unlocks: SD3.5 Ultra inpaint/outpaint
+     Sign up: https://platform.stability.ai/
+     → $5 free credit on signup
+     → API key → copy
+     → Add to Railway as STABILITY_API_KEY
+     TIME: 2 minutes
+
+ [ ] RECRAFT_API_KEY  🆓/💰 (vector/illustration)
+     Unlocks: Recraft V3 — great for diagrams, logos, brand illustrations
+     Sign up: https://recraft.ai/api
+     → Free tier available
+     → API key → copy
+     → Add to Railway as RECRAFT_API_KEY
+     TIME: 2 minutes
+
+ [ ] GOAPI_KEY  💰 (Midjourney access via API)
+     Unlocks: Midjourney v8.1 (no other way to API Midjourney)
+     Sign up: https://www.goapi.ai/
+     → Cheapest Midjourney API (~$0.05/image)
+     → API key → copy
+     → Add to Railway as GOAPI_KEY
+     TIME: 2 minutes
+
+
+ PRIORITY 5 — CHAT EXPANSION (optional)
+ ----------------------------------------------------------------
+ [ ] XAI_API_KEY  💰 (Grok 4)
+     Sign up: https://console.x.ai/
+     → $25 free credit on signup
+     → API key → copy
+     → Add as XAI_API_KEY
+     TIME: 1 minute
+
+ [ ] MISTRAL_API_KEY  🆓/💰 (Mistral Large 2)
+     Sign up: https://console.mistral.ai/api-keys/
+     → Free tier available
+     → API key → copy
+     → Add as MISTRAL_API_KEY
+     TIME: 1 minute
+
+ [ ] TOGETHER_API_KEY  🆓/$5 credit (Llama 4, Qwen, open models)
+     Sign up: https://api.together.xyz/settings/api-keys
+     → $5 free credit
+     → API key → copy
+     → Add as TOGETHER_API_KEY
+     TIME: 1 minute
+
+ [ ] FIREWORKS_API_KEY  🆓/paygo (Firefunction V2, very fast)
+     Sign up: https://fireworks.ai/api-keys
+     → Pay-as-you-go
+     → API key → copy
+     → Add as FIREWORKS_API_KEY
+     TIME: 1 minute
+
+ [ ] COHERE_API_KEY  🆓 (Command R+, long-context)
+     Sign up: https://dashboard.cohere.com/api-keys
+     → Free trial credits
+     → API key → copy
+     → Add as COHERE_API_KEY
+     TIME: 1 minute
+
+
+ PRIORITY 6 — VOICE
+ ----------------------------------------------------------------
+ [ ] ELEVENLABS_API_KEY  💰 (best voices, ~$5/month or paygo)
+     Unlocks: ElevenLabs v2, Turbo v2.5 (industry best TTS)
+     Sign up: https://elevenlabs.io/app/settings/api-keys
+     → Free tier: 10k characters/month
+     → API key → copy
+     → Add as ELEVENLABS_API_KEY
+     TIME: 1 minute
+
+ [ ] CARTESIA_API_KEY  🆓 (Sonic — very natural)
+     Sign up: https://play.cartesia.ai/dashboard/developers/api-keys
+     → Free credits on signup
+     → API key → copy
+     → Add as CARTESIA_API_KEY
+     TIME: 1 minute
+
+ [ ] DEEPGRAM_API_KEY  🆓 (Aura TTS, very cheap)
+     Sign up: https://console.deepgram.com/
+     → $200 free credit (!) on signup
+     → API key → copy
+     → Add as DEEPGRAM_API_KEY
+     TIME: 1 minute
+
+ [ ] PLAYHT_API_KEY  💰 (PlayHT v4)
+     Sign up: https://play.ht/api-access/
+     → Paid
+     → API key → copy
+     → Add as PLAYHT_API_KEY
+     TIME: 1 minute
+
+
+ PRIORITY 7 — MONITORING / BALANCE
+ ----------------------------------------------------------------
+ [ ] RAILWAY_API_TOKEN  🆓 read-only (lets dashboard show Railway credit balance)
+     Sign up: https://railway.app/account/tokens
+     → Create READ-ONLY token (never give write access)
+     → Copy token
+     → Add to Railway as RAILWAY_API_TOKEN
+     TIME: 1 minute
+
+
+ OPTIONAL
+ ----------------------------------------------------------------
+ [ ] STRIPE_SECRET_KEY  (for paid user billing — later phase)
+ [ ] DESCRIPT_API_KEY   (Descript captions — not needed, local captions are free)
+
+
+ HOW TO ADD THEM TO RAILWAY (1 minutes per key)
+ -----------------------------------------------
+ 1. Open https://railway.app → your project → worker service → Variables
+ 2. Click "+ New Variable"
+ 3. Paste NAME exactly as shown (e.g. FAL_KEY) and the key as value
+ 4. Click Add
+ 5. Railway auto-redeploys after each — you can add them all then click "Redeploy" once
+ 6. Open https://agent-x-two.vercel.app/dashboard/models → each model should flip from
+    "NO KEY" to "LIVE" or "FREE" as the worker picks them up (within 60 seconds)
+
+ HOW TO ADD TO VERCEL (for web-side API health checks)
+ -----------------------------------------------------
+ Only the "AI provider wallets" balance panel needs keys on the web side too.
+ 1. Open Vercel → Agent-X project → Settings → Environment Variables
+ 2. Add the same keys you added to Railway, for Production + Preview environments
+ 3. Redeploy
+
+ MINIMUM VIABLE SET (5 keys, 10 minutes)
+ ---------------------------------------
+ After these 5, you have: FREE chat + FREE images + best paid video + GPT image + fast chat.
+   1. GEMINI_API_KEY  (you have)
+   2. ANTHROPIC_API_KEY (you have)
+   3. FAL_KEY            (sign up at fal.ai, $5 free)
+   4. OPENAI_API_KEY     (add $5)
+   5. GROQ_API_KEY       (free, 1 minute)
+
+ After that, add ELEVENLABS_API_KEY for voice and you're production ready.
+ The rest are bonus/quality upgrades as revenue comes in.

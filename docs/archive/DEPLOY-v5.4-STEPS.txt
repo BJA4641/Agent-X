@@ -1,0 +1,128 @@
+==========================================================
+ Agent-X v5.4 DEPLOY STEPS
+ ==========================================================
+
+ WHAT'S NEW IN v5.4
+ ------------------
+ 1. FIXED: pet posts no longer get #ai #tech hashtags
+     - brain.py demo script was hardcoded AI content → now niche-neutral
+     - _normalize_script() now accepts account_id and looks up niche
+     - Hashtag fallbacks are niche-aware (pets, cats, dogs, fitness, finance,
+       cooking, ai, tech, beauty, gaming, travel dictionaries)
+     - Visual prompts no longer default to "dark tech-noir" for non-tech posts
+     - Caption/sound defaults are niche-appropriate
+ 2. FIXED: scout trends are now filtered by niche when generating a script;
+    a cat account gets cat trends, finance account gets finance trends.
+ 3. FIXED: Stop-work auto-reject repair in SQL — 84 rejected items that
+    were auto-rejected (no human reason) get restored to 'idea' pool.
+ 4. ADDED: 74 AI models across 7 categories — unified provider catalog:
+     • Text/chat: 19 models (Claude, GPT-4o/o3, Gemini, DeepSeek, Grok,
+       Cohere, Mistral, Groq, Llama, Qwen, Kimi K2, Fireworks, Together)
+     • Text→Image: 16 models (GPT Image 1.5/2, Gemini 2.5/3, FLUX 2 Max/Pro/Schnell,
+       Ideogram 3, Recraft, SD 3.5 Ultra, DALL-E 3, Midjourney via GoAPI,
+       Pollinations FREE, Hunyuan)
+     • Image→Image (edit): 6 models (GPT edit, FLUX Kontext, FLUX Fill, SD inpaint,
+       Ideogram Remix, Gemini edit FREE)
+     • Text→Video: 12 models (Veo 3, Kling 2, Runway Gen-3, Sora, Pika,
+       Minimax Hailuo, Luma Dream Machine, Vidu Q1, Hunyuan, LTX, CogVideoX)
+     • Image→Video: 9 models (Veo3 I2V, Kling I2V, Runway I2V, Luma I2V,
+       Pika I2V, Minimax/Hailuo I2V, Vidu I2V, LTX I2V)
+     • Voice/TTS: 7 models (ElevenLabs v2/Turbo, OpenAI TTS, Gemini TTS FREE,
+       DeepGram, Cartesia, PlayHT)
+     • Video edit: 5 models (local captions FREE, fal captions, Topaz-style
+       upscale, Runway captions, Descript)
+ 5. ADDED: /dashboard/models admin page ("AI models" in sidebar) showing all
+    models per category with LIVE/NO KEY/FREE badges, current default, and
+    one-click "Use this" to switch default. Auto-fallback is ON by default
+    so failed keys automatically rotate to working ones.
+ 6. ADDED: /api/ai-models endpoint — reads the catalog JSON, returns key
+    status and chosen defaults.
+ 7. ADDED: agentcore/aisuite.py — new unified router that every new worker
+    will call. Auto-fallback within each category (free tiers last so we
+    spend $0 when possible without sacrificing quality).
+ 8. ADDED: ledger.py now tags every row with provider_label and cost_cents
+    so the Provider Wallets panel shows accurate MTD $ per provider.
+ 9. v5.3 fixes carried over: SQL ordering, pause doesn't reject ideas,
+    wallet shows real run_ledger spend, black chat bubble fix, business
+    plan /b/[aid] page, auto-fallback toggle in Developer console,
+    AI provider wallets live balance panel.
+
+ REQUIREMENTS (env vars — add in Railway)
+ ----------------------------------------
+ Already set (from v5.x):
+   ANTHROPIC_API_KEY          — Claude (paid, high quality)
+   GEMINI_API_KEY             — Gemini 2.5 (free text, free images, free TTS)
+   SUPABASE_URL + SUPABASE_SERVICE_KEY
+   TENANT_ID=me
+   DAILY_BUDGET_USD=1.50 (or whatever)
+
+ NEW optional keys (add any you want — models light up automatically):
+   OPENAI_API_KEY             — GPT-4o, o3, GPT Image 1.5/2, DALL-E 3, Sora, TTS
+   FAL_KEY                    — FLUX, Veo 3, Kling 2, Runway, Pika, Luma, Hailuo,
+                                Minimax, Vidu, LTX, Hunyuan, CogVideoX — 1 key unlocks 20+ models
+   BFL_API_KEY                — Black Forest Labs FLUX.2 Pro/Max direct
+   IDEOGRAM_API_KEY           — Ideogram 3 (best text-in-image)
+   RECRAFT_API_KEY            — Recraft V3 (vectors/illustration)
+   STABILITY_API_KEY          — Stable Diffusion 3.5 Ultra
+   GOAPI_KEY                  — Midjourney v8.1
+   DEEPSEEK_API_KEY           — DeepSeek V3 + R1 reasoning (cheap)
+   XAI_API_KEY                — Grok 4
+   COHERE_API_KEY             — Command R+
+   MISTRAL_API_KEY            — Mistral Large 2
+   TOGETHER_API_KEY           — Llama 4, Qwen, open models
+   FIREWORKS_API_KEY          — Firefunction V2, fast open models
+   OPENROUTER_API_KEY         — Kimi K2 free + 100+ models
+   GROQ_API_KEY               — Llama 3.3 70B FREE
+   ELEVENLABS_API_KEY         — Best TTS voices
+   DEEPGRAM_API_KEY           — Cheap fast TTS
+   CARTESIA_API_KEY           — Sonic voice
+   PLAYHT_API_KEY             — PlayHT v4 voices
+   RAILWAY_API_TOKEN          — Live Railway balance in wallets panel
+
+ ==========================================================
+ STEP 1 — SUPABASE (REQUIRED)
+ ==========================================================
+ In Supabase SQL Editor, open and run:
+    db/v5.4_PRODUCTION.sql
+ (It's the fixed v5.3 SQL with v5.4 additions; fully idempotent.)
+
+ Then verify:
+    SELECT value FROM settings WHERE key='schema_version';
+ Expected:  {"v": "5.4", "applied_at_epoch": ...}
+
+ This will:
+   - Create any missing v5 tables (jobs, agent_events, memory, etc.)
+   - Add provider_label + cost_cents columns to run_ledger
+   - Add model selection rows (model_t2i, model_t2v, etc.)
+   - RESET auto-rejected board items back to 'idea' pool (the 84 rejections
+     that happened when you paused the pet project)
+
+ ==========================================================
+ STEP 2 — DEPLOY CODE
+ ==========================================================
+ A. Push the web/ + pipeline/ + db/ folders to GitHub.
+ B. Vercel auto-deploys web.
+ C. Railway auto-deploys worker (Dockerfile CMD = python cli.py worker).
+ D. In Railway, add any new API keys you want from the list above.
+    Start with FAL_KEY if you want video models (~$1 free credit on signup).
+    GEMINI_API_KEY alone unlocks free text + free images + free TTS.
+
+ ==========================================================
+ STEP 3 — VERIFY
+ ==========================================================
+ 1. Open /dashboard/models — you should see 7 category tabs, each with a
+    grid of models. The first time most will say "NO KEY" except Gemini
+    (FREE) and anything you already have keys for.
+ 2. Open /dashboard/console — "AI provider wallets" shows live balances
+    for the keys you added; "Auto-fallback ON" banner is visible.
+ 3. Unpause the pet account; resume worker. New scripts will have pet
+    hashtags (#catsoftiktok, #petrescue, etc.) NOT #ai.
+ 4. Check agent activity feed — scout messages should say "pets: N hot items"
+    instead of generic AI/finance topics.
+
+ TROUBLESHOOTING
+ - "relation does not exist": re-run db/v5.4_PRODUCTION.sql (idempotent).
+ - Models show NO KEY: add the env var in Railway, redeploy.
+ - Videos aren't generating: add FAL_KEY (1 key unlocks Veo3, Kling, Runway,
+   Pika, Hailuo, Luma, Vidu, LTX all at once).
+ - Legacy loop firing: confirm Railway CMD is `python cli.py worker` (not `loop`).

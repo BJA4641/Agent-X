@@ -1,0 +1,129 @@
+============================================================
+Agent-X v4.3 — BOOT FIX + 18 AGENTS + 13-DOC BUSINESS PLANS
+============================================================
+
+This version FIXES the Railway "cannot import memory" crash.
+Also cleans up the 73 broken failed items.
+Also wires Research + SEO agents.
+Also guarantees 13-document business plan per account.
+Also enforces 8/10 grader quality gate (no more failed posts burning money).
+
+You only have ONE active account by default: AI Tool Daily.
+Everything else is PAUSED until you manually unpause it.
+This is on purpose — get one account producing 8/10 content first, then scale.
+
+------------------------------------------------------------
+STEP 1 — UPLOAD THE ZIP TO GITHUB
+------------------------------------------------------------
+1. Download: Agent-X-v4.3-BOOTFIX-FULL-AGENCY.zip
+2. UNZIP it on your computer.
+3. Drag the unzipped files into your GitHub repo (Agent-X), replacing old files.
+   - If GitHub asks "replace?", click YES, replace all.
+   - Make sure these NEW files are in the repo:
+     * pipeline/boot_check.py            (new)
+     * pipeline/agent/_memstub.py        (new)
+     * pipeline/agent/research.py        (confirm it exists)
+     * pipeline/agent/seo.py             (confirm it exists)
+     * db/v4.3_BOOTFIX.sql               (new)
+4. Commit & push to main.
+
+------------------------------------------------------------
+STEP 2 — DEPLOY PIPELINE TO RAILWAY (fixes the crash)
+------------------------------------------------------------
+1. Open Railway → your "affectionate-purpose" service.
+2. Click "Deployments" → trigger a new deploy from GitHub (auto-deploys if connected).
+3. Watch the build logs.
+   - If you see "BOOT CHECK OK — all 33 modules imported cleanly." → SUCCESS.
+   - If the build FAILS at "RUN python boot_check.py", the log will tell you
+     EXACTLY which .py file broke. Send me that line.
+   - This is the NEW thing: the Docker build TESTS itself every deploy.
+     You will never see the cryptic "cannot import memory" crash loop again.
+4. Once deployed, container should stay green (no crash loop).
+   In logs you'll see:
+     "Agent-X v4.3 pipeline ONLINE"
+     "18 agents loaded: scout, research, architect, ..."
+     "[loop] starting tick loop every 60 seconds"
+
+------------------------------------------------------------
+STEP 3 — RUN THE SQL IN SUPABASE
+------------------------------------------------------------
+1. Open Supabase → your project → SQL Editor.
+2. Open the file db/v4.3_BOOTFIX.sql from the zip.
+3. Copy-paste ALL of it into the SQL Editor.
+4. Click "RUN".
+5. It will say "v4.3 BOOTFIX APPLIED" when done.
+
+WHAT THIS SQL DOES:
+  - Clears all 73 old failed/idea items (moves them to 'cleared' status).
+  - Resets run_ledger so your dashboard $ starts at $0 from v4.3.
+  - PAUSES every account EXCEPT "AI Tool Daily" (so you start safe with ONE account).
+  - Adds missing columns (first_comment, alt_text, yt_title for SEO).
+  - Fixes any stuck "in_progress" tasks.
+
+------------------------------------------------------------
+STEP 4 — DEPLOY WEB TO VERCEL
+------------------------------------------------------------
+1. Open Vercel → agent-x-two.vercel.app project.
+2. Go to Deployments → Redeploy (or push to GitHub auto-triggers it).
+3. Wait for "Ready".
+
+------------------------------------------------------------
+STEP 5 — TEST (5 minutes)
+------------------------------------------------------------
+1. Open https://agent-x-two.vercel.app/dashboard/workspace
+2. The "Open Feed" bug from v4.2 is fixed (right panel doesn't hide on workspace,
+   and the workspace page now shows all 18 agents with live events).
+3. Open your AI Tool Daily account page.
+4. Within ~2-3 minutes of the pipeline running, you should see:
+   - Architect event: "Writing full business plan for @ai_tool_daily ..."
+   - Research event: "Compiled research brief ..."
+   - Strategist event: "Planning 10 kickoff posts ..."
+   - Then brain/composer/visuals/voice producing videos.
+5. Only items graded 8/10+ will move to "drafted" (the queue).
+   Anything below 8 gets rewritten up to 2 times, then rejected (not retried forever).
+
+------------------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------------------
+Q: Railway is still crashing?
+A: Now the Docker BUILD itself fails with a clear log line.
+   Look for "FAIL agent.XXX: ..." in the BUILD log (not the runtime log).
+   Send me that exact line. The new boot_check.py names the exact broken file.
+
+Q: No content is publishing?
+A: That's the new 8/10 gate working. If nothing hits 8/10, nothing wastes your money.
+   Wait 10-15 minutes and check the "grades" tab on the account page.
+   If everything is being rejected, the fix-instruction will tell you what's wrong
+   (usually hook needs to be more specific) — send me that and I'll tune prompts.
+
+Q: How do I turn on another account (e.g., Cat Facts Daily)?
+A: Dashboard → Projects → pick the project → the account → toggle "Paused" OFF.
+   The architect will write its 13-doc business plan on the next tick,
+   then strategist plans posts, then production begins.
+   START SLOW — only unpause 1 new account per day.
+
+Q: How do I shut everything off fast?
+A: Railway → service → Variables → set KILL_SWITCH=1 → Redeploy.
+   Or in Supabase: update projects set paused=true;
+
+Q: How much will this cost?
+A: ~$0.03-0.06 per finished reel. With one account posting 1x/day = ~$1.50/day max
+   (DAILY_BUDGET_USD is already set to $1.50 — the loop stops when budget is hit).
+
+------------------------------------------------------------
+FILES YOU MUST HAVE AFTER UNZIPPING
+------------------------------------------------------------
+pipeline/boot_check.py                              [NEW — boot smoke test]
+pipeline/Dockerfile                                 [CHANGED — wipes stale files]
+pipeline/agent/_memstub.py                          [NEW — no-op memory stub]
+pipeline/agent/architect.py                         [13-doc business plans]
+pipeline/agent/strategist.py                        [uses all 13 docs]
+pipeline/agent/brain.py                             [loads 13 docs for script]
+pipeline/agent/research.py                          [wired into architect]
+pipeline/agent/seo.py                               [hashtags/first-comment]
+pipeline/agent/orchestrator.py                      [research+seo wired]
+pipeline/cli.py                                     [v4.3 banner]
+db/v4.3_BOOTFIX.sql                                 [cleanup + new columns]
+
+If any of these are missing, the deploy will fail at boot_check.py.
+------------------------------------------------------------
