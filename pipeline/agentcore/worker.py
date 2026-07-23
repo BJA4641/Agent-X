@@ -5,7 +5,8 @@ retries, cost tracking, and escalation. This replaces the monolithic
 `orchestrator.tick()` with a proper worker pool.
 """
 from __future__ import annotations
-import time, traceback, uuid, threading
+import os, threading, time, traceback, uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Callable, Optional
 from .models import Job, JobStatus, HumanEscalation, AgentContext
 from .jobs import JobQueue
@@ -14,6 +15,23 @@ from .observability import Tracer, Span
 
 
 Handler = Callable[["Worker", Job, AgentContext], None]
+
+
+# v5.10.2 REQ-LANES-1 (DEC-030): jobs are not interchangeable. A 400-token LLM
+# call is network-bound and safe to run many-at-once; a video render is memory-
+# bound and will OOM a 512 MB container if run wide. Lanes give each class its
+# own concurrency budget so heavy work can never starve — or crash — light work.
+HEAVY_JOB_PREFIXES = ("creative.render", "creative.write_carousel", "postprod.")
+FREE_ONLY_JOB_PREFIXES = ("paused.",)
+
+
+def lane_for(job_type: str) -> str:
+    jt = job_type or ""
+    if jt.startswith(FREE_ONLY_JOB_PREFIXES):
+        return "free_only"
+    if jt.startswith(HEAVY_JOB_PREFIXES):
+        return "heavy"
+    return "light"
 
 
 class Worker:
@@ -33,6 +51,20 @@ class Worker:
         self.BREAKER_HOLD_S = 1800
         self._running = False
         self._ctx = AgentContext(run_id=uuid.uuid4().hex[:12], deps={})
+        # v5.10.2 REQ-PARALLEL-1 (DEC-029). Execution was strictly sequential
+        # (claim limit=1), so 105 accounts shared ONE execution slot and the
+        # daily SLA was unreachable by construction. Work here is network-bound,
+        # so threads give near-linear throughput inside the same 512 MB
+        # container — no new infrastructure, no extra spend.
+        # Rollback: WORKER_CONCURRENCY=1 restores v5.10.1 behaviour exactly.
+        self.concurrency = max(1, int(os.environ.get("WORKER_CONCURRENCY", "4")))
+        self._lane_caps = {
+            "light": max(1, int(os.environ.get("LANE_LIGHT", "4"))),
+            "heavy": max(1, int(os.environ.get("LANE_HEAVY", "1"))),
+            "free_only": max(1, int(os.environ.get("LANE_FREE_ONLY", "2"))),
+        }
+        self._lane_sems = {k: threading.Semaphore(v) for k, v in self._lane_caps.items()}
+        self._state_lock = threading.Lock()
 
     def register(self, job_type: str, handler: Handler):
         self.handlers[job_type] = handler
@@ -45,18 +77,38 @@ class Worker:
         self.bus.agent(self.id, f"worker {self.id} started — types: {list(self.handlers.keys())}", "success", "worker_up")
         while self._running:
             try:
-                jobs = self.queue.claim(self.id, job_types=list(self.handlers.keys()), limit=1)
+                jobs = self.queue.claim(self.id, job_types=list(self.handlers.keys()),
+                                        limit=self.concurrency)
                 if not jobs:
                     time.sleep(self.poll_interval)
                     continue
-                job = jobs[0]
-                self._execute(job)
+                if self.concurrency == 1 or len(jobs) == 1:
+                    self._execute(jobs[0])
+                else:
+                    self._execute_batch(jobs)
             except KeyboardInterrupt:
                 break
             except Exception as e:
                 self.bus.agent(self.id, f"worker loop error: {e}", "error", "worker_error")
                 traceback.print_exc()
                 time.sleep(self.poll_interval)
+
+    def _execute_batch(self, jobs):
+        """Run a claimed batch across the thread pool, respecting lane caps."""
+        def _run(job):
+            lane = lane_for(job.job_type)
+            sem = self._lane_sems.get(lane) or self._lane_sems["light"]
+            with sem:
+                try:
+                    self._execute(job)
+                except Exception as e:
+                    self.bus.agent(self.id, f"job {job.job_type} crashed in pool: {e}",
+                                   "error", "pool_error")
+                    traceback.print_exc()
+
+        with ThreadPoolExecutor(max_workers=self.concurrency,
+                                thread_name_prefix="agentx") as pool:
+            list(pool.map(_run, jobs))
 
     def stop(self):
         self._running = False
@@ -67,7 +119,8 @@ class Worker:
                               account_id=job.account_id, project_id=job.project_id,
                               priority=job.priority)
         # v5.6 circuit breaker: if this job_type is tripped, park the job.
-        until = self._breaker_until.get(job.job_type, 0)
+        with self._state_lock:
+            until = self._breaker_until.get(job.job_type, 0)
         if until > time.time():
             try:
                 self.queue._update_row(job, {"status": "queued",

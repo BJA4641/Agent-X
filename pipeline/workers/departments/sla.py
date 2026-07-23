@@ -306,6 +306,15 @@ def monitor(w: Worker, job: Job, ctx: AgentContext):
         except Exception:
             pass
 
+        # ---- 4d) REQ-BACKOFF-RESET: writer jobs parked with "no model" are
+        #          serving a 30-minute sentence handed down when the free tier
+        #          was dead. Once the ladder is healthy again that wait is pure
+        #          lost SLA — release them to run on the next claim.
+        try:
+            _release_no_model_backoffs(sb, bus, job, now)
+        except Exception:
+            pass
+
         # ---- 5) stuck-job self-heal (crash recovery between reboots)
         try:
             res = (sb.table("jobs")
@@ -372,3 +381,47 @@ def _write_cost_per_post(sb, bus, job):
         bus.agent("cfo", f"💵 cost per published post today: ${payload['cost_per_post_today']:.4f} "
                          f"({pub_today} post(s), ${spend_today:.2f})",
                   "info", "cost_per_post", job_id=job.id)
+
+
+LADDER_HEALTHY_MIN = int(os.environ.get("LADDER_HEALTHY_MIN", "2"))
+
+
+def ladder_is_healthy(report: dict) -> bool:
+    """Pure + testable. Healthy = enough usable rungs and not flagged below floor."""
+    if not report:
+        return False
+    if report.get("below_floor"):
+        return False
+    return int(report.get("usable_count") or 0) >= LADDER_HEALTHY_MIN
+
+
+def _release_no_model_backoffs(sb, bus, job, now: float):
+    """Pull forward jobs delayed purely because no model was available."""
+    try:
+        row = (sb.table("settings").select("value").eq("key", "free_ladder_report")
+               .limit(1).execute().data)
+        report = (row or [{}])[0].get("value") or {}
+    except Exception:
+        return
+    if not ladder_is_healthy(report):
+        return
+    try:
+        rows = (sb.table("jobs").select("id,error,scheduled_for")
+                .eq("status", "queued").eq("job_type", "creative.write_script")
+                .gt("scheduled_for", now).limit(50).execute().data) or []
+    except Exception:
+        return
+    released = 0
+    for r in rows:
+        err = (r.get("error") or "").lower()
+        if "no model" not in err and "no free provider" not in err:
+            continue
+        try:
+            sb.table("jobs").update({"scheduled_for": now}).eq("id", r["id"]).execute()
+            released += 1
+        except Exception:
+            continue
+    if released:
+        bus.agent("coo", f"⏩ free ladder healthy again ({report.get('usable_count')} rungs) — "
+                         f"released {released} writer job(s) from no-model backoff",
+                  "success", "backoff_released", job_id=job.id)

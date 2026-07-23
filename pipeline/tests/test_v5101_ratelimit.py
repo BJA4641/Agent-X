@@ -171,3 +171,68 @@ def test_fallback_is_a_marker_not_a_plausible_version():
     from agentcore import version as v
     assert not v._FALLBACK[0].isdigit(), \
         "a stale numeric fallback is indistinguishable from a real version"
+
+
+# ------------------------------------------------- v5.10.2 concurrency + lanes
+
+def test_lanes_separate_heavy_from_light():
+    from agentcore.worker import lane_for
+    assert lane_for("creative.render") == "heavy"
+    assert lane_for("postprod.finish") == "heavy"
+    assert lane_for("creative.write_script") == "light"
+    assert lane_for("cqo.grade_script") == "light"
+    assert lane_for("art.direct") == "light"
+    assert lane_for("paused.prep_cycle") == "free_only"
+    assert lane_for("") == "light"
+
+
+def test_heavy_lane_is_narrow_enough_for_512mb():
+    from agentcore.worker import Worker
+    from agentcore.jobs import JobQueue
+    w = Worker(JobQueue.__new__(JobQueue), name="t")
+    assert w._lane_caps["heavy"] <= 2, "wide renders will OOM a 512MB container"
+    assert w._lane_caps["light"] >= w._lane_caps["heavy"]
+
+
+def test_concurrency_defaults_and_rollback_switch(monkeypatch):
+    from agentcore.jobs import JobQueue
+    import importlib, agentcore.worker as wm
+    monkeypatch.setenv("WORKER_CONCURRENCY", "1")
+    importlib.reload(wm)
+    w = wm.Worker(JobQueue.__new__(JobQueue), name="t")
+    assert w.concurrency == 1, "WORKER_CONCURRENCY=1 must restore sequential behaviour"
+    monkeypatch.delenv("WORKER_CONCURRENCY", raising=False)
+    importlib.reload(wm)
+
+
+def test_claim_limit_now_uses_concurrency():
+    import inspect, agentcore.worker as wm
+    src = inspect.getsource(wm.Worker.run_forever)
+    assert "limit=self.concurrency" in src
+    assert "limit=1)" not in src, "the sequential claim was the throughput ceiling"
+
+
+def test_breaker_state_is_lock_protected():
+    import inspect, agentcore.worker as wm
+    src = inspect.getsource(wm.Worker._execute)
+    assert "self._state_lock" in src, "shared breaker state must be guarded under threads"
+
+
+# ------------------------------------------------- REQ-BACKOFF-RESET
+
+def test_ladder_health_gate():
+    from workers.departments.sla import ladder_is_healthy
+    assert ladder_is_healthy({"usable_count": 7, "below_floor": False}) is True
+    assert ladder_is_healthy({"usable_count": 1, "below_floor": False}) is False
+    assert ladder_is_healthy({"usable_count": 7, "below_floor": True}) is False
+    assert ladder_is_healthy({}) is False
+    assert ladder_is_healthy(None) is False
+
+
+def test_backoff_release_targets_only_no_model_waits():
+    import inspect
+    from workers.departments import sla
+    src = inspect.getsource(sla._release_no_model_backoffs)
+    assert '"no model" not in err' in src
+    assert "creative.write_script" in src
+    assert "ladder_is_healthy" in src
