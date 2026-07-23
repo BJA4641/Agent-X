@@ -171,10 +171,13 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
         except Exception as e:
             bus.agent("cqo", f"auto-approve check errored ({str(e)[:80]}) — human gate kept",
                       "warn", "auto_approve_err", job_id=job.id)
-        # Chain into render
-        job_of(w, "creative.render", {
-            "item_id": item_id, "script": script, "style": job.payload.get("style", "cinemagraph"),
-        }, parent=job, priority=job.priority)
+        # v5.10.0: art direction sits between grading and rendering. It converts
+        # each beat into a photographable shot, then hands off to render itself.
+        # It is fail-open — if it cannot direct, it still spawns the render.
+        job_of(w, "art.direct", {
+            "item_id": item_id, "script": script, "topic": job.payload.get("topic", ""),
+            "account_id": account_id, "style": job.payload.get("style", "cinemagraph"),
+        }, parent=job, account_id=account_id, priority=job.priority)
         w.queue.complete(job, {"ok": True, "quality": qg.model_dump(), "auto_approved": auto})
         return
 

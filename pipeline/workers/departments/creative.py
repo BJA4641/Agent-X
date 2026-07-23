@@ -782,6 +782,23 @@ def _sla_state_for(sb, account_id) -> str:
         return "unknown"
 
 
+def _record_escalation(sb, allowed: bool, reason: str, account_id, item_id):
+    """v5.9.9 REQ-ESC-OBS — write every escalation verdict where a human can read
+    it. Without this, "the writer is stuck" and "escalation declined because the
+    account's daily budget is spent" look identical from the outside."""
+    if sb is None:
+        return
+    try:
+        sb.table("settings").upsert(
+            {"tenant_id": os.environ.get("TENANT_ID", "me"), "key": "escalation_last",
+             "value": {"allowed": bool(allowed), "reason": reason[:300],
+                       "account_id": str(account_id or ""), "item_id": str(item_id or ""),
+                       "at": time.time()}},
+            on_conflict="tenant_id,key").execute()
+    except Exception:
+        pass
+
+
 def _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
                       project_id, free_error: str):
     """Try ONE paid write when free capacity is exhausted. Returns a script
@@ -812,6 +829,7 @@ def _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
                   "warn", "escalate_err", job_id=job.id)
         return None
 
+    _record_escalation(sb, allowed, reason, account_id, item_id)
     if not allowed:
         bus.agent("cfo", f"💤 paid escalation declined: {reason}", "info",
                   "escalate_declined", job_id=job.id, item_id=item_id)

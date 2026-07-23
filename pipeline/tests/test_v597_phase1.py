@@ -198,3 +198,27 @@ def test_web_and_python_share_one_version_file():
     assert os.path.exists(path), "web/version.json is the canonical source"
     from agentcore.version import VERSION
     assert json.load(open(path))["version"] == VERSION
+
+
+# ------------------------------------------------- v5.9.9 observability
+
+def test_pulse_reports_its_own_health():
+    from workers.departments import ops
+    src = inspect.getsource(ops.start_heartbeat_pulse)
+    assert "heartbeat_pulse" in src and "last_error" in src
+    assert "no supabase factory" in src, "a missing factory must be reported, not silent"
+
+
+def test_every_escalation_verdict_is_recorded():
+    from workers.departments import creative as cr
+    assert callable(cr._record_escalation)
+    src = inspect.getsource(cr._escalate_to_paid)
+    dec = src.index("_record_escalation")
+    ret = src.index("if not allowed:")
+    assert dec < ret, "the verdict must be recorded BEFORE the decline returns"
+
+
+def test_ladder_report_is_published_by_probe():
+    from workers.departments import providers
+    src = inspect.getsource(providers)
+    assert "free_ladder_report" in src and "below_floor" in src

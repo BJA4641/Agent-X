@@ -211,6 +211,29 @@ def probe_one(provider: str) -> dict:
                 "balance": None, "unit": None, "role": role, "note": str(e)[:180]}
 
 
+def _publish_ladder(sb, bus, job):
+    """v5.9.9 REQ-LADDER-OBS — settings.free_ladder_report. The whole
+    zero-output outage came down to "which free rungs are actually usable",
+    and there was no way to see it without reading job error strings."""
+    try:
+        from agentcore.council import ladder_report
+        rep = ladder_report()
+        sb.table("settings").upsert(
+            {"tenant_id": os.environ.get("TENANT_ID", "me"),
+             "key": "free_ladder_report", "value": rep},
+            on_conflict="tenant_id,key").execute()
+        if rep.get("below_floor"):
+            bus.agent("cto", f"⚠️ free ladder below floor — only {rep.get('usable_count')} usable rung(s). "
+                             f"dropped: {'; '.join(rep.get('dropped') or [])[:200]}",
+                      "warn", "ladder_below_floor", job_id=getattr(job, "id", None))
+        else:
+            bus.agent("cto", f"🪜 free ladder: {rep.get('usable_count')} usable rung(s) — "
+                             f"{', '.join(rep.get('usable') or [])[:180]}",
+                      "info", "ladder_ok", job_id=getattr(job, "id", None))
+    except Exception:
+        pass
+
+
 def probe(w: Worker, job: Job, ctx: AgentContext):
     """providers.probe — refresh linked/alive/balance for every known provider."""
     _bus = ctx.deps["bus"]
@@ -280,6 +303,10 @@ def probe(w: Worker, job: Job, ctx: AgentContext):
         w.queue.enqueue(Job(job_type="providers.probe", payload={"scheduled": True},
                             priority=Priority.LOW, scheduled_for=time.time() + 6 * 3600,
                             idempotency_key=f"probe:{int(time.time() // (6 * 3600))}"))
+    except Exception:
+        pass
+    try:
+        _publish_ladder(sb, _bus, job)
     except Exception:
         pass
     w.queue.complete(job, {"ok": True, "linked": len(linked), "checked": checked,

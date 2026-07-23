@@ -194,13 +194,44 @@ def start_heartbeat_pulse(supabase_factory, worker_id: str, version: str,
     _PULSE_STARTED = True
 
     def _loop():
+        n, last_err = 0, ""
         while True:
             try:
                 sb = supabase_factory() if supabase_factory else None
-                if sb is not None:
+                if sb is None:
+                    last_err = "no supabase factory in worker deps"
+                else:
                     _write_health_row(sb, worker_id, started, version)
-            except Exception:
-                pass          # never let telemetry kill the worker
+                    last_err = ""
+                n += 1
+                # v5.9.9 REQ-HEALTH-2: the pulse itself must be observable. v5.9.6
+                # swallowed every error, so a pulse that never wrote looked exactly
+                # like a pulse that was working (worker_health lag kept growing at
+                # 253s -> 321s with no signal anywhere).
+                if sb is not None and n % 5 == 1:
+                    try:
+                        sb.table("settings").upsert(
+                            {"tenant_id": os.environ.get("TENANT_ID", "me"),
+                             "key": "heartbeat_pulse",
+                             "value": {"alive": True, "writes": n, "at": time.time(),
+                                       "worker": worker_id, "version": version,
+                                       "last_error": last_err}},
+                            on_conflict="tenant_id,key").execute()
+                    except Exception:
+                        pass
+            except Exception as e:
+                last_err = str(e)[:300]
+                try:
+                    sb2 = supabase_factory() if supabase_factory else None
+                    if sb2 is not None:
+                        sb2.table("settings").upsert(
+                            {"tenant_id": os.environ.get("TENANT_ID", "me"),
+                             "key": "heartbeat_pulse",
+                             "value": {"alive": False, "writes": n, "at": time.time(),
+                                       "worker": worker_id, "last_error": last_err}},
+                            on_conflict="tenant_id,key").execute()
+                except Exception:
+                    pass          # never let telemetry kill the worker
             time.sleep(interval_s)
 
     t = threading.Thread(target=_loop, name="heartbeat-pulse", daemon=True)

@@ -11,6 +11,7 @@ from . import providers  # v5.8.7 provider probe (keys, liveness, balances)
 from . import strategy   # v5.8.8 10-day paid audit + arena leaderboard scout
 from . import sla         # v5.9.5 publishing SLA plan/monitor/self-heal
 from . import paused_prep # v5.9.5 $0 free-only prep for paused accounts
+from . import art_director  # v5.10.0 shot-level prompt packs
 
 
 def register_all(worker: "Worker"):
@@ -39,3 +40,4 @@ def register_all(worker: "Worker"):
     strategy.register(worker)   # v5.8.8
     sla.register(worker)        # v5.9.5
     paused_prep.register(worker)  # v5.9.5
+    art_director.register(worker)  # v5.10.0
