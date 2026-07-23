@@ -28,6 +28,7 @@ export default function Sidebar({ admin, onboarded }: { admin: boolean; onboarde
     { label: "Sell & earn", items: [
       { href: "/dashboard/store", label: "Ecommerce · rebrand" },
       { href: "/dashboard/digital", label: "Digital products" },
+      { href: "/dashboard/marketplace", label: "Agent marketplace" },
     ]},
     { label: "Account", items: [
       { href: "/dashboard/wallet", label: "Wallet & billing" },

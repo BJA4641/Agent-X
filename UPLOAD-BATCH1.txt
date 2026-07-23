@@ -1,0 +1,16 @@
+BATCH 1 — canonical schema + sidebar fix (v5.9.5 web bump not needed; no logic change)
+======================================================================================
+Upload via GitHub web UI (drag the folders onto the repo root — paths must match):
+
+  db/schema.sql                → REPLACES the stale v1-era schema.sql
+  web/components/Sidebar.tsx   → adds "Agent marketplace" under Sell & earn
+
+OPTIONAL CLEANUP (delete manually via GitHub web UI — zip uploads can't delete):
+  web/app/dashboard/affiliate-page-stub.tsx.txt   (dead stub, never used)
+  web/app/dashboard/layout-redirect-patch.tsx     (leftover patch file, never applied)
+
+VERIFY AFTER VERCEL REDEPLOYS:
+  1. Hard refresh (Ctrl+Shift+R) on agent-x-two.vercel.app/dashboard
+  2. Sidebar → Sell & earn should now show: Ecommerce · rebrand, Digital products, Agent marketplace
+  3. Sidebar → Social platforms → Instagram / YouTube / TikTok / Affiliate links all open
+     (they were already live — served by the [track] route; cache was hiding them)
