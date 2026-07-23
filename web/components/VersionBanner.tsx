@@ -58,10 +58,13 @@ export default function VersionBanner() {
 
   return (
     <div role="status" style={{
-      display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-      padding: "7px 14px", fontSize: 12.5, lineHeight: 1.4,
+      position: "relative",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      gap: 12, flexWrap: "wrap",
+      padding: "7px 96px 7px 14px", fontSize: 12.5, lineHeight: 1.4,
       fontFamily: "var(--font-mono, ui-monospace, monospace)",
       background: "rgba(0,0,0,.55)", borderBottom: `1px solid ${tone}`, color: "#e5e7eb",
+      textAlign: "center",
     }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: tone, flex: "0 0 auto" }} />
       <strong style={{ color: tone }}>LIVE BUILD</strong>
@@ -80,7 +83,8 @@ export default function VersionBanner() {
         versions disagree — the worker has not picked up this push yet</span>}
       {!stale && !mismatch && <span style={{ opacity: .7 }}>web and worker agree ✓</span>}
       <button onClick={dismiss} aria-label="Dismiss"
-        style={{ marginLeft: "auto", background: "none", border: "1px solid #4b5563",
+        style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+          background: "none", border: "1px solid #4b5563",
           color: "#9ca3af", borderRadius: 4, padding: "1px 8px", cursor: "pointer" }}>
         dismiss
       </button>

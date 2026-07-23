@@ -228,6 +228,17 @@ def ceo_decide(sb, action: str, *, account_id=None, est_cost: float = None,
             _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
             return decision
 
+        # v5.9.4 FOUNDER POLICY: hard $25/month cap per account. Every paid
+        # action from every agent passes through here, so this one gate makes
+        # the policy real for the whole workflow.
+        if account_id:
+            _ok, _spent, _cap = account_monthly_ok(sb, account_id, est)
+            if not _ok:
+                decision.update(decision="deny",
+                                reason=f"monthly cap: ${_spent:.2f} of ${_cap:.0f} spent this month")
+                _ceo._record_inline(sb, account_id, department or action.split("_")[0], action, est, decision)
+                return decision
+
         if not hard_budget_ok(est):
             decision.update(decision="delay",
                             reason=f"daily budget hit — {remaining_budget():.3f} left, need ${est:.3f}")
@@ -292,6 +303,41 @@ def ceo_decide(sb, action: str, *, account_id=None, est_cost: float = None,
         traceback.print_exc()
         if est <= 0.005: return {"decision":"approve","reason":"fail-safe: cheap action","model_tier":"free"}
         return {"decision":"delay","reason":"CEO engine error — delaying non-free action"}
+
+
+
+def account_monthly_cap(sb) -> float:
+    """v5.9.4 FOUNDER POLICY: each account may spend at most $25/month on content.
+    Read from settings.account_monthly_budget {"usd": 25}; default 25."""
+    try:
+        r = sb.table("settings").select("value").eq("key", "account_monthly_budget").limit(1).execute()
+        if r.data:
+            v = r.data[0].get("value") or {}
+            if isinstance(v, str):
+                import json as _j; v = _j.loads(v)
+            return float(v.get("usd", 25))
+    except Exception:
+        pass
+    return 25.0
+
+
+def account_monthly_spend(sb, account_id) -> float:
+    """Sum of run_ledger cost for this account since the 1st of the month."""
+    try:
+        import datetime as _dt
+        first = _dt.date.today().replace(day=1).isoformat()
+        s = sb.table("run_ledger").select("cost_usd").eq("account_id", str(account_id)) \
+              .gte("created_at", first).execute()
+        return sum(float(x.get("cost_usd") or 0) for x in (s.data or []))
+    except Exception:
+        return 0.0
+
+
+def account_monthly_ok(sb, account_id, est: float) -> tuple:
+    """Returns (ok, spent, cap). Hard gate: spent + est must stay under cap."""
+    cap = account_monthly_cap(sb)
+    spent = account_monthly_spend(sb, account_id)
+    return (spent + est) <= cap, spent, cap
 
 
 def remaining_budget() -> float:
