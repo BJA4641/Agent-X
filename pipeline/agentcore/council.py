@@ -31,10 +31,33 @@ import os, time, traceback
 
 # Free provider order: (provider_key_in_agent_llm, model)
 _FREE_ORDER = [
-    ("gemini",     "gemini-2.5-flash"),          # most generous free tier — FIRST
-    ("groq",       "llama-3.3-70b-versatile"),
-    ("openrouter", "moonshotai/kimi-k2:free"),
+    # v5.8.8 — verified live against openrouter /api/v1/models on 2026-07-23 and
+    # ranked against arena.ai open-weight leaderboard. The old entry here
+    # ("moonshotai/kimi-k2:free") NO LONGER EXISTS as a free route, which is why
+    # openrouter drafts kept failing and the writer fell through to paid Claude.
+    ("gemini",     "gemini-2.5-flash"),                    # free tier, most generous
+    ("groq",       "llama-3.3-70b-versatile"),             # free tier, fastest
+    ("openrouter", "google/gemma-4-31b-it:free"),          # Apache-2.0, arena top-10 open weight
+    ("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
+    ("openrouter", "openai/gpt-oss-20b:free"),
 ]
+
+# Overridable from settings.free_council_models (written by research.arena_scout)
+# so the roster follows the leaderboard without a redeploy.
+def _order():
+    try:
+        from agentcore import runtime
+        sb = runtime.supabase()
+        row = (sb.table("settings").select("value").eq("key", "free_council_models")
+               .limit(1).execute().data)
+        models = ((row or [{}])[0].get("value") or {}).get("models") or []
+        picked = [(m["provider"], m["model"]) for m in models
+                  if m.get("provider") and m.get("model")]
+        if picked:
+            return picked
+    except Exception:
+        pass
+    return _FREE_ORDER
 
 _CRITIQUE_INSTRUCTIONS = (
     "You are a ruthless senior editor for short-form social content. Below is an "
@@ -51,9 +74,20 @@ _CRITIQUE_INSTRUCTIONS = (
 
 
 def _providers():
-    """Free providers whose API keys are actually configured."""
+    """Free providers whose API keys are actually configured AND not in cooldown."""
     from agent import llm as _llm
-    return [(p, m) for (p, m) in _FREE_ORDER if _llm._has_key(p)]
+    out = []
+    for (p, m) in _order():
+        if not _llm._has_key(p):
+            continue
+        try:
+            from agentcore import costmode as _cm
+            if _cm.provider_state(p) not in ("ok",):
+                continue          # rate-limited / dead key -> try the next free one
+        except Exception:
+            pass
+        out.append((p, m))
+    return out
 
 
 def enabled() -> bool:

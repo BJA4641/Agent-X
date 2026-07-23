@@ -6,7 +6,7 @@
       "cheap": [
         "gemini-2.5-flash",
         "llama-3.3-70b-groq",
-        "deepseek-chat",
+        "deepseek-v4-flash",
         "gpt-4o-mini",
         "claude-3-5-haiku"
       ],
@@ -14,7 +14,7 @@
         "gemini-2.5-pro",
         "gemini-2.5-flash",
         "llama-3.3-70b-groq",
-        "deepseek-chat",
+        "deepseek-v4-flash",
         "gpt-4o-mini",
         "claude-sonnet-4-5"
       ],
@@ -122,6 +122,30 @@
         "endpoint": "gemini"
       },
       {
+        "id": "deepseek-v4-flash",
+        "name": "DeepSeek V4 Flash (DeepSeek)",
+        "provider": "deepseek",
+        "tier": "cheap",
+        "paid": true,
+        "price_in": 0.27,
+        "price_out": 1.1,
+        "key_env": "DEEPSEEK_API_KEY",
+        "endpoint": "deepseek",
+        "price_note": "carried over from the V3-era entry \u2014 verify at platform.deepseek.com"
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro (DeepSeek)",
+        "provider": "deepseek",
+        "tier": "premium",
+        "paid": true,
+        "price_in": 0.55,
+        "price_out": 2.19,
+        "key_env": "DEEPSEEK_API_KEY",
+        "endpoint": "deepseek",
+        "price_note": "carried over from the V3-era entry \u2014 verify at platform.deepseek.com"
+      },
+      {
         "id": "deepseek-chat",
         "name": "DeepSeek V3 (DeepSeek)",
         "provider": "deepseek",
@@ -130,7 +154,8 @@
         "price_in": 0.27,
         "price_out": 1.1,
         "key_env": "DEEPSEEK_API_KEY",
-        "endpoint": "deepseek"
+        "endpoint": "deepseek",
+        "deprecated": "legacy alias \u2014 DeepSeek retires these on 2026-07-24; kept as last-resort fallback"
       },
       {
         "id": "deepseek-reasoner",
@@ -141,7 +166,8 @@
         "price_in": 0.55,
         "price_out": 2.19,
         "key_env": "DEEPSEEK_API_KEY",
-        "endpoint": "deepseek"
+        "endpoint": "deepseek",
+        "deprecated": "legacy alias \u2014 DeepSeek retires these on 2026-07-24; kept as last-resort fallback"
       },
       {
         "id": "grok-4",

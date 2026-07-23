@@ -107,7 +107,10 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
         pass
 
     verdict = _default_verdict()
-    _gate = llm.ready() and ledger.budget_ok(0.015)
+    # v5.8.7: free-council grading costs $0 -> not gated on the paid budget.
+    from agentcore import costmode as _cm
+    _free_available = any(_cm.has_key(p) for p in ("gemini", "groq", "openrouter"))
+    _gate = _free_available or (llm.ready() and _cm.may_spend(0.015))
     if not _gate:
         # v5.7.1: grader can't actually run (no LLM key or daily budget spent).
         # Say so honestly instead of emitting fake 6.0 scores that trigger
@@ -195,7 +198,9 @@ def rewrite_script(previous_script: dict, verdict: dict, topic: str,
         overall=verdict["overall"], fix=verdict["fix"],
         previous=json.dumps(previous_script)[:3000],
         memory=mem, trends=trends, brand=brand or "(none yet)", topic=topic)
-    if not (llm.ready() and ledger.budget_ok(0.025)):
+    from agentcore import costmode as _cm2
+    if not (any(_cm2.has_key(p) for p in ("gemini", "groq", "openrouter"))
+            or (llm.ready() and _cm2.may_spend(0.025))):
         return previous_script
     try:
         # v5.8.6: rewrites are free-council work too; paid only if explicitly allowed.

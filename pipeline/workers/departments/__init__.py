@@ -7,6 +7,8 @@ if TYPE_CHECKING:
 from . import finance, portfolio, research, editorial, creative, postprod
 from . import distribution, analytics, cqo, risk, knowledge
 from . import ops, human_desk, experiments, brand_studio, monetization, ceo
+from . import providers  # v5.8.7 provider probe (keys, liveness, balances)
+from . import strategy   # v5.8.8 10-day paid audit + arena leaderboard scout
 
 
 def register_all(worker: "Worker"):
@@ -31,3 +33,5 @@ def register_all(worker: "Worker"):
     ops.register(worker)
     human_desk.register(worker)
     experiments.register(worker)
+    providers.register(worker)  # v5.8.7
+    strategy.register(worker)   # v5.8.8

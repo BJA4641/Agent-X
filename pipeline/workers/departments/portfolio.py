@@ -190,17 +190,33 @@ def _no_output_trip(bus, sb, job) -> bool:
                .gte("created_at", boot_iso).execute())
         if int(out.count or 0) > 0:
             return False
-        # TRIP: flip the kill switch, scream, leave a recommendation.
+        # v5.8.7 TRIP = DEGRADE, NOT STOP.
+        # Old behaviour flipped the hard kill switch: the worker went silent and
+        # stayed silent until a human noticed. The money problem is PAID spend —
+        # so suspend paid calls and let the free council keep producing. Only if
+        # money is still leaking while already in free_only (which should be
+        # impossible, free = $0) do we hard-stop.
         from agentcore import config as _cfg
-        sb.table("settings").upsert({
-            "tenant_id": _cfg.TENANT_ID, "key": "kill_switch",
-            "value": {"on": True, "by": "no_output_guard",
-                       "reason": f"${spend:.2f} spent since boot with zero output"},
-        }, on_conflict="tenant_id,key").execute()
-        bus.agent("ceo", f"🛑 AUTO KILL SWITCH: ${spend:.2f} spent since boot with ZERO items "
-                          f"reaching approved/published. Pipeline is broken — spending stopped. "
-                          f"Fix the failing step, then turn the kill switch off in Settings.",
-                  "critical", "auto_killswitch", job_id=job.id)
+        from agentcore import costmode as _cm
+        if _cm.free_only():
+            sb.table("settings").upsert({
+                "tenant_id": _cfg.TENANT_ID, "key": "kill_switch",
+                "value": {"on": True, "by": "no_output_guard",
+                          "reason": f"${spend:.2f} spent since boot with zero output "
+                                    f"WHILE already in free_only — real fault, hard stop"},
+            }, on_conflict="tenant_id,key").execute()
+            bus.agent("ceo", f"🛑 HARD STOP: ${spend:.2f} spent with zero output even in "
+                              f"free-only mode. Something is charging us outside the router. "
+                              f"Kill switch on — needs a human.",
+                      "critical", "auto_killswitch", job_id=job.id)
+            return True
+        _cm.degrade(f"${spend:.2f} spent since boot with zero output", by="no_output_guard")
+        bus.agent("ceo", f"💚 PAID SPEND SUSPENDED: ${spend:.2f} since boot with ZERO items "
+                          f"reaching approved/published. Switched to FREE-ONLY mode — the "
+                          f"worker keeps writing and grading on free models at $0 while you "
+                          f"look at the failing step. Paid access returns automatically at "
+                          f"the next budget day, or hit Resume paid in Studio.",
+                  "warn", "auto_free_only", job_id=job.id)
         try:
             import datetime as _dt2
             sb.table("ceo_recommendations").insert({

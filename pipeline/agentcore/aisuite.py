@@ -146,6 +146,16 @@ def generate_text(prompt: str, *, tier: str = "standard", model: str = None,
     for m in candidates:
         if not _has_key(m.get("key_env")) and not m.get("free_tier"):
             continue
+        # v5.8.7: skip providers that are out of credit, have a dead key, or are
+        # paid while we are in free_only mode. The loop then falls through to the
+        # next candidate (ultimately a free one) instead of failing the job.
+        try:
+            from agentcore import costmode as _cm
+            _prov = (m.get("provider") or m.get("endpoint") or "").lower()
+            if _prov and not _cm.usable(_prov, paid=bool(m.get("paid"))):
+                continue
+        except Exception:
+            pass
         try:
             text, cost, label = _call_text(m, prompt, system=system, max_tokens=max_tokens or 1200)
             meta = {"model": label, "cost_usd": cost, "latency_s": time.time() - t0, "tier": tier}
@@ -153,6 +163,14 @@ def generate_text(prompt: str, *, tier: str = "standard", model: str = None,
             return text, meta
         except Exception as e:
             last_err = e
+            try:
+                from agentcore import costmode as _cm
+                import urllib.error as _ue
+                _code = getattr(e, "code", 0) if isinstance(e, _ue.HTTPError) else 0
+                _cm.mark_error((m.get("provider") or m.get("endpoint") or "").lower(),
+                               _code, str(e)[:200])
+            except Exception:
+                pass
             continue
     raise RuntimeError(f"all text providers failed: {last_err}")
 

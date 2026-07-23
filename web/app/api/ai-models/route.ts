@@ -56,9 +56,26 @@ export async function GET() {
   const { data: rows } = await admin.from("settings").select("key,value").eq("tenant_id", TENANT).in("key", keys);
   const chosen: Record<string, any> = {};
   for (const r of rows || []) chosen[r.key] = r.value;
+
+  // v5.8.7: ground truth from the WORKER process (Railway env), not this one.
+  //   provider_status    <- providers.probe : linked / alive / balance / spend
+  //   provider_inventory <- boot            : which key names the worker sees
+  //   cost_mode          <- costmode        : normal | free_only
+  let provider_status: any = null, worker_inventory: any = null, cost_mode: any = null;
+  try {
+    const { data: extra } = await admin.from("settings").select("key,value")
+      .eq("tenant_id", TENANT).in("key", ["provider_status", "provider_inventory", "cost_mode"]);
+    for (const r of extra || []) {
+      if (r.key === "provider_status") provider_status = r.value;
+      if (r.key === "provider_inventory") worker_inventory = r.value;
+      if (r.key === "cost_mode") cost_mode = r.value;
+    }
+  } catch { /* best effort */ }
+
   return NextResponse.json({
     catalog: publicCatalog(loadCatalog()),
     chosen,
+    provider_status, worker_inventory, cost_mode,
     schema_version: chosen.model ? undefined : "needs_sql",
   });
 }

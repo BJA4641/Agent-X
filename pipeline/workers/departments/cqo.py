@@ -31,9 +31,16 @@ def _claude_final_audit(w, script, item_id, account_id, project_id, job):
         if not _cfg.get("ANTHROPIC_API_KEY"):
             return "skip", None
         sb = w.deps.get("supabase") and w.deps["supabase"]()
-        if sb:
-            row = sb.table("settings").select("value").eq("key", "claude_final_audit").limit(1).execute().data
-            if row and str((row[0].get("value") or {}).get("on", True)).lower() in ("false", "0"):
+        # v5.8.8 SPEND POLICY: paid thinking is off by default. The Anthropic
+        # budget now goes to ONE 10-day strategy retro (strategy.audit) instead
+        # of a per-item audit. Opt back in with settings.claude_final_audit={"on":true}.
+        from agentcore import costmode as _cm2
+        if not _cm2.policy().get("paid_thinking", False):
+            opted_in = False
+            if sb:
+                row = sb.table("settings").select("value").eq("key", "claude_final_audit").limit(1).execute().data
+                opted_in = bool(row and (row[0].get("value") or {}).get("on") is True)
+            if not opted_in:
                 return "skip", None
         from agent import grader as _g2
         v = _g2.grade_post(script, account_id=account_id, project_id=project_id,

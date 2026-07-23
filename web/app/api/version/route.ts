@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const WEB_VERSION = "5.8.1";
+const WEB_VERSION = "5.8.7";
 
 // GET /api/version — web + worker version & liveness at a glance
 export async function GET() {
@@ -17,5 +17,12 @@ export async function GET() {
       worker = { version: data.version, heartbeat_age_s: age, alive: age < 120, host: data.host };
     }
   } catch { /* worker info best-effort */ }
-  return NextResponse.json({ web: WEB_VERSION, worker });
+  let cost_mode: string | null = null;
+  try {
+    const admin = supabaseAdmin();
+    const { data } = await admin.from("settings").select("value").eq("key", "cost_mode").maybeSingle();
+    cost_mode = (data?.value as any)?.mode ?? "normal";
+  } catch { /* best effort */ }
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA || null;
+  return NextResponse.json({ web: WEB_VERSION, commit, worker, cost_mode });
 }

@@ -111,7 +111,12 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
             pass
         return base
 
-    if llm.ready() and ledger.budget_ok(EST_COST):
+    # v5.8.7: the free council costs $0 — it must NOT be gated on the paid
+    # daily budget. Before this, a spent budget stopped the writer completely
+    # ("worker does nothing"). Now: free always allowed; paid asks costmode.
+    from agentcore import costmode as _cm
+    _can_write = llm.ready() or _cm.has_key("gemini") or _cm.has_key("groq") or _cm.has_key("openrouter")
+    if _can_write:
         try:
             from agentcore import council as _council
             # v5.8.6: writing is FREE-ONLY. debate_or_chat's paid llm.chat

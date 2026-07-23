@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.8.6"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.8.8"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 INVENTORY_KEYS = [
@@ -49,7 +49,21 @@ def _write_provider_inventory(rt, version: str):
         if sb is None:
             return
         tenant = os.environ.get("TENANT_ID", "me")
-        keys = {k: bool(os.environ.get(k)) for k in INVENTORY_KEYS}
+        # v5.8.7: alias-aware. Several capabilities accept more than one env
+        # spelling (voice.py already reads ELEVEN_API_KEY *or* ELEVENLABS_API_KEY).
+        # Reporting the alias as "missing" made the dashboard lie.
+        ALIASES = {
+            "ELEVENLABS_API_KEY": ["ELEVEN_API_KEY"],
+            "YOUTUBE_API_KEY":    ["YT_API_KEY"],
+            "YT_API_KEY":         ["YOUTUBE_API_KEY"],
+            "FAL_KEY":            ["FAL_API_KEY"],
+            "GEMINI_API_KEY":     ["GOOGLE_API_KEY"],
+        }
+        def _present(k):
+            if os.environ.get(k):
+                return True
+            return any(os.environ.get(a) for a in ALIASES.get(k, []))
+        keys = {k: _present(k) for k in INVENTORY_KEYS}
         sb.table("settings").upsert({
             "tenant_id": tenant, "key": "provider_inventory",
             "value": {"checked_at": time.time(), "worker_version": version,
@@ -72,6 +86,15 @@ def main():
     # ---- Bootstrap self-scheduling jobs (idempotent keys prevent dupes after restart) ----
     now = time.time()
     boot_jobs = [
+        Job(job_type="strategy.arena_scout", payload={"boot": True},
+            priority=Priority.LOW, scheduled_for=now + 90,
+            idempotency_key=f"arena:boot:{int(now)}"),
+        Job(job_type="strategy.audit", payload={"boot": True},
+            priority=Priority.LOW, scheduled_for=now + 150,
+            idempotency_key=f"audit:boot:{int(now)}"),
+        Job(job_type="providers.probe", payload={"boot": True},
+            priority=Priority.HIGH, scheduled_for=now + 20,
+            idempotency_key=f"probe:boot:{int(now)}"),
         Job(job_type="portfolio.boot",
             payload={"booted_at": now, "version": VERSION},
             priority=Priority.HIGH,

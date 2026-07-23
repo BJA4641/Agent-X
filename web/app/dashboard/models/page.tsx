@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import ProviderStatus from "@/components/ProviderStatus";
 
 type Model = {
   id: string; name: string; provider: string;
@@ -8,7 +9,8 @@ type Model = {
   arena_rank: number | null; best_for: string | null;
 };
 type Cat = { label: string; defaults: string[]; models: Model[] };
-type Data = { catalog: Record<string, Cat>; chosen: Record<string, any> };
+type Data = { catalog: Record<string, Cat>; chosen: Record<string, any>;
+  provider_status?: any; worker_inventory?: any; cost_mode?: any };
 
 const CAT_EMOJI: Record<string, string> = {
   text: "💬", text_to_image: "🖼️", image_edit: "✏️",
@@ -57,7 +59,7 @@ export default function ModelsAdminPage() {
 
   return (
     <div>
-      <h1>AI models <span className="tag" style={{marginLeft:8, fontSize:11}}>v5.4</span></h1>
+      <h1>AI models <span className="tag" style={{marginLeft:8, fontSize:11}}>v5.8.7</span></h1>
       <p className="note" style={{maxWidth:760}}>
         <b>Every AI your agents can use,</b> organized by job type. Agents automatically pick the
         top-rated model that has an API key loaded and falls back to free tiers when paid wallets
@@ -66,7 +68,13 @@ export default function ModelsAdminPage() {
       </p>
       <div className="note" style={{maxWidth:760, padding:"10px 14px", border:"1px solid var(--line)", borderRadius:8, marginTop:10}}>
         <b>Auto-fallback:</b> if the chosen model fails (no key, out of credits, overloaded),
-        agents automatically rotate down the list → free tier last. Production never stops.
+        agents automatically rotate down the list → free tier last. A provider that returns
+        402/401/429 is put in cooldown so the next call skips it instead of failing.
+        Production never stops.
+      </div>
+
+      <div style={{marginTop:20}}>
+        <ProviderStatus status={data.provider_status} costMode={data.cost_mode} />
       </div>
 
       {/* Tabs */}

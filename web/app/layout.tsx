@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import "../lib/theme-fix"; // v5.3: fixes black-on-black chat bubbles
+import VersionBanner from "../components/VersionBanner"; // v5.8.7: which build is live
 
 const body = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "600", "700"], variable: "--font-body" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "600"], variable: "--font-mono" });
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: BOOT_JS }} />
       </head>
       <body className={`${body.variable} ${mono.variable}`}>
+        <VersionBanner />
         {children}
       </body>
     </html>

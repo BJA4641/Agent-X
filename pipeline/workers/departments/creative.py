@@ -52,6 +52,7 @@ def render_video(w: Worker, job: Job, ctx: AgentContext):
 
     # CEO gate — video is EXPENSIVE, so strict
     from ..common import kill_switch, ceo_decide, hard_budget_ok, remaining_budget
+    from agentcore import costmode as _cm  # v5.8.8 art-only paid policy
     if kill_switch():
         bus.agent("video", "⏸ kill switch on — video held", "warn", "video_held", job_id=job.id)
         w.queue.complete(job, {"ok": False, "paused": True})
@@ -89,7 +90,7 @@ def render_video(w: Worker, job: Job, ctx: AgentContext):
                 w.queue.complete(job, {"ok": True, "fallback": "static_render"})
                 return
 
-    if not hard_budget_ok(next_cost_usd=0.15):
+    if not (_cm.may_spend_on('image', 0.15) and hard_budget_ok(next_cost_usd=0.15)):
         bus.agent("cfo", f"⏸ budget too low for AI video (${remaining_budget():.3f}) — static fallback",
                   "warn", "video_budget", job_id=job.id)
         job_of(w, "creative.render",
@@ -177,6 +178,7 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
 
     # v5.5 CEO GATE: ask CEO before spending any money
     from ..common import kill_switch, hard_budget_ok, remaining_budget, ceo_decide
+    from agentcore import costmode as _cm  # v5.8.8 art-only paid policy
     if kill_switch():
         bus.agent("brain", "⏸ kill switch on — write held", "warn", "script_held",
                   job_id=job.id, item_id=item_id)
@@ -214,7 +216,7 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
                     return
             except Exception: pass
     # Legacy budget check (belt-and-suspenders)
-    if not hard_budget_ok(next_cost_usd=0.05):
+    if not (_cm.may_spend_on('image', 0.05) and hard_budget_ok(next_cost_usd=0.05)):
         bus.agent("cfo", f"⏸ budget too low for script (${remaining_budget():.3f} left) — delaying",
                   "warn", "script_budget", job_id=job.id)
         w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
@@ -292,6 +294,7 @@ def render(w: Worker, job: Job, ctx: AgentContext):
 
     # v5.5 CEO GATE: ask CEO before spending money on render (~$0.02-0.06 for Gemini images)
     from ..common import kill_switch, hard_budget_ok, remaining_budget, ceo_decide
+    from agentcore import costmode as _cm  # v5.8.8 art-only paid policy
     if kill_switch():
         bus.agent("composer", "⏸ kill switch on — render held", "warn", "render_held",
                   job_id=job.id, item_id=item_id)
@@ -324,7 +327,7 @@ def render(w: Worker, job: Job, ctx: AgentContext):
             except Exception:
                 pass
     # Legacy budget check (belt-and-suspenders)
-    if not hard_budget_ok(next_cost_usd=0.03):
+    if not (_cm.may_spend_on('image', 0.03) and hard_budget_ok(next_cost_usd=0.03)):
         bus.agent("cfo", f"⏸ budget too low for render (${remaining_budget():.3f} left) — delaying 1h",
                   "warn", "render_budget", job_id=job.id)
         w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 3600,
