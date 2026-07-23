@@ -3,6 +3,7 @@ Scores every finished script across 6 dimensions (hook/visuals/pacing/audio/capt
 1-10 each, with an overall average. Content below MIN_GRADE (8.0) is auto-rejected
 with a concrete fix instruction — the brain rewrites it up to MAX_ATTEMPTS times.
 """
+import os as _os_g
 from . import config, ledger, llm, events
 try:
     from . import memory
@@ -127,7 +128,12 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
             text = cost = mlabel = None
             if force_claude:
                 from agentcore import aisuite as _ais
-                text, _meta = _ais.generate_text(prompt, model="claude-sonnet-4-5",
+                # v5.10.8 REQ-CHEAP-TEXT: grading is classification against a rubric,
+                # not open-ended reasoning. Hard-pinning sonnet cost $0.16 across 12
+                # calls for work a cheap model does at ~1/10th. Overridable by env
+                # when a genuine quality audit is wanted.
+                text, _meta = _ais.generate_text(prompt, model=_os_g.environ.get("GRADER_MODEL") or None,
+                                                 tier=_os_g.environ.get("GRADER_TIER", "cheap"),
                                                  max_tokens=500)
                 cost, mlabel = float(_meta.get("cost_usd") or 0), _meta.get("model", "claude-sonnet-4-5")
                 ledger.record("grader.final_audit", model=mlabel, cost_usd=cost, item_id=item_id)

@@ -337,3 +337,74 @@ def test_ceiling_blocks_before_any_spend_path():
     from workers.departments import creative as cr
     src = inspect.getsource(cr._escalate_to_paid)
     assert src.index("escalate_ceiling") < src.index("_ESC_SEM.acquire")
+
+
+# ------------------------------------------------- v5.10.7
+
+def test_ledger_records_paid_cost_once():
+    import inspect
+    from agent import brain
+    src = inspect.getsource(brain.write_script)
+    assert "REQ-LEDGER-DEDUPE" in src
+    assert "_already" in src and "0.0 if _already else cost" in src
+
+
+def test_backpressure_pauses_production_when_drafts_pile_up():
+    from workers.departments import portfolio as pf
+    assert pf.MAX_AWAITING_APPROVAL == 5
+    src = inspect.getsource(pf.tick)
+    i_wait = src.index("awaiting_approval(")
+    i_need = src.index("need = max(0,")
+    assert i_wait < i_need, "backpressure must be checked BEFORE demand is computed"
+    assert "continue" in src[i_wait:i_need + 400]
+
+
+def test_awaiting_approval_counts_only_drafted():
+    import inspect
+    from workers.departments import portfolio as pf
+    src = inspect.getsource(pf.awaiting_approval)
+    assert '"drafted"' in src
+    for other in ('"idea"', '"approved"', '"published"'):
+        assert other not in src
+
+
+def test_awaiting_approval_fails_safe_to_zero():
+    from workers.departments import portfolio as pf
+    assert pf.awaiting_approval(None) == 0
+
+
+# ------------------------------------------------- v5.10.8 REQ-CHEAP-TEXT
+
+def test_text_defaults_to_the_cheap_tier():
+    """100% of the first day's paid spend went to TEXT on a premium reasoning
+    model — $1.46 on 50 sonnet script writes — while $0.00 reached images,
+    voice or video. Text is a commodity; the money must follow the content."""
+    import inspect
+    from agent import llm
+    src = inspect.getsource(llm.chat)
+    assert 'TEXT_TIER_DEFAULT", "cheap"' in src
+    assert 'tier = "cheap" if chosen' not in src, "old provider-derived tier must be gone"
+
+
+def test_chat_accepts_an_explicit_tier():
+    import inspect
+    from agent import llm
+    assert "tier" in inspect.signature(llm.chat).parameters
+
+
+def test_escalated_write_requests_cheap_tier():
+    import inspect
+    from agent import brain
+    src = inspect.getsource(brain.write_script)
+    i = src.index("if force_paid:")
+    j = src.index("elif config.get(\"ALLOW_PAID_WRITER\")")
+    branch = src[i:j]
+    assert "tier=" in branch and '"cheap"' in branch, "escalated write must request the cheap tier"
+
+
+def test_grader_is_not_pinned_to_a_premium_model():
+    import inspect
+    from agent import grader
+    src = inspect.getsource(grader)
+    assert 'model="claude-sonnet-4-5"' not in src, "grading must not hard-pin a premium model"
+    assert 'GRADER_TIER' in src

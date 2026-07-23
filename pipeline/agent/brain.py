@@ -137,13 +137,26 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
                 # paid call was ever made. Permission was granted and never spent.
                 # This branch is that spend. Every guard still ran upstream —
                 # kill switch, cost mode, daily budget, $25/account cap, CEO gate.
-                text, cost, mlabel = llm.chat(_prompt_with_context(), max_tokens=1800)
+                # v5.10.8 REQ-CHEAP-TEXT: escalate to the CHEAP paid tier, not the
+                # premium one. A reel script does not need a reasoning model; the
+                # first escalation run spent $1.46 on 50 sonnet calls for exactly
+                # this task while $0.00 went to images, voice or video.
+                text, cost, mlabel = llm.chat(_prompt_with_context(), max_tokens=1800,
+                                              tier=config.get("ESCALATION_TIER") or "cheap")
             elif config.get("ALLOW_PAID_WRITER") == "1":
                 text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
             else:
                 text, cost, mlabel = _council.debate(_prompt_with_context(), max_tokens=1800)
             script = json.loads(text[text.find("{"): text.rfind("}")+1])
-            ledger.record("brain", model=mlabel, prompt_version=version, cost_usd=cost, item_id=item_id)
+            # v5.10.7 REQ-LEDGER-DEDUPE: aisuite already recorded the true cost of
+            # this call as "aisuite.text". Recording it again here DOUBLED every
+            # paid write in run_ledger — today's ledger showed $2.97 when ~$1.50
+            # had actually been spent. Inflated spend then trips the daily guard
+            # early and makes cost-per-post read 2x worse than reality.
+            # Keep the step row for traceability; attribute the money once.
+            _already = str(mlabel or "").startswith(("aisuite", "claude-", "gpt-", "gemini-"))
+            ledger.record("brain", model=mlabel, prompt_version=version,
+                          cost_usd=(0.0 if _already else cost), item_id=item_id)
         except Exception as e:
             _write_err = str(e)[:400]
             ledger.record("brain", prompt_version=version, ok=False, detail=_write_err, item_id=item_id)

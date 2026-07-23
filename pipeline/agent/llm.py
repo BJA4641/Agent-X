@@ -4,6 +4,7 @@ v5.5 P0 FIX: primary path now routes through agentcore.aisuite (catalog-driven, 
 falling back to legacy direct-provider code ONLY if aisuite throws (misconfigured catalog,
 missing deps, etc). This makes the /dashboard/models model picker actually control inference.
 """
+import os
 import json, time, urllib.request, traceback
 from . import config
 
@@ -44,7 +45,7 @@ def _has_key(p):
 def ready() -> bool:
     return any(_has_key(p) for p in DEFAULT_MODEL)
 
-def chat(prompt: str, max_tokens: int = 800):
+def chat(prompt: str, max_tokens: int = 800, tier: str = None):
     """-> (text, cost_usd, model_label).
 
     v5.5: TRY AISUITE FIRST (unified router, honors /dashboard/models selection),
@@ -57,7 +58,13 @@ def chat(prompt: str, max_tokens: int = 800):
         from agentcore import aisuite
         chosen, model_override = selection()
         # Map chosen provider -> aisuite tier hint
-        tier = "cheap" if chosen in ("groq", "openrouter", "gemini") else "standard"
+        # v5.10.8 REQ-CHEAP-TEXT (DEC-048): writing a 7-beat reel script is a
+        # commodity text task, not a reasoning task. Today it ran on
+        # claude-sonnet-4-5 at $0.029/call — 50 calls, $1.46, while $0.00 went to
+        # images, video or voice. The money must follow the CONTENT, not the chat.
+        # Callers may request a tier explicitly; otherwise cheap is the default and
+        # premium must be asked for by name.
+        tier = tier or os.environ.get("TEXT_TIER_DEFAULT", "cheap")
         text, meta = aisuite.generate_text(prompt, tier=tier, model=model_override or None,
                                            max_tokens=max_tokens)
         if text:
