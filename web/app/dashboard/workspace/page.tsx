@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import HumanDesk from "@/components/HumanDesk";
+import PipelineBlocker from "@/components/PipelineBlocker";
 
 type Evt = { id?: number; agent: string; action: string; message: string; status: string; cost_usd?: number; created_at: string };
 
@@ -105,7 +106,14 @@ export default function WorkspacePage() {
     setSending(false);
   }
 
-  const agents = Array.from(new Set(events.map(e=>e.agent)));
+  // v5.8.9: the chip row used to be built ONLY from the agents present in the
+  // last 200 events — so when the pipeline stalls at "idea" you see two chips
+  // and it looks like the other agents do not exist. Show the FULL roster and
+  // mark the ones that have not spoken recently as idle, which is the honest
+  // picture: they are registered and waiting for work, not missing.
+  const seen = new Set(events.map(e=>e.agent));
+  const roster = Object.keys(AGENT_META).filter(a => a !== "you" && a !== "digest");
+  const agents = [...Array.from(seen), ...roster.filter(a => !seen.has(a))];
   const shown = filter === "all" ? events : events.filter(e=>e.agent===filter);
   const spend = events.reduce((a,e)=>a+Number(e.cost_usd||0),0);
   const errors = events.filter(e=>e.status==="error").length;
@@ -121,6 +129,7 @@ export default function WorkspacePage() {
       </div>
       <p className="lead">Live feed of every agent working around the clock. Give them orders below — they queue topics, write scripts, generate visuals, edit video, and hand drafts back for your approval.</p>
 
+      <PipelineBlocker />
       <HumanDesk />
 
       <div style={{display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginTop:20}}>
@@ -146,6 +155,7 @@ export default function WorkspacePage() {
         {["all", ...agents].map(a => {
           const meta = AGENT_META[a] || { label:a, color:"var(--dim)", emoji:"•" };
           const active = filter===a;
+          const idle = a !== "all" && !seen.has(a);
           return (
             <button key={a} onClick={()=>setFilter(a)}
               style={{
@@ -154,8 +164,11 @@ export default function WorkspacePage() {
                 background: active?meta.color:"transparent",
                 color: active?"#000":"inherit", fontWeight: active?600:400,
                 display:"inline-flex",alignItems:"center",gap:6,
-              }}>
+                opacity: idle && !active ? 0.42 : 1,
+              }}
+              title={idle ? `${meta.label} is registered and waiting — no events in the last 200. Agents only wake up when an ACTIVE account gives them work.` : meta.label}>
               <span>{meta.emoji}</span>{meta.label}
+              {idle && <span style={{fontSize:10,opacity:.7}}>idle</span>}
             </button>
           );
         })}

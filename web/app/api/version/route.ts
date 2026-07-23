@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-const WEB_VERSION = "5.8.7";
+const WEB_VERSION = "5.8.9";
 
 // GET /api/version — web + worker version & liveness at a glance
 export async function GET() {

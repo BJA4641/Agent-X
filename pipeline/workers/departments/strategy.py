@@ -22,9 +22,8 @@ verifies itself against the live model list prevents that class of bug.
 from __future__ import annotations
 import json, re, time, urllib.request
 
-from agentcore.jobs import Job, Priority
-from agentcore.worker import Worker
-from agentcore import bus, costmode
+from agentcore import Worker, Job, AgentContext, Priority
+from agentcore import costmode
 
 ARENAS = {
     "text":           "https://arena.ai/leaderboard/text",
@@ -75,8 +74,9 @@ def _free_openrouter_routes() -> list:
         return []
 
 
-def arena_scout(w: Worker, job: Job):
-    sb = w.deps.get("supabase") and w.deps["supabase"]()
+def arena_scout(w: Worker, job: Job, ctx: AgentContext):
+    _bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
     boards, notes = {}, []
     for name, url in ARENAS.items():
         try:
@@ -133,7 +133,7 @@ def arena_scout(w: Worker, job: Job):
             pass
 
     top_open = ", ".join(f"{r['model']} (#{r['rank']})" for r in open_rows[:3]) or "none parsed"
-    bus.agent("cto", f"🏆 arena scout — top open-weight text: {top_open} · "
+    _bus.agent("cto", f"🏆 arena scout — top open-weight text: {top_open} · "
                      f"{len(free_routes)} free OpenRouter routes live · "
                      f"free council roster now {len(roster)} models"
                      + (f" · notes: {'; '.join(notes)}" if notes else ""),
@@ -168,17 +168,18 @@ Return STRICT JSON, no markdown:
 Be blunt. No praise. No income claims. If the data shows nothing shipped, say so plainly."""
 
 
-def audit(w: Worker, job: Job):
+def audit(w: Worker, job: Job, ctx: AgentContext):
     """strategy.audit — the only paid thinking call. Skips itself if not due."""
-    sb = w.deps.get("supabase") and w.deps["supabase"]()
+    _bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
     forced = bool(job.payload.get("force"))
     if not forced and not costmode.audit_due():
-        bus.agent("ceo", "strategy audit not due yet — skipping (policy: paid thinking "
+        _bus.agent("ceo", "strategy audit not due yet — skipping (policy: paid thinking "
                          "only once per cycle)", "info", "audit_skip", job_id=job.id)
         w.queue.complete(job, {"ok": True, "skipped": "not_due"})
         return
     if not costmode.has_key("anthropic"):
-        bus.agent("ceo", "strategy audit skipped — no ANTHROPIC_API_KEY", "warn",
+        _bus.agent("ceo", "strategy audit skipped — no ANTHROPIC_API_KEY", "warn",
                   "audit_skip", job_id=job.id)
         w.queue.complete(job, {"ok": True, "skipped": "no_key"})
         return
@@ -219,7 +220,7 @@ def audit(w: Worker, job: Job):
         _led.record("strategy.audit", model=meta.get("model"), cost_usd=meta.get("cost_usd", 0))
         parsed = json.loads(text[text.find("{"): text.rfind("}") + 1])
     except Exception as e:
-        bus.agent("ceo", f"strategy audit failed: {str(e)[:120]}", "warn",
+        _bus.agent("ceo", f"strategy audit failed: {str(e)[:120]}", "warn",
                   "audit_error", job_id=job.id)
         w.queue.complete(job, {"ok": False, "error": str(e)[:200]})
         return
@@ -244,7 +245,7 @@ def audit(w: Worker, job: Job):
         except Exception:
             pass
 
-    bus.agent("ceo", f"🧠 {int(days)}-day strategy audit (Anthropic, 1 paid call): "
+    _bus.agent("ceo", f"🧠 {int(days)}-day strategy audit (Anthropic, 1 paid call): "
                      f"{parsed.get('verdict', '')[:200]} · biggest leak: "
                      f"{parsed.get('biggest_leak', '')[:160]} · "
                      f"{len(parsed.get('lessons') or [])} lessons written to memory",

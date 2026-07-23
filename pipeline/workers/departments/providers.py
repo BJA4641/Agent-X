@@ -30,9 +30,8 @@ Nothing here is invented: if a probe fails we store the error, not a guess.
 from __future__ import annotations
 import json, os, time, urllib.request, urllib.error
 
-from agentcore.jobs import Job, Priority
-from agentcore.worker import Worker
-from agentcore import bus, costmode
+from agentcore import Worker, Job, AgentContext, Priority
+from agentcore import costmode
 
 TIMEOUT = 12
 
@@ -170,9 +169,10 @@ def probe_one(provider: str) -> dict:
                 "balance": None, "unit": None, "role": role, "note": str(e)[:180]}
 
 
-def probe(w: Worker, job: Job):
+def probe(w: Worker, job: Job, ctx: AgentContext):
     """providers.probe — refresh linked/alive/balance for every known provider."""
-    sb = w.deps.get("supabase") and w.deps["supabase"]()
+    _bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
     results, checked = {}, 0
     for provider in costmode.PROVIDER_KEYS:
         rec = probe_one(provider)
@@ -220,7 +220,7 @@ def probe(w: Worker, job: Job):
         msg += " · balances: " + ", ".join(f"{p} {v}" for p, v in sorted(with_bal.items()))
     if broke:
         msg += " · ⚠️ needs attention: " + ", ".join(broke)
-    bus.agent("cfo", msg, "warn" if broke else "info", "provider_probe", job_id=job.id)
+    _bus.agent("cfo", msg, "warn" if broke else "info", "provider_probe", job_id=job.id)
 
     # reschedule (every 6h) so the dashboard stays current without a human
     try:
