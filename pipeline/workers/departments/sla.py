@@ -36,9 +36,45 @@ from ..common import active_accounts, job_of
 SLA_MINUTES_PER_POST = int(os.environ.get("SLA_MINUTES_PER_POST", "45"))
 SLA_MONITOR_INTERVAL_S = int(os.environ.get("SLA_MONITOR_INTERVAL_S", "300"))
 SLA_STUCK_JOB_S = int(os.environ.get("SLA_STUCK_JOB_S", "900"))
-# Publishing window (UTC hours) content should land inside.
-SLA_WINDOW_START_H = int(os.environ.get("SLA_WINDOW_START_H", "8"))
-SLA_WINDOW_END_H = int(os.environ.get("SLA_WINDOW_END_H", "22"))
+# v5.9.6 REQ-SLA-TZ (DEC-031): the founder mandate is "every active account
+# completes its full daily production pipeline before 14:00 Asia/Dubai,
+# configurable per account". v5.9.5 shipped an 08:00-22:00 UTC window, which
+# measured the wrong deadline entirely.
+SLA_DEADLINE_LOCAL = os.environ.get("SLA_DEADLINE_LOCAL", "14:00")
+SLA_TIMEZONE = os.environ.get("SLA_TIMEZONE", "Asia/Dubai")
+SLA_WINDOW_START_H = int(os.environ.get("SLA_WINDOW_START_H", "6"))   # local start hour
+
+
+def _tz(name: str):
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:
+        return None
+
+
+def resolve_deadline_utc(deadline_local: str = None, tzname: str = None,
+                         day: "_dt.date" = None) -> float:
+    """Resolve 'HH:MM' in `tzname` on `day` to a UTC epoch. Pure + testable.
+    Falls back to a fixed UTC offset table if zoneinfo data is unavailable."""
+    deadline_local = deadline_local or SLA_DEADLINE_LOCAL
+    tzname = tzname or SLA_TIMEZONE
+    day = day or _dt.date.today()
+    hh, _, mm = deadline_local.partition(":")
+    hh, mm = int(hh or 14), int(mm or 0)
+    tz = _tz(tzname)
+    if tz is not None:
+        return _dt.datetime.combine(day, _dt.time(hh, mm), tzinfo=tz).timestamp()
+    offsets = {"Asia/Dubai": 4, "Europe/Istanbul": 3, "Europe/London": 1, "UTC": 0}
+    off = offsets.get(tzname, 0)
+    naive = _dt.datetime.combine(day, _dt.time(hh, mm))
+    return (naive - _dt.timedelta(hours=off)).replace(tzinfo=_dt.timezone.utc).timestamp()
+
+
+def account_deadline_utc(acct: dict, day=None) -> float:
+    """Per-account override: project_accounts.config.sla_deadline / sla_timezone."""
+    cfg = (acct or {}).get("config") or {}
+    return resolve_deadline_utc(cfg.get("sla_deadline"), cfg.get("sla_timezone"), day)
 
 _TENANT = os.environ.get("TENANT_ID", "me")
 
@@ -114,14 +150,17 @@ def plan_day(w: Worker, job: Job, ctx: AgentContext):
     if sb is not None:
         for acct in (active_accounts(sb) or []):
             quota = max(1, int(acct.get("posts_per_day") or 1))
-            day0 = _dt.datetime.combine(_dt.date.today(), _dt.time.min)
-            start = (day0 + _dt.timedelta(hours=SLA_WINDOW_START_H)).timestamp()
-            end = (day0 + _dt.timedelta(hours=SLA_WINDOW_END_H)).timestamp()
+            end = account_deadline_utc(acct)                    # 14:00 Asia/Dubai default
+            start = end - (24 - SLA_WINDOW_START_H) * 3600      # production window opens
             step = (end - start) / quota
             deadlines = [round(start + step * (i + 1)) for i in range(quota)]
+            cfg = acct.get("config") or {}
             plans[str(acct["id"])] = {
                 "handle": acct.get("handle"), "quota": quota,
                 "deadlines": deadlines, "date": date,
+                "deadline_utc": round(end),
+                "deadline_local": cfg.get("sla_deadline") or SLA_DEADLINE_LOCAL,
+                "timezone": cfg.get("sla_timezone") or SLA_TIMEZONE,
             }
         try:
             _put_setting(sb, "sla_plan", {"date": date, "accounts": plans})

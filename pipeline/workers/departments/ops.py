@@ -20,6 +20,7 @@ def register(w: Worker):
 
 
 HEARTBEAT_INTERVAL_S = 30
+HEARTBEAT_PULSE_S = 20   # daemon-thread pulse (v5.9.6 REQ-HEALTH-1)
 JOBS_COMPLETED = 0
 JOBS_FAILED = 0
 
@@ -147,3 +148,54 @@ def _count_today(sb, table, filters) -> int:
 def _today_iso() -> str:
     import datetime
     return datetime.date.today().isoformat()
+
+
+# --------------------------------------------------------------- v5.9.6 REQ-HEALTH-1
+
+_PULSE_STARTED = False
+
+
+def _write_health_row(sb, worker_id, started, version, in_flight=0):
+    sb.table("worker_health").upsert({
+        "worker_id": worker_id,
+        "last_heartbeat_at": time.time(),
+        "jobs_completed": JOBS_COMPLETED,
+        "jobs_failed": JOBS_FAILED,
+        "jobs_in_progress": in_flight,
+        "host": socket.gethostname()[:80],
+        "version": version,
+        "started_at": started,
+    }, on_conflict="worker_id").execute()
+
+
+def start_heartbeat_pulse(supabase_factory, worker_id: str, version: str,
+                          started: float, interval_s: int = HEARTBEAT_PULSE_S):
+    """Heartbeat from a DAEMON THREAD instead of only from a queued job.
+
+    Root cause this fixes (finding N-3): the worker is single-threaded and
+    claims one job at a time, so a slow LLM call blocks the loop — and with it
+    the ops.heartbeat JOB. worker_health then went 10+ minutes without an
+    update and the dashboard declared a perfectly healthy worker dead. Liveness
+    must not be reported by the same queue whose blockage it is meant to detect.
+
+    The ops.heartbeat job is retained as a fallback and for job-count accuracy;
+    this thread is the authoritative liveness signal.
+    """
+    global _PULSE_STARTED
+    if _PULSE_STARTED:
+        return None
+    _PULSE_STARTED = True
+
+    def _loop():
+        while True:
+            try:
+                sb = supabase_factory() if supabase_factory else None
+                if sb is not None:
+                    _write_health_row(sb, worker_id, started, version)
+            except Exception:
+                pass          # never let telemetry kill the worker
+            time.sleep(interval_s)
+
+    t = threading.Thread(target=_loop, name="heartbeat-pulse", daemon=True)
+    t.start()
+    return t

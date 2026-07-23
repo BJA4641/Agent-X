@@ -81,22 +81,56 @@ def _resolve(provider: str, wanted: str, live: dict) -> str:
 
 # Overridable from settings.free_council_models (written by strategy.arena_scout)
 # so the roster follows the leaderboard without a redeploy.
+LADDER_FLOOR_MIN = 3   # below this many rungs we shout instead of failing silently
+
+
+def merge_ladder(picked, floor=None):
+    """v5.9.6 REQ-LADDER-FLOOR (DEC-034) — MERGE, never replace.
+
+    The old code let settings.free_council_models (written autonomously by
+    strategy.arena_scout) REPLACE the hardcoded _FREE_ORDER outright. When an
+    arena run wrote a 2-rung ladder, the 3 openrouter fallbacks silently
+    vanished; then gemini hit 429, the groq key expired, free capacity became
+    exactly zero, and the writer delayed 30 min forever with a full wallet.
+    That single behaviour is the mechanism behind the all-time zero-output
+    record.
+
+    New contract: arena picks come FIRST (they are fresher and arena-ranked),
+    then every hardcoded rung not already present is appended. The floor can
+    therefore never be removed by an autonomous agent — only re-ordered.
+    Pure function so it is unit-testable.
+    """
+    floor = _FREE_ORDER if floor is None else floor
+    out, seen = [], set()
+    for pair in list(picked or []) + list(floor or []):
+        try:
+            prov, model = pair[0], pair[1]
+        except Exception:
+            continue
+        if not prov or not model:
+            continue
+        key = (str(prov), str(model))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
 def _order():
+    picked = []
     try:
         from agentcore import costmode as _cm
         sb = _cm._sb()
-        if sb is None:
-            return _FREE_ORDER
-        row = (sb.table("settings").select("value").eq("key", "free_council_models")
-               .limit(1).execute().data)
-        models = ((row or [{}])[0].get("value") or {}).get("models") or []
-        picked = [(m["provider"], m["model"]) for m in models
-                  if m.get("provider") and m.get("model")]
-        if picked:
-            return picked
+        if sb is not None:
+            row = (sb.table("settings").select("value").eq("key", "free_council_models")
+                   .limit(1).execute().data)
+            models = ((row or [{}])[0].get("value") or {}).get("models") or []
+            picked = [(m["provider"], m["model"]) for m in models
+                      if m.get("provider") and m.get("model")]
     except Exception:
-        pass
-    return _FREE_ORDER
+        picked = []
+    return merge_ladder(picked)
 
 _CRITIQUE_INSTRUCTIONS = (
     "You are a ruthless senior editor for short-form social content. Below is an "
@@ -112,23 +146,44 @@ _CRITIQUE_INSTRUCTIONS = (
 )
 
 
-def _providers():
-    """Free providers with a key, not in cooldown, resolved to a LIVE model id."""
+def _providers(explain: bool = False):
+    """Free providers with a key, not in cooldown, resolved to a LIVE model id.
+
+    v5.9.6: `explain=True` also returns why each rung was EXCLUDED. Rungs used
+    to disappear with no trace, which is why 'openrouter never fires' cost
+    several debugging sessions to localise.
+    """
     from agent import llm as _llm
     live = _live_models()
-    out = []
+    out, dropped = [], []
     for (p, m) in _order():
         m = _resolve(p, m, live)
         if not _llm._has_key(p):
+            dropped.append(f"{p}/{m}: no key")
             continue
         try:
             from agentcore import costmode as _cm
-            if _cm.provider_state(p) not in ("ok",):
+            st = _cm.provider_state(p)
+            if st not in ("ok",):
+                dropped.append(f"{p}/{m}: state={st}")
                 continue          # rate-limited / dead key -> try the next free one
         except Exception:
             pass
         out.append((p, m))
+    if explain:
+        return out, dropped
     return out
+
+
+def ladder_report() -> dict:
+    """Operator-facing snapshot of the live free ladder. Written to
+    settings.free_ladder_report by providers.probe / on council failure."""
+    usable, dropped = _providers(explain=True)
+    return {"usable": [f"{p}/{m}" for (p, m) in usable],
+            "dropped": dropped,
+            "usable_count": len(usable),
+            "below_floor": len(usable) < LADDER_FLOOR_MIN,
+            "at": time.time()}
 
 
 def enabled() -> bool:
@@ -151,10 +206,14 @@ def free_chat(prompt: str, max_tokens: int = 800):
     v5.9.2: the old version kept only the LAST exception, so a three-provider
     failure surfaced as one opaque line and cost hours of guesswork. Every
     provider's own error is now reported."""
-    provs = _providers()
+    try:
+        provs, dropped = _providers(explain=True)
+    except TypeError:
+        # a caller/test may have swapped in a simpler _providers() — degrade
+        provs, dropped = _providers(), []
     if not provs:
-        raise RuntimeError("no free provider configured (need GEMINI/GROQ/OPENROUTER key "
-                           "with a usable state)")
+        raise RuntimeError("no free provider usable — ladder empty. dropped: "
+                           + ("; ".join(dropped) if dropped else "ladder itself was empty"))
     errors = []
     for prov, model in provs:
         try:
@@ -163,7 +222,13 @@ def free_chat(prompt: str, max_tokens: int = 800):
         except Exception as e:
             errors.append(f"{prov}/{model}: {str(e)[:160]}")
             continue
+    # v5.9.6 REQ-DIAG-1: include the rungs that were never even ATTEMPTED.
+    # Without this, a ladder silently narrowed to 2 looks identical to a
+    # 5-rung ladder that genuinely failed 5 times.
     detail = " | ".join(errors)
+    if dropped:
+        detail += "  ||  NOT ATTEMPTED: " + "; ".join(dropped)
+    detail += f"  ||  attempted={len(errors)} usable_rungs={len(provs)}"
     _report_council_failure(detail)
     raise RuntimeError(f"no free provider available -> {detail}")
 

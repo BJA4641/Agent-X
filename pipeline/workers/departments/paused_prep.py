@@ -60,6 +60,21 @@ def _pick_paused(sb, limit: int) -> list:
     return rows[:limit]
 
 
+def _record_skip(sb, bus, job, acct, reason: str):
+    """Make a $0 skip visible: one event + a rolling settings breadcrumb."""
+    handle = (acct or {}).get("handle") or "?"
+    bus.agent("planner", f"⏭️ prep skipped for paused @{handle} — free tier unavailable: {reason[:140]}",
+              "warn", "prep_skipped", job_id=getattr(job, "id", None),
+              account_id=(acct or {}).get("id"))
+    try:
+        sb.table("settings").upsert(
+            {"tenant_id": os.environ.get("TENANT_ID", "me"), "key": "prep_last_skip",
+             "value": {"at": time.time(), "account": handle, "reason": reason[:500]}},
+            on_conflict="tenant_id,key").execute()
+    except Exception:
+        pass
+
+
 def _run_task(sb, bus, job, acct) -> bool:
     """Draft ONE prep outline for one paused account. FREE MODELS ONLY —
     the single model call below is council.free_chat (cost 0.0 by contract).
@@ -75,8 +90,12 @@ def _run_task(sb, bus, job, acct) -> bool:
     try:
         from agentcore.council import free_chat
         text, _cost, label = free_chat(prompt, max_tokens=400)
-    except Exception:
-        return False  # free providers down -> skip silently ($0 > progress)
+    except Exception as e:
+        # v5.9.6 REQ-PREPOBS-1: still $0 and still a skip — but NEVER silent.
+        # v5.9.5 banked 0 items across every cycle and reported nothing, so the
+        # dead free tier looked identical to "nothing to do".
+        _record_skip(sb, bus, job, acct, str(e)[:300])
+        return False
     text = (text or "").strip()
     if not text:
         return False

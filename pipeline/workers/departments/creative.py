@@ -241,13 +241,31 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
             verify=False, allow_demo=False,
         )
     except RuntimeError as e:
-        # No model could write (free tiers + fallback all down) — delay 30 min,
-        # do NOT fabricate content.
-        bus.agent("brain", f"⏸ no model available to write — retrying in 30m ({str(e)[:80]})",
-                  "warn", "script_no_model", job_id=job.id, item_id=item_id)
-        w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 1800,
-                                  "error": f"no model: {str(e)[:150]}"})
-        return
+        # v5.9.6 REQ-ESCALATE-1 — THE FIX FOR ALL-TIME ZERO OUTPUT.
+        #
+        # Old behaviour: free tiers exhausted -> delay 30 min -> repeat forever.
+        # The router degraded downward (paid->free) with great sophistication and
+        # had NO rung back up, so a rate-limited free tier idled the whole company
+        # while $23.85 of a $25/account cap sat unused.
+        #
+        # New behaviour: when free capacity is gone, ASK for permission to spend.
+        # Every existing brake still applies (kill switch, cost mode, daily
+        # budget, $25/account/month cap, CEO gate) — this adds a rung, it does
+        # not remove a guard. Delay is now the LAST resort, not the second.
+        esc = _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
+                                project_id, str(e))
+        if esc is not None:
+            script = esc
+        else:
+            bus.agent("brain", f"⏸ no model available and paid escalation not permitted — "
+                               f"retrying in 30m ({str(e)[:120]})",
+                      "warn", "script_no_model", job_id=job.id, item_id=item_id)
+            # REQ-DIAG-1: store the FULL reason. The old [:150] truncation cut the
+            # provider list mid-word and destroyed the evidence needed to diagnose
+            # exactly this failure — it cost multiple debugging sessions.
+            w.queue._update_row(job, {"status": "queued", "scheduled_for": time.time() + 1800,
+                                      "error": f"no model: {str(e)[:900]}"})
+            return
     except Exception as e:
         traceback.print_exc()
         w.fail_job(job, f"brain.write_script failed: {e}", fatal=False)
@@ -712,3 +730,136 @@ def render_carousel(w: Worker, job: Job, ctx: AgentContext):
         bus.agent("composer", "⚠️ carousel upload failed — images only on worker disk",
                   "warn", "carousel_upload_missing", job_id=job.id, item_id=item_id)
     w.queue.complete(job, {"ok": True, "images": len(paths), "uploaded": len(urls)})
+
+
+# --------------------------------------------------------------------- v5.9.6
+
+# Module-level handle so the escalation path has a single, patchable brain
+# reference (the writer body imports it locally inside the function).
+try:
+    from agent import brain as _brain
+except Exception:            # pragma: no cover - import-time safety only
+    _brain = None
+
+ESCALATION_ENABLED = os.environ.get("ESCALATION_ENABLED", "1") != "0"
+ESCALATION_EST_USD = float(os.environ.get("ESCALATION_EST_USD", "0.02"))
+
+
+def escalation_allowed(*, kill_switch_on: bool, free_only: bool,
+                       daily_remaining: float, account_month_remaining: float,
+                       est_cost: float, sla_state: str, produced_today: int,
+                       enabled: bool = True) -> tuple:
+    """Pure decision function (unit-testable) — REQ-ESCALATE-1 / DEC-028.
+
+    Returns (allowed: bool, reason: str). ALL guards must pass, then at least
+    one justification must hold.
+    """
+    if not enabled:
+        return False, "escalation disabled by env"
+    if kill_switch_on:
+        return False, "kill switch on"
+    if free_only:
+        return False, "cost mode is free_only"
+    if daily_remaining < est_cost:
+        return False, f"daily budget ${daily_remaining:.3f} < ${est_cost:.3f}"
+    if account_month_remaining < est_cost:
+        return False, f"account monthly cap exhausted (${account_month_remaining:.2f} left)"
+    # Justifications — deadline pressure OR nothing shipped yet today.
+    if sla_state in ("at_risk", "behind", "breached"):
+        return True, f"SLA {sla_state}"
+    if produced_today <= 0:
+        return True, "nothing published today — first post justifies one paid attempt"
+    return False, "quota already progressing on free models; no deadline pressure"
+
+
+def _sla_state_for(sb, account_id) -> str:
+    try:
+        row = (sb.table("settings").select("value").eq("key", "sla_status")
+               .limit(1).execute().data)
+        accts = ((row or [{}])[0].get("value") or {}).get("accounts") or {}
+        return (accts.get(str(account_id)) or {}).get("state") or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
+                      project_id, free_error: str):
+    """Try ONE paid write when free capacity is exhausted. Returns a script
+    dict on success, or None if not permitted / still failed."""
+    if not ESCALATION_ENABLED:
+        return None
+    try:
+        from agentcore import costmode as _cm2
+        from ..common import (kill_switch as _ks, remaining_budget as _rb,
+                              remaining_account_budget as _rab)
+        try:
+            from ..departments.portfolio import _produced_today as _pt
+            produced = _pt(sb, account_id) if (sb and account_id) else 0
+        except Exception:
+            produced = 0
+        allowed, reason = escalation_allowed(
+            kill_switch_on=_ks(),
+            free_only=_cm2.free_only(),
+            daily_remaining=_rb(),
+            account_month_remaining=(_rab(sb, account_id) if (sb and account_id) else 0.0),
+            est_cost=ESCALATION_EST_USD,
+            sla_state=_sla_state_for(sb, account_id) if sb else "unknown",
+            produced_today=produced,
+            enabled=ESCALATION_ENABLED,
+        )
+    except Exception as e:
+        bus.agent("cfo", f"escalation check errored ({str(e)[:80]}) — staying free-only",
+                  "warn", "escalate_err", job_id=job.id)
+        return None
+
+    if not allowed:
+        bus.agent("cfo", f"💤 paid escalation declined: {reason}", "info",
+                  "escalate_declined", job_id=job.id, item_id=item_id)
+        return None
+
+    # CEO still gets the final say on the spend.
+    if sb is not None:
+        try:
+            from ..common import ceo_decide
+            d = ceo_decide(sb, "write_script_paid", account_id=account_id,
+                           est_cost=ESCALATION_EST_USD, department="creative",
+                           topic=topic, item_id=item_id)
+            if d.get("decision") == "deny":
+                bus.agent("ceo", f"👔 CEO denied paid escalation: {d.get('reason')}",
+                          "warn", "escalate_ceo_deny", job_id=job.id)
+                return None
+        except Exception:
+            pass
+
+    bus.agent("cfo", f"⬆️ FREE TIER EXHAUSTED — escalating to a paid model "
+                     f"(~${ESCALATION_EST_USD:.3f}) because: {reason}",
+              "warn", "escalate_paid", job_id=job.id, item_id=item_id,
+              account_id=account_id)
+    try:
+        script = _brain.write_script(
+            topic, item_id=item_id, account_id=account_id, project_id=project_id,
+            grade_feedback=job.payload.get("grade_feedback", ""),
+            verify=False, allow_demo=False, force_paid=True,
+        )
+    except TypeError:
+        # brain build without force_paid support — fall back to a plain call,
+        # which still routes paid now that free providers are marked unusable.
+        try:
+            script = _brain.write_script(
+                topic, item_id=item_id, account_id=account_id, project_id=project_id,
+                grade_feedback=job.payload.get("grade_feedback", ""),
+                verify=False, allow_demo=False,
+            )
+        except Exception as e2:
+            bus.agent("brain", f"paid escalation failed too: {str(e2)[:120]}", "error",
+                      "escalate_failed", job_id=job.id, item_id=item_id)
+            return None
+    except Exception as e:
+        bus.agent("brain", f"paid escalation failed: {str(e)[:120]}", "error",
+                  "escalate_failed", job_id=job.id, item_id=item_id)
+        return None
+    if script and script.get("beats"):
+        bus.agent("brain", "✅ paid escalation produced a script — pipeline unblocked",
+                  "success", "escalate_ok", job_id=job.id, item_id=item_id)
+        return script
+    return None

@@ -19,6 +19,10 @@ TICK_SECONDS = 60
 # v5.9.5: at most one ideation per account per window (DEC-021)
 import os as _os
 IDEATE_COOLDOWN_S = int(_os.environ.get("IDEATE_COOLDOWN_S", "1800"))
+# v5.9.6: an item older than this no longer counts as "in flight" for the
+# demand governor (REQ-GOV-2). Must exceed STALE_IDEA_HOURS so the sweep gets
+# first attempt at rescuing it.
+INFLIGHT_MAX_AGE_H = int(_os.environ.get("INFLIGHT_MAX_AGE_H", "6"))
 
 
 def _produced_today(sb, account_id) -> int:
@@ -286,8 +290,21 @@ def _count_inflight(sb, account_id) -> int:
         # stale ideas therefore blocked every account forever:
         #     "in-flight for @glowup.daily: 4/2 — no new reels this tick"
         # board_items does have account_id in this deployment, so scope it.
+        # v5.9.6 REQ-GOV-2 (DEC-035): only count items that are plausibly still
+        # MOVING. The governor computes need = quota - produced - inflight; a
+        # permanently stalled item therefore suppressed ideation forever
+        # ("quota met (0 produced + 2 in-flight >= 1) — no ideation") while the
+        # account published nothing. Items older than INFLIGHT_MAX_AGE_H no
+        # longer count as demand-satisfying; the stale sweep still owns cleanup.
+        import datetime as _dt
+        floor_iso = (_dt.datetime.utcnow()
+                     - _dt.timedelta(hours=INFLIGHT_MAX_AGE_H)).isoformat() + "Z"
         q = (sb.table("board_items").select("id", count="exact")
              .in_("status", ["idea", "drafted", "approved", "scheduled"]))
+        try:
+            q = q.gte("created_at", floor_iso)
+        except Exception:
+            pass   # client without gte -> fall back to un-aged count, never to 0
         if account_id:
             try:
                 res = q.eq("account_id", str(account_id)).execute()
@@ -357,9 +374,14 @@ def _sweep_stale_ideas(w, bus, sb, acct, job):
             sb.table("board_items").update({"payload": payload}).eq("id", r["id"]).execute()
         except Exception:
             pass
+        # v5.9.6 REQ-DEDUPE-1: the re-plan path was the one spawn site without an
+        # idempotency key, so every sweep queued ANOTHER write_script for the same
+        # item — "Black Spots Gone Instantly!" was queued 5x. Harmless while the
+        # writer was dead; a 5x spend multiplier the moment escalation lands.
         job_of(w, "editorial.plan_one",
                {"item_id": r["id"], "topic": topic, "bucket": payload.get("bucket", "trend")},
                parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
-               priority=Priority.HIGH)
+               priority=Priority.HIGH,
+               idempotency_key=f"replan:{r['id']}")
         bus.agent("coo", f"♻️ re-planning stale idea (>{STALE_IDEA_HOURS}h at 'idea') — \"{topic[:60]}\"",
                   "info", "idea_replan", job_id=job.id, item_id=r["id"])

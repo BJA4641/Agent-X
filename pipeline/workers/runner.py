@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.9.5"  # v5.9.5: demand-governed ideation (windowed idempotency), SLA plan/monitor/self-heal, $0 paused-account prep, fair claim ordering, empty-topic root-cause fix, human_desk 20s->120s  # v5.9.4: $25/month per-account hard cap in ceo_decide  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.9.6"  # v5.9.6: free-ladder FLOOR (merge not replace), SLA-aware paid escalation, in-flight age-out, replan dedupe, daemon heartbeat, 14:00 Asia/Dubai SLA, full-fidelity diagnostics  # v5.9.5: demand-governed ideation (windowed idempotency), SLA plan/monitor/self-heal, $0 paused-account prep, fair claim ordering, empty-topic root-cause fix, human_desk 20s->120s  # v5.9.4: $25/month per-account hard cap in ceo_decide  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 INVENTORY_KEYS = [
@@ -107,6 +107,15 @@ def main():
     worker = Worker(rt.queue, name="agentx-v5", poll_interval=2.5)
     worker.set_deps(**rt.deps)
     register_all(worker)
+
+    # v5.9.6 REQ-HEALTH-1: authoritative liveness from a daemon thread, so a
+    # slow job can no longer make a healthy worker look dead on the dashboard.
+    try:
+        from workers.departments.ops import start_heartbeat_pulse
+        start_heartbeat_pulse(rt.deps.get("supabase"), worker.id, VERSION, time.time())
+        print("  heartbeat pulse thread started")
+    except Exception as e:
+        print(f"  heartbeat pulse not started (non-fatal): {e}")
 
     # ---- Bootstrap self-scheduling jobs (idempotent keys prevent dupes after restart) ----
     now = time.time()

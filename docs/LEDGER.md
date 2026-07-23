@@ -33,6 +33,63 @@ Status legend: ✅ Implemented · 🟡 Scheduled in Roadmap · 🔵 Waiting for 
 | REQ-MCP-CLAIMS | Scope MCP integration claims honestly pre-marketing | P2 | 🔵 Founder review | — | No inflated capability claims |
 | REQ-PAYOUT-1 | Stripe Connect payout automation for 50% affiliate commissions | P2 | 🟡 Phase 2+ | — | Currently manual |
 
+
+## 1B · REQUEST TRACKER — FULL SCHEMA (v5.9.6, closes gap G-1)
+Mandated fields: Description · Priority · Status · Phase · Dependencies · Estimated Effort ·
+Business Impact · Engineering Impact · Completion Date · Notes.
+(§1 above is retained verbatim as the historical short-form view — nothing removed, per standing rule 2.)
+
+| ID | Description | Pri | Status | Phase | Dependencies | Effort | Business Impact | Engineering Impact | Completed | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| REQ-LADDER-FLOOR | Merge free ladder with hardcoded floor; never replace; shrink alert | P0 | ✅ | 0 | none | 1 pt | Extreme — restores 3 dead free rungs at $0 | Removes an entire failure class (autonomous config narrowing) | 2026-07-24 | WSJF 39.0, highest in plan. DEC-034 |
+| REQ-ESCALATE-1 | SLA-aware paid escalation rung above free-exhausted | P0 | ✅ | 0 | REQ-LADDER-FLOOR | 3 pt | Extreme — converts a full wallet into published posts | Adds missing upward rung; all guards retained | 2026-07-24 | Pure fn `escalation_allowed` unit-tested. DEC-028 |
+| REQ-GOV-2 | Age out stalled items from in-flight demand count | P1 | ✅ | 0 | none | 2 pt | Very high — unfreezes ideation when downstream stalls | Governor becomes stall-tolerant | 2026-07-24 | INFLIGHT_MAX_AGE_H=6. DEC-035 |
+| REQ-DEDUPE-1 | Idempotency key on re-plan → write_script spawn | P1 | ✅ | 0 | none | 2 pt | Very high — prevents 5x spend multiplication post-escalation | Consistency with existing idempotency discipline | 2026-07-24 | `replan:{item_id}` |
+| REQ-HEALTH-1 | Heartbeat from daemon thread; staleness no longer job-blocked | P1 | ✅ | 0 | none | 2 pt | High — restores trust in every health signal | Liveness decoupled from the queue it monitors | 2026-07-24 | Creates TD-06 (accepted). DEC-036 |
+| REQ-PREPOBS-1 | Surface silent prep/provider skips | P2 | ✅ | 0 | none | 2 pt | Medium — dead free tier no longer looks like idleness | Kills a silent-failure path | 2026-07-24 | settings.prep_last_skip |
+| REQ-SLA-TZ | SLA deadline → 14:00 Asia/Dubai, per-account overridable | P1 | ✅ | 0 | none | 2 pt | High — SLA finally measures the mandated deadline | Timezone resolution + per-account config | 2026-07-24 | Closes finding N-10 |
+| REQ-DIAG-1 | Stop truncating diagnostics (150→900); report unattempted rungs | P1 | ✅ | 0 | none | 1 pt | High — prevents repeat multi-session blind debugging | Full-fidelity failure evidence | 2026-07-24 | NEW, discovered during Batch 1. TD-12 |
+| REQ-E2E-1 | End-to-end integration test ideate→script vs stub provider | P1 | ✅ | 0 | REQ-ESCALATE-1 | 3 pt | High — would have caught zero-output on day one | Proves the loop, not just the parts | 2026-07-24 | Fails on v5.9.5 by design |
+| REQ-KEYS-2 | Replace expired Groq key (HTTP 403) | P0 | ✅ | 0 | founder | 1 pt | Extreme — restores a free writing rung | none (ops) | 2026-07-23 | Founder-completed |
+| REQ-OPENROUTER-1 | OPENROUTER_API_KEY present | P0 | ✅ | 0 | founder | 1 pt | High — unlocks 3 free routes | none (ops) | 2026-07-23 | Confirmed in provider_inventory |
+| REQ-AUTOAPPROVE-1 | Auto-approve above grade threshold | P1 | 🟡 | 1 | first published post | 3 pt | High — removes human from every publish | Approval policy engine | — | WSJF 8.0 |
+| REQ-PUB-TOKENS | Publishing OAuth, one platform end-to-end | P1 | 🔴 | 1 | founder OAuth setup | 8 pt | Extreme — approved content still cannot post | Token storage + refresh | — | CoD 31, 2nd highest |
+| REQ-SLASTAGE-1 | Back-planned per-stage deadlines stamped on jobs | P1 | 🟡 | 1 | REQ-SLA-TZ ✅ | 3 pt | High — makes fairness the SLA enforcer | Reuses v5.9.5 ordering | — | DEC-031 |
+| REQ-RATELIMIT-1 | Per-provider semaphores + token bucket | P1 | 🟡 | 2 | none | 5 pt | High — prevents 429 storms | MANDATORY before concurrency | — | Blocks REQ-PARALLEL-1 |
+| REQ-PARALLEL-1 | claim(limit=N) + thread pool (~8x throughput) | P1 | 🟡 | 2 | REQ-RATELIMIT-1 | 5 pt | Extreme at scale — SLA unreachable without it | Thread-safe clients, bus context | — | TD-05 |
+| REQ-LANES-1 | Job lanes light/heavy/free-only + per-lane pools | P1 | 🟡 | 2 | REQ-PARALLEL-1 | 3 pt | Medium — OOM protection at 512MB | Lane classification | — | DEC-030 |
+| REQ-CHAIN-1 | Stop self-scheduling chain multiplication | P2 | 🟡 | 3 | none | 3 pt | Medium — cadence fixes currently diluted | Single-chain guard | — | TD-03 |
+| REQ-OVERHEAD-2 | Cut self-maintenance share of queue (97%) | P2 | 🟡 | 3 | REQ-CHAIN-1 | 3 pt | Medium — reclaims throughput | Ops job consolidation | — | TD-04 |
+| REQ-SCALE-WORKERS | 2nd Railway worker replica | P2 | 🟡 | 3 | REQ-CHAIN-1, REQ-HEALTH-1 ✅ | 5 pt | High at scale | Linear cost, linear throughput | — | Do not precede REQ-PARALLEL-1 |
+| REQ-PREP-REDESIGN | Paused prep: subordinate, capped, decay-classified, graded | P2 | 🟡 | 3 | free capacity restored | 5 pt | High — 103 idle accounts compound inventory | Prep governor + classification | — | DEC-032, TD-11 |
+| REQ-PREP-PROMOTE | Resume bridge: prep → live funnel | P2 | 🟡 | 3 | REQ-PREP-REDESIGN | 3 pt | Medium — instant production on unpause | Promotion + staleness refresh | — | — |
+| REQ-LEARN-1 | Replace 45-min heuristic with measured p75 | P2 | 🟡 | 3 | real published throughput | 5 pt | Medium — ETA accuracy | Rolling percentile store | — | TD-09, DEC-022 |
+| REQ-BUDGET-2 | Per-account monthly cap + spend bar in UI | P2 | 🟡 | 4 | none | 3 pt | Medium — founder visibility | Web layer only | — | Cap already enforced since v5.9.4 |
+| REQ-SLA-UI | SLA chips + prep filter in Studio | P2 | 🟡 | 4 | REQ-SLA-TZ ✅ | 3 pt | Medium | Web layer only | — | Reads settings.sla_status |
+| REQ-PAYOUT-1 | Stripe Connect payout automation (50% affiliate) | P2 | 🟡 | 4 | first revenue | 5 pt | Medium — currently manual | Connect onboarding + webhooks | — | — |
+| REQ-DEADCODE-1 | Remove legacy pipeline/agent/, refresh roster docs | P3 | 🟡 | 4 | REQ-PARALLEL-1 | 5 pt | Low direct | High clarity — removes audit confusion | — | TD-01, TD-02 |
+| REQ-ISOLATION-1 | Per-account queues + leases | P2 | 🟡 | 5 | ~50 active accounts | 13 pt | High at 500 brands | Schema change, high risk | — | DEC-033, TD-10 |
+| REQ-TRADEMARK | Resolve Agent-X vs agentx.so | P1 | 🔵 | — | founder decision | 8 pt | High — blocks marketing spend | none | — | Cheap now, expensive later |
+| REQ-MCP-CLAIMS | Scope MCP claims honestly pre-marketing | P2 | 🔵 | 4 | founder review | 3 pt | Medium — honesty policy | none | — | — |
+| G-1 | Request tracker missing 5 mandated fields | P2 | ✅ | — | none | 1 pt | Low | Compliance with program spec | 2026-07-24 | This table |
+| G-2 | Decision log missing 2 mandated fields | P2 | ✅ | — | none | 1 pt | Low | Compliance | 2026-07-24 | See §2B |
+| G-3 | Action plan: BI/EI/Complexity/ROI only on CRITICAL tier | P2 | 🟡 | — | none | 2 pt | Low | Compliance | — | Batch 2 doc pass |
+| G-4 | 4 Phase-5 items named but not WSJF-scored | P3 | 🟡 | — | none | 1 pt | Low | Compliance | — | Batch 2 doc pass |
+| G-5 | Dashboards graded from repo files, not the deployed site; banner/sidebar requests unverified | P2 | 🟡 | 1 | web access | 2 pt | Medium — two founder requests unconfirmed | Verification only | — | Fold into Batch 2 |
+| G-6 | Ambiguity: whether the roadmap authorized immediate implementation | P3 | ✅ | — | founder ruling | 0 pt | Low | Process clarity | 2026-07-24 | Resolved: founder approved execution |
+
+## 2B · DECISION LOG — FULL SCHEMA (closes gap G-2)
+Mandated fields: ID · Date · Decision · Reasoning · Alternatives · Expected benefits · Risks · Related items.
+(§2 retained verbatim below as history.)
+
+| ID | Date | Decision | Reasoning | Alternatives considered | Expected benefits | Risks | Related |
+|---|---|---|---|---|---|---|---|
+| DEC-034 | 2026-07-24 | Autonomous config MUST merge with a hardcoded floor, never replace; alert on shrink | arena_scout narrowed the free ladder 5→2 with no signal, causing total output failure | Forbid dynamic config (rejected — loses adaptivity); validate schema only (insufficient — a valid 2-rung ladder is still fatal) | Free capacity can never be silently removed; adaptivity retained | Floor may contain stale models → mitigated by `_resolve()` live-model matching | REQ-LADDER-FLOOR, R-1 |
+| DEC-028 | 2026-07-24 | Add an SLA-aware paid escalation rung; delay becomes last resort | Router degraded downward with no rung up; $23.85 of $25 cap unused while output was zero | Always-paid (rejected — cost); manual trigger (rejected — needs a human awake) | First published post becomes achievable; cost stays capped | Escalation could multiply spend under concurrency → mitigated by per-thread guards + REQ-DEDUPE-1 | REQ-ESCALATE-1, R-3 |
+| DEC-035 | 2026-07-24 | Stalled items stop counting as in-flight after INFLIGHT_MAX_AGE_H (6h) | Governor computed need = quota − produced − inflight; stalled items froze ideation permanently | Clear items aggressively (rejected — destroys recoverable work); disable governor (rejected — churn returns) | Funnel self-recovers when downstream stalls | Age-out could double-produce if the stalled item later completes → bounded by quota re-check | REQ-GOV-2, N-4 |
+| DEC-036 | 2026-07-24 | Liveness reported by a daemon thread, not only by a queued job | Single-threaded worker blocked on a slow LLM call also blocked its own heartbeat job → dashboard declared a healthy worker dead | Shorter heartbeat interval (rejected — same blockage); external uptime pinger (rejected — extra service) | Health signal becomes trustworthy immediately | Two sources of truth for liveness (accepted as TD-06); collapses at Phase 2 | REQ-HEALTH-1, N-3, TD-06 |
+| DEC-037 | 2026-07-24 | Maintain a separate append-only technical debt register naming the *interest* of each debt | Debt was previously scattered in prose and quietly absorbed into "later" | Track debt as normal roadmap items (rejected — outcompeted by features every time) | Debt stays visible and costed | Register can rot if not updated per release → updated in the same commit as the code | TD-01…TD-12 |
+
 ## 2 · DECISION LOG (append-only)
 
 | ID | Date | Decision | Reasoning / Alternatives / Risks |
