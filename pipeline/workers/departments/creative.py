@@ -744,6 +744,59 @@ except Exception:            # pragma: no cover - import-time safety only
 ESCALATION_ENABLED = os.environ.get("ESCALATION_ENABLED", "1") != "0"
 ESCALATION_EST_USD = float(os.environ.get("ESCALATION_EST_USD", "0.02"))
 
+# ---------------------------------------------------------------- v5.10.4
+# REQ-ESC-THROTTLE — the spend stampede guard.
+#
+# v5.10.2 enabled 4 concurrent threads. v5.10.3 made escalation actually spend.
+# v5.10.2's backoff release then freed 18 parked writer jobs at once. Combined:
+# four threads each read "budget remaining" BEFORE any of them had recorded a
+# cost, all four passed, and the same happened on the next tick — 36 paid calls
+# and $1.27 in 15 minutes against a $2.50 DAILY budget. The budget check was
+# never wrong; it was raced.
+#
+# Three locks, cheapest first:
+#   1. a semaphore so only N paid escalations are ever in flight,
+#   2. a RESERVATION written to the ledger BEFORE the call, so concurrent
+#      checkers see the money as already committed,
+#   3. a per-account hourly ceiling so a retry loop cannot drain a day.
+import threading as _threading
+
+ESCALATION_CONCURRENCY = max(1, int(os.environ.get("ESCALATION_CONCURRENCY", "1")))
+ESCALATION_MAX_PER_HOUR = max(1, int(os.environ.get("ESCALATION_MAX_PER_HOUR", "6")))
+_ESC_SEM = _threading.Semaphore(ESCALATION_CONCURRENCY)
+_ESC_HIST_LOCK = _threading.Lock()
+_ESC_HIST: dict = {}
+
+
+def escalations_last_hour(account_id, now: float = None) -> int:
+    """In-process count of paid escalations for this account in the last hour."""
+    now = now or time.time()
+    key = str(account_id or "_global")
+    with _ESC_HIST_LOCK:
+        hist = [t for t in _ESC_HIST.get(key, []) if now - t < 3600]
+        _ESC_HIST[key] = hist
+        return len(hist)
+
+
+def _note_escalation(account_id, now: float = None):
+    now = now or time.time()
+    key = str(account_id or "_global")
+    with _ESC_HIST_LOCK:
+        _ESC_HIST.setdefault(key, []).append(now)
+
+
+def _reserve_spend(item_id, usd: float, note: str = "escalation reservation"):
+    """Write the estimated cost to the ledger BEFORE the call. Concurrent budget
+    checks then see committed money instead of a stale zero. Reconciled by the
+    real cost the model call records immediately afterwards."""
+    try:
+        from agentcore import ledger as _led
+        _led.record("brain", model="escalation:reserved", cost_usd=float(usd),
+                    item_id=item_id, detail=note)
+        return True
+    except Exception:
+        return False
+
 
 def escalation_allowed(*, kill_switch_on: bool, free_only: bool,
                        daily_remaining: float, account_month_remaining: float,
@@ -849,10 +902,52 @@ def _escalate_to_paid(w, job, ctx, bus, sb, topic, item_id, account_id,
         except Exception:
             pass
 
-    bus.agent("cfo", f"⬆️ FREE TIER EXHAUSTED — escalating to a paid model "
-                     f"(~${ESCALATION_EST_USD:.3f}) because: {reason}",
-              "warn", "escalate_paid", job_id=job.id, item_id=item_id,
-              account_id=account_id)
+    # v5.10.4 REQ-ESC-THROTTLE — hourly ceiling per account.
+    used = escalations_last_hour(account_id)
+    if used >= ESCALATION_MAX_PER_HOUR:
+        bus.agent("cfo", f"🛑 escalation ceiling hit — {used}/{ESCALATION_MAX_PER_HOUR} paid "
+                         f"writes this hour for this account. Holding until the window rolls.",
+                  "warn", "escalate_ceiling", job_id=job.id, item_id=item_id,
+                  account_id=account_id)
+        _record_escalation(sb, False, f"hourly ceiling {used}/{ESCALATION_MAX_PER_HOUR}",
+                           account_id, item_id)
+        return None
+
+    # Serialise paid writes. Without this, N threads each pass the budget check
+    # before any of them records a cost.
+    if not _ESC_SEM.acquire(timeout=float(os.environ.get("ESCALATION_WAIT_S", "20"))):
+        bus.agent("cfo", "⏳ another paid escalation is in flight — skipping this one",
+                  "info", "escalate_busy", job_id=job.id, item_id=item_id)
+        return None
+    try:
+        # Re-check budget INSIDE the lock: the job that just finished may have
+        # spent the headroom this one was approved against.
+        try:
+            from ..common import remaining_budget as _rb2, remaining_account_budget as _rab2
+            if _rb2() < ESCALATION_EST_USD or (
+                    sb is not None and account_id is not None
+                    and _rab2(sb, account_id) < ESCALATION_EST_USD):
+                bus.agent("cfo", "💤 budget consumed by a concurrent escalation — standing down",
+                          "info", "escalate_raced", job_id=job.id, item_id=item_id)
+                _record_escalation(sb, False, "budget consumed by concurrent escalation",
+                                   account_id, item_id)
+                return None
+        except Exception:
+            pass
+
+        _reserve_spend(item_id, ESCALATION_EST_USD)
+        _note_escalation(account_id)
+        bus.agent("cfo", f"⬆️ FREE TIER EXHAUSTED — escalating to a paid model "
+                         f"(~${ESCALATION_EST_USD:.3f}, {used + 1}/{ESCALATION_MAX_PER_HOUR} this hour) "
+                         f"because: {reason}",
+                  "warn", "escalate_paid", job_id=job.id, item_id=item_id,
+                  account_id=account_id)
+        return _do_paid_write(w, job, bus, topic, item_id, account_id, project_id)
+    finally:
+        _ESC_SEM.release()
+
+
+def _do_paid_write(w, job, bus, topic, item_id, account_id, project_id):
     try:
         script = _brain.write_script(
             topic, item_id=item_id, account_id=account_id, project_id=project_id,

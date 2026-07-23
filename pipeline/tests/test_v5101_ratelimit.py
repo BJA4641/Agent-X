@@ -261,9 +261,9 @@ def test_force_paid_routes_to_the_paid_client_not_the_council():
 def test_escalation_no_longer_degrades_to_a_free_retry():
     import inspect
     from workers.departments import creative as cr
-    src = inspect.getsource(cr._escalate_to_paid)
+    # v5.10.4 moved the write into _do_paid_write; assert on that now.
+    src = inspect.getsource(cr._do_paid_write)
     assert "escalate_unsupported" in src
-    # the old silent-degrade retry must be gone
     assert src.count("_brain.write_script(") == 1, \
         "exactly ONE write attempt in the escalation path — the second was the bug"
 
@@ -276,3 +276,64 @@ def test_escalation_still_respects_every_guard():
     assert escalation_allowed(kill_switch_on=False, **{**base, "free_only": True})[0] is False
     assert escalation_allowed(kill_switch_on=False, **{**base, "account_month_remaining": 0.0})[0] is False
     assert escalation_allowed(kill_switch_on=False, **base)[0] is True
+
+
+# ------------------------------------------------- v5.10.4 REQ-ESC-THROTTLE
+
+def test_escalation_is_serialised_by_default():
+    from workers.departments import creative as cr
+    assert cr.ESCALATION_CONCURRENCY == 1, \
+        "concurrent paid writes race the budget check — default must serialise"
+
+
+def test_hourly_ceiling_counts_and_expires():
+    from workers.departments import creative as cr
+    cr._ESC_HIST.clear()
+    now = time.time()
+    for _ in range(3):
+        cr._note_escalation("acct-1", now)
+    assert cr.escalations_last_hour("acct-1", now) == 3
+    # entries older than an hour fall out of the window
+    cr._ESC_HIST["acct-1"] = [now - 4000, now - 3700, now - 10]
+    assert cr.escalations_last_hour("acct-1", now) == 1
+    cr._ESC_HIST.clear()
+
+
+def test_ceiling_default_is_survivable_on_a_daily_budget():
+    from workers.departments import creative as cr
+    worst_case = cr.ESCALATION_MAX_PER_HOUR * cr.ESCALATION_EST_USD
+    assert worst_case <= 0.25, \
+        "an hour of escalations must not be able to eat a day's budget"
+
+
+def test_reservation_is_written_before_the_paid_call():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr._escalate_to_paid)
+    i_reserve = src.index("_reserve_spend(")
+    i_call = src.index("_do_paid_write(")
+    assert i_reserve < i_call, "money must be committed to the ledger BEFORE it is spent"
+
+
+def test_budget_is_rechecked_inside_the_lock():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr._escalate_to_paid)
+    i_lock = src.index("_ESC_SEM.acquire")
+    i_recheck = src.index("escalate_raced")
+    assert i_lock < i_recheck, "the in-lock re-check is what closes the race"
+
+
+def test_semaphore_is_always_released():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr._escalate_to_paid)
+    assert "finally:" in src and "_ESC_SEM.release()" in src, \
+        "a leaked semaphore would freeze all future escalations"
+
+
+def test_ceiling_blocks_before_any_spend_path():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr._escalate_to_paid)
+    assert src.index("escalate_ceiling") < src.index("_ESC_SEM.acquire")
