@@ -62,7 +62,13 @@ def _research(niche: str, angle: str) -> dict:
                       "Return JSON with {top_questions:[5 strings], competitor_angles:[5 strings],"
                       " keywords:[10 strings]} for short-form content in this niche. "
                       "Questions people actually Google/TikTok search; angles proven to work.")
-            text, cost, _ = llm.chat(prompt, max_tokens=600)
+            # v5.8.3: research playbook + free model first
+            try:
+                from agentcore import skills as _sk, council as _council
+                prompt += _sk.skill_block("research")
+                text, cost, _ = _council.free_or_chat(prompt, max_tokens=600)
+            except ImportError:
+                text, cost, _ = llm.chat(prompt, max_tokens=600)
             ledger.record("research", cost_usd=cost, detail=niche)
             parsed = json.loads(text[text.find("{"):text.rfind("}")+1])
             return {

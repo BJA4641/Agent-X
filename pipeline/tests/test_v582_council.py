@@ -100,3 +100,22 @@ def test_brain_verify_false_skips_internal_grader(monkeypatch):
     script = brain.write_script("cats", verify=False, allow_demo=False)
     assert script.get("grade", {}).get("deferred_to") == "cqo"
     assert graded["called"] is False                    # single-judge economy holds
+
+
+def test_free_or_chat_returns_llm_chat_shape(monkeypatch):
+    from agentcore import council
+    monkeypatch.setattr(council, "enabled", lambda: True)
+    monkeypatch.setattr(council, "free_chat", lambda p, max_tokens=800: ("hi", "groq:m1"))
+    text, cost, label = council.free_or_chat("prompt")
+    assert text == "hi" and cost == 0.0 and label == "council:groq:m1"
+
+
+def test_new_department_skills_load():
+    from agentcore import skills
+    skills.clear_cache()
+    for dept in ("distribution", "brand_studio", "community", "analytics",
+                 "creative", "cqo", "editorial", "research"):
+        block = skills.skill_block(dept)
+        assert block and len(block) < 4000, dept
+    assert "hashtags" in skills.skill_block("distribution").lower()
+    assert "hook" in skills.skill_block("creative").lower()

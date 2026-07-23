@@ -42,7 +42,13 @@ def draft_replies(topic, comments, item_id=None) -> list:
         try:
             prompt, version = config.load_prompt("reply_v1")
             prompt = prompt.replace("{topic}", topic).replace("{comments}", json.dumps(comments))
-            text, _llm_cost, _llm_model = llm.chat(prompt, max_tokens=500)
+            # v5.8.3: community playbook + free model first
+            try:
+                from agentcore import skills as _sk, council as _council
+                prompt += _sk.skill_block("community")
+                text, _llm_cost, _llm_model = _council.free_or_chat(prompt, max_tokens=500)
+            except ImportError:
+                text, _llm_cost, _llm_model = llm.chat(prompt, max_tokens=500)
             replies = json.loads(text[text.find("{"): text.rfind("}") + 1])["replies"]
             cost = _llm_cost
             ledger.record("community", model=_llm_model, prompt_version=version, cost_usd=cost, item_id=item_id)

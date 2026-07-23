@@ -1,0 +1,39 @@
+AGENT-X v5.8.3 — "SKILLED COUNCIL" (supersedes the v5.8.2 zip — push THIS one)
+==============================================================================
+Contains everything from v5.8.2 PLUS the GitHub-scouted skills upgrade.
+
+v5.8.2 recap (all included here):
+- CONTENT BRIDGE: Studio "Approve" now actually queues the video render.
+- COUNCIL: free models draft+debate; Claude called ONCE per item as judge.
+- Strategy: 412 paid calls/day → 1 free/day/niche. CEO crash fixed.
+- LEARNING LOOP: every grade + your approve/reject saved as lessons; writers
+  and strategy read them back. No more template junk drafts.
+
+NEW in v5.8.3:
+- 8 departments now carry expert playbooks (pipeline/skills/<dept>/SKILL.md)
+  distilled from top-rated open-source skill repos (MIT/Apache, attributed):
+  creative (6 hook patterns), cqo (performance-scoring rubric), editorial
+  (content pillars), research (niche signals), distribution (per-platform
+  captions/hashtags), brand_studio (voice principles), community (reply
+  rules), analytics (decision-first metrics).
+- 3 MORE paid call-sites moved to free models: distribution repurposing,
+  research lists, community replies. Claude now pays ONLY for: final grade
+  (~$0.01/item) + one-time brand bibles.
+
+DEPLOY:
+1. Drag zip CONTENTS into GitHub repo root (Add file → Upload files, keep
+   folder structure) → commit to main.
+2. Railway auto-redeploys. Your worker is currently STILL ON 5.7.0 — if
+   worker_health doesn't show 5.8.3 within ~10 min, open Railway → service →
+   "Redeploy" manually (platform had an incident earlier).
+3. Verify (Supabase SQL editor):
+   SELECT worker_id, version, to_timestamp(last_heartbeat_at) hb
+   FROM worker_health ORDER BY last_heartbeat_at DESC LIMIT 3;
+   → must say 5.8.3, fresh heartbeat.
+
+ENV: OPENROUTER_API_KEY on Railway = done (you added it). Nothing on Vercel.
+
+FIRST CONTENT: unpause one account, or Studio → approve a drafted item →
+render queues within ~1 min → playable video appears in Studio.
+Check learning: SELECT role, left(content,80), created_at FROM memory
+ORDER BY created_at DESC LIMIT 10;

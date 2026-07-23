@@ -138,6 +138,20 @@ def debate_or_chat(prompt: str, max_tokens: int = 1800):
     return _llm.chat(prompt, max_tokens=max_tokens)
 
 
+def free_or_chat(prompt: str, max_tokens: int = 800):
+    """v5.8.3: ONE free-model call (no debate) with paid llm.chat() fallback.
+    For low-stakes prompts: captions, replies, research lists, repurposing.
+    Always returns (text, cost_usd, label) — drop-in for llm.chat()."""
+    if enabled():
+        try:
+            text, label = free_chat(prompt, max_tokens=max_tokens)
+            return text, 0.0, f"council:{label}"
+        except Exception:
+            traceback.print_exc()
+    from agent import llm as _llm
+    return _llm.chat(prompt, max_tokens=max_tokens)
+
+
 def _log_council(n_cand: int, names: str, judge: str, secs: float):
     try:
         from . import ledger as _ldgr  # noqa

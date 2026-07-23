@@ -21,3 +21,15 @@ mistake-to-avoid, hidden-reason, cheap-alternative, myth-bust.
 - Income promises, "make $X", get-rich framing (legal rule)
 - Anything requiring reposting someone else's footage
 - Topics already on the board in the last 20 items (check the recent list)
+
+## Content pillars (balance the calendar)
+<!-- pillar framework distilled from coreyhaines31/marketingskills social (MIT) -->
+Spread topics across pillars per account, roughly: Educational how-tos 30%,
+Industry insight/trends 30%, Myth-busting/contrarian 20%, Story/case 15%,
+Promotional 5% max. If the last 5 items lean one pillar, pick from another.
+Repurposing mindset: one strong idea = one video + a tweet + a caption angle —
+prefer topics rich enough to survive repurposing.
+
+## Topic quality bar
+Each topic must name a specific outcome or number ("8-minute", "3 mistakes",
+"under $50"). Reject topics that are a category, not a promise.

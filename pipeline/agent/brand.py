@@ -143,6 +143,12 @@ CLIENT ANSWERS:
 {qa_text}
 
 Output ONLY the JSON object, nothing else."""
+        # v5.8.3: brand-voice playbook injected; stays on Claude (one-time, high-stakes)
+        try:
+            from agentcore import skills as _sk
+            prompt += _sk.skill_block("brand_studio")
+        except ImportError:
+            pass
         text, cost, mlabel = llm.chat(prompt, max_tokens=1200)
         try:
             profile = json.loads(text[text.find("{"): text.rfind("}") + 1])

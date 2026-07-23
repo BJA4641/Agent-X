@@ -10,7 +10,13 @@ def repurpose(script: dict, topic: str, item_id=None) -> dict:
         try:
             prompt, version = config.load_prompt("repurpose_v1")
             prompt = prompt.replace("{script}", json.dumps({"topic": topic, **script}))
-            text, _llm_cost, _llm_model = llm.chat(prompt, max_tokens=500)
+            # v5.8.3: distribution playbook + free model first
+            try:
+                from agentcore import skills as _sk, council as _council
+                prompt += _sk.skill_block("distribution")
+                text, _llm_cost, _llm_model = _council.free_or_chat(prompt, max_tokens=500)
+            except ImportError:
+                text, _llm_cost, _llm_model = llm.chat(prompt, max_tokens=500)
             out = json.loads(text[text.find("{"): text.rfind("}") + 1])
             cost = _llm_cost
             ledger.record("distribution", model=_llm_model, prompt_version=version, cost_usd=cost, item_id=item_id)

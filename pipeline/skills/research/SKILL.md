@@ -20,3 +20,12 @@ shorter than 8 characters is noise — drop it.
   underlying subject instead.
 - Never mark a trend niche_fit>0.5 unless a niche keyword appears in it or
   it maps to a known audience problem for that niche.
+
+## Niche research signals
+<!-- inspired by charlie947/social-media-skills niche-research (MIT) -->
+Prioritize: 1) questions people actually type into search/TikTok (start with
+how/why/what-happens-if), 2) competitor angles that repeat across 3+ channels
+(repetition = proven demand), 3) keywords with clear intent, not vanity terms.
+For each validated trend, output: the question form, the proven angle, and
+2-3 keywords. A trend without a question people ask is entertainment, not a
+content opportunity — flag it low-priority.

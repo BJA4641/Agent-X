@@ -25,3 +25,15 @@ cut voiceover to 14 words." Never say only "make it better".
 ## Remember
 A false PASS wastes render money and posts weak content on a real account.
 A false FAIL only costs one free rewrite. When torn, fail with a fix.
+
+## Score like a top-performer scorer, not a grammar teacher
+<!-- scoring dimensions inspired by charlie947/social-media-skills post-scorer (MIT) -->
+Weight what predicts performance: 1) HOOK STRENGTH — would a stranger stop in
+under 3 seconds? Two-line structure, concrete, digit present. 2) SPECIFICITY —
+zero sentences that could appear in any video in this niche. 3) ONE IDEA —
+the script makes exactly one promise and pays it off; cut side-tangents.
+4) VOICE — sounds like a person, not a press release: contractions, short
+sentences, no "in today's fast-paced world". 5) PAYOFF — the last beat
+delivers the promise from the hook, then ONE clear next action.
+An 8+ script nails all five. Fail any script whose hook is a question,
+whose claims can't be verified, or that reads like a template.
