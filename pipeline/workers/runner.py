@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.8.9"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.9.0"  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 INVENTORY_KEYS = [
@@ -64,9 +64,21 @@ def _write_provider_inventory(rt, version: str):
                 return True
             return any(os.environ.get(a) for a in ALIASES.get(k, []))
         keys = {k: _present(k) for k in INVENTORY_KEYS}
+        # v5.9.0: publish the EFFECTIVE runtime config too. hard_budget_ok()
+        # reads DAILY_BUDGET_USD from the worker env, NOT from settings.daily_budget
+        # — so the dashboard could show $2.50 while the worker enforced $1.00 and
+        # refused every tick with no visible reason. Now the real number is on record.
+        try:
+            from agentcore import config as _c
+            effective = {"daily_budget_usd": _c.DAILY_BUDGET_USD,
+                         "tenant_id": _c.TENANT_ID,
+                         "env_daily_budget_raw": os.environ.get("DAILY_BUDGET_USD")}
+        except Exception as _e:
+            effective = {"error": str(_e)[:120]}
         sb.table("settings").upsert({
             "tenant_id": tenant, "key": "provider_inventory",
             "value": {"checked_at": time.time(), "worker_version": version,
+                      "effective_config": effective,
                       "keys": keys,
                       "present": sorted([k for k, v in keys.items() if v]),
                       "missing": sorted([k for k, v in keys.items() if not v])},

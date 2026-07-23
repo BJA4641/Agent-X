@@ -53,20 +53,35 @@ def persist_to_agent_events(event: Event):
     sb = _sb()
     if not sb:
         return
+    # v5.9.0 CRITICAL FIX — this insert failed 100% of the time.
+    #
+    #   agent_events.id is GENERATED ALWAYS AS IDENTITY. Postgres rejects ANY
+    #   explicit value for such a column (SQLSTATE 428C9), and we were sending
+    #   "id": event.id (a 12-char hex string) on every single event. Every
+    #   department event — ceo, coo, cfo, cqo, cto — was silently dropped by
+    #   the except-and-print below. Verified against production: zero rows with
+    #   those emitters had ever been written.
+    #
+    #   Two more mismatches fixed at the same time:
+    #     * the table (and the dashboard feed) key off `agent`; we only wrote
+    #       `emitter`, so even a successful insert would have shown "system".
+    #     * the feed sums `cost_usd`; we only wrote `cost_cents`.
     row = {
-        "id": event.id,
         "tenant_id": _cfg.TENANT_ID,
         "ts": event.ts,
-        "emitter": event.emitter,
+        "agent": event.emitter,          # what the dashboard groups by
+        "emitter": event.emitter,        # keep the v2 field in sync
         "type": event.type.value if isinstance(event.type, EventType) else str(event.type),
-        "status": event.status,
-        "action": event.action,
+        "status": event.status if event.status in
+                  ("info", "success", "warn", "error", "debate") else "info",
+        "action": event.action or "note",
         "message": event.message,
         "subject": event.subject or {},
         "job_id": event.job_id,
         "brand_id": str(event.brand_id) if event.brand_id else None,
         "account_id": str(event.account_id) if event.account_id else None,
         "cost_cents": event.cost_cents,
+        "cost_usd": round((event.cost_cents or 0) / 100.0, 6),
         "data": event.data or {},
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(event.ts)),
     }
@@ -76,8 +91,20 @@ def persist_to_agent_events(event: Event):
     try:
         sb.table("agent_events").insert(row).execute()
     except Exception as e:
-        # Don't recursively emit failures; just print
-        print(f"[events.persist] insert failed (non-fatal): {e}")
+        # v5.9.0: this used to print once and move on, which is how a 100%
+        # insert failure went unnoticed for weeks. Still non-fatal (the feed
+        # must never take the worker down) but now it is unmistakable in the
+        # Railway log and it records itself so the dashboard can surface it.
+        print(f"[events.persist] !!! agent_events INSERT FAILED: {e}\n"
+              f"[events.persist] !!! dropped event: {event.emitter}/{event.action} — {event.message[:120]}")
+        try:
+            sb.table("settings").upsert(
+                {"tenant_id": _cfg.TENANT_ID, "key": "event_persist_error",
+                 "value": {"at": time.time(), "error": str(e)[:400],
+                           "sample": f"{event.emitter}/{event.action}"}},
+                on_conflict="tenant_id,key").execute()
+        except Exception:
+            pass
 
 
 def wire_bus_to_persistence(bus):
