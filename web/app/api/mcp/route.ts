@@ -57,6 +57,20 @@ async function authenticate(req: Request): Promise<{ user_id: string } | null> {
   if (!m) return null;
   const token = m[1].trim();
   if (!token) return null;
+  // v5.10.6 REQ-MCP-OAUTH: two accepted credential types.
+  //  1. axat_… — OAuth access token (what Claude.ai connectors obtain)
+  //  2. axmcp_… — legacy personal token from Settings → MCP (Cursor, scripts)
+  if (token.startsWith("axat_")) {
+    const { data: t } = await supabaseAdmin()
+      .from("oauth_tokens")
+      .select("user_id,expires_at,revoked_at")
+      .eq("access_token", token)
+      .maybeSingle();
+    if (!t?.user_id) return null;
+    if ((t as any).revoked_at) return null;
+    if (new Date((t as any).expires_at).getTime() < Date.now()) return null;
+    return { user_id: (t as any).user_id };
+  }
   const { data } = await supabaseAdmin()
     .from("mcp_connections")
     .select("user_id")
@@ -447,7 +461,12 @@ async function handleSingle(body: JsonRpcReq, req: Request): Promise<JsonRpcRes>
   // All tool calls require a valid bearer token
   const auth = await authenticate(req);
   if (!auth) {
-    return { jsonrpc: "2.0", id, error: { code: -32001, message: "Unauthorized: provide a valid Bearer token from Settings → MCP." } };
+    // v5.10.6: point unauthenticated clients at the OAuth discovery document so
+    // Claude's connector can start the registration flow instead of guessing.
+    return { jsonrpc: "2.0", id, error: { code: -32001,
+      message: "Unauthorized. Connect via OAuth (see /.well-known/oauth-protected-resource) "
+             + "or supply a personal token from Settings → MCP.",
+      data: { www_authenticate: "Bearer resource_metadata=\"/.well-known/oauth-protected-resource\"" } } };
   }
 
   if (body.method === "tools/call") {
