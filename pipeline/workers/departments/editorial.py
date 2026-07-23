@@ -66,6 +66,26 @@ def ideate(w: Worker, job: Job, ctx: AgentContext):
     account_id = job.payload.get("account_id") or job.account_id
     target = int(job.payload.get("target_posts") or 1)
 
+    # ----- v5.9.5 DEMAND GOVERNOR RE-CHECK (DEC-021) -----
+    # The tick that spawned this job may be stale by the time it is claimed
+    # (queue delay, restarts). Re-verify unmet demand BEFORE the CEO gate or
+    # any strategy-LLM spend; complete as a no-op if the quota is already met.
+    if sb and account_id:
+        from ..departments.portfolio import (_produced_today, _count_inflight,
+                                             POSTS_PER_DAY_DEFAULT)
+        acct0 = load_account(sb, account_id) or {}
+        quota = int(acct0.get("posts_per_day") or POSTS_PER_DAY_DEFAULT)
+        produced = _produced_today(sb, account_id)
+        inflight0 = _count_inflight(sb, account_id)
+        need = max(0, quota - produced - inflight0)
+        if need <= 0:
+            bus.agent("strategist", f"quota already met at claim time "
+                                    f"({produced} produced + {inflight0} in-flight ≥ {quota}) — ideation no-op",
+                      "info", "ideate_noop", job_id=job.id)
+            w.queue.complete(job, {"ok": True, "noop": "quota_met"})
+            return
+        target = min(target, need)
+
     # ----- BUDGET / KILL SWITCH / CEO PREFLIGHT -----
     if kill_switch():
         bus.agent("strategist", "⏸ kill switch on — ideation skipped",
@@ -124,6 +144,26 @@ def plan_one(w: Worker, job: Job, ctx: AgentContext):
     topic = job.payload["topic"]
     item_id = job.payload.get("item_id")
     account_id = job.account_id or job.payload.get("account_id")
+
+    # v5.9.5: an empty/whitespace topic is unwritable — fail the board item
+    # here with the reason and spawn NOTHING downstream, instead of letting
+    # creative.write_script die with a "no topic" fatal (9 in 7 days).
+    if not (topic or "").strip():
+        if sb and item_id:
+            try:
+                from ..common import board_get as _bget
+                board_patch(sb, item_id, status="failed")
+                p = dict((_bget(sb, item_id) or {}).get("payload") or {})
+                p["failed_reason"] = "empty_topic_at_plan"
+                sb.table("board_items").update({"payload": p}).eq("id", item_id).execute()
+            except Exception:
+                pass
+        bus.agent("strategist", "🛑 plan_one received an EMPTY topic — item failed, "
+                                "no writer job spawned", "warn", "plan_empty_topic",
+                  job_id=job.id, item_id=item_id)
+        w.queue.complete(job, {"ok": False, "reason": "empty_topic"})
+        return
+
     brand = brand_context_for(sb, account_id)
     bus.agent("strategist", f"📋 briefing writers for: \"{topic[:80]}\"", "info",
               "brief_ready", job_id=job.id, item_id=item_id)

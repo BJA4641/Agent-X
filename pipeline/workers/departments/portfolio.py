@@ -16,6 +16,26 @@ from ..common import (active_accounts, first_active_account, board_get,
 MAX_INFLIGHT_PER_ACCOUNT = 2
 POSTS_PER_DAY_DEFAULT = 2
 TICK_SECONDS = 60
+# v5.9.5: at most one ideation per account per window (DEC-021)
+import os as _os
+IDEATE_COOLDOWN_S = int(_os.environ.get("IDEATE_COOLDOWN_S", "1800"))
+
+
+def _produced_today(sb, account_id) -> int:
+    """Items that reached approved/scheduled/published today for this account.
+    'prep' items are excluded (DEC-025)."""
+    if sb is None:
+        return 0
+    try:
+        import datetime as _dt
+        start = _dt.datetime.combine(_dt.date.today(), _dt.time.min).isoformat() + "Z"
+        res = (sb.table("board_items").select("id", count="exact")
+               .in_("status", ["approved", "scheduled", "published"])
+               .eq("account_id", str(account_id))
+               .gte("created_at", start).execute())
+        return int(res.count or 0)
+    except Exception:
+        return 0
 
 
 def register(w: Worker):
@@ -108,12 +128,27 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
             touched.append(acct.get("handle"))
             continue
 
-        if inflight < MAX_INFLIGHT_PER_ACCOUNT:
+        # v5.9.5 DEMAND GOVERNOR (DEC-021). The old rule spawned an ideate
+        # whenever inflight < cap — with cleared/failed items constantly
+        # freeing slots this produced ~1,000 ideations/day and 7,404 cleared
+        # board items in 7 days ($12 of pure churn). New rule: ideate ONLY
+        # when today's quota still has unmet demand, and at most once per
+        # IDEATE_COOLDOWN_S window (windowed idempotency key makes floods
+        # structurally impossible regardless of tick cadence).
+        produced = _produced_today(sb, acct["id"])
+        need = max(0, target - produced - inflight)
+        if need > 0 and inflight < MAX_INFLIGHT_PER_ACCOUNT:
+            bucket = int(time.time() // IDEATE_COOLDOWN_S)
             job_of(w, "editorial.ideate", {
                 "account_id": acct["id"], "project_id": acct.get("project_id"),
-                "target_posts": max(1, MAX_INFLIGHT_PER_ACCOUNT - inflight),
+                "target_posts": min(need, MAX_INFLIGHT_PER_ACCOUNT - inflight),
             }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
-               priority=Priority.HIGH)
+               priority=Priority.HIGH,
+               idempotency_key=f"ideate:{acct['id']}:{bucket}")
+        elif need <= 0:
+            bus.agent("coo", f"@{acct.get('handle','?')} quota met for today "
+                             f"({produced} produced + {inflight} in-flight ≥ {target}) — no ideation",
+                      "info", "tick_quota_met", job_id=job.id)
         else:
             bus.agent("coo", f"@{acct.get('handle','?')} in-flight at cap — no new reels this tick",
                       "info", "tick_cap", job_id=job.id)
@@ -282,14 +317,32 @@ def _sweep_stale_ideas(w, bus, sb, acct, job):
     try:
         import datetime as _dt
         cutoff = (_dt.datetime.utcnow() - _dt.timedelta(hours=STALE_IDEA_HOURS)).isoformat() + "Z"
-        rows = (sb.table("board_items").select("id,payload,created_at")
+        rows = (sb.table("board_items").select("id,topic,payload,created_at")
                 .eq("status", "idea").eq("account_id", str(acct["id"]))
                 .lt("created_at", cutoff).limit(10).execute().data) or []
     except Exception:
         return
     for r in rows:
         payload = dict(r.get("payload") or {})
-        topic = payload.get("topic") or payload.get("title") or ""
+        # v5.9.5 ROOT-CAUSE FIX: the topic lives in the board `topic` COLUMN
+        # (board_add puts it there) — the old payload-only read came back
+        # empty for every normal idea, so every re-plan fired
+        # editorial.plan_one with topic="" → creative.write_script "no topic"
+        # fatal (9 in 7 days). Read the column first.
+        topic = (r.get("topic") or payload.get("topic") or payload.get("title") or "")
+        # v5.9.5: an EMPTY topic can never be planned — re-queueing it just
+        # manufactures a "creative.write_script: no topic" fatal (9 in the
+        # last 7 days). Clear it immediately with the reason recorded.
+        if not topic.strip():
+            payload["cleared_reason"] = "empty_topic"
+            try:
+                sb.table("board_items").update(
+                    {"status": "cleared", "payload": payload}).eq("id", r["id"]).execute()
+            except Exception:
+                pass
+            bus.agent("coo", "🧹 cleared stale idea with EMPTY topic (unplannable)",
+                      "warn", "idea_cleared", job_id=job.id, item_id=r["id"])
+            continue
         if payload.get("replan_attempted"):
             try:
                 sb.table("board_items").update({"status": "cleared"}).eq("id", r["id"]).execute()

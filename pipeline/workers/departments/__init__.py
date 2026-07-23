@@ -9,6 +9,8 @@ from . import distribution, analytics, cqo, risk, knowledge
 from . import ops, human_desk, experiments, brand_studio, monetization, ceo
 from . import providers  # v5.8.7 provider probe (keys, liveness, balances)
 from . import strategy   # v5.8.8 10-day paid audit + arena leaderboard scout
+from . import sla         # v5.9.5 publishing SLA plan/monitor/self-heal
+from . import paused_prep # v5.9.5 $0 free-only prep for paused accounts
 
 
 def register_all(worker: "Worker"):
@@ -35,3 +37,5 @@ def register_all(worker: "Worker"):
     experiments.register(worker)
     providers.register(worker)  # v5.8.7
     strategy.register(worker)   # v5.8.8
+    sla.register(worker)        # v5.9.5
+    paused_prep.register(worker)  # v5.9.5

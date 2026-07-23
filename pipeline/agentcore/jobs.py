@@ -19,6 +19,50 @@ from typing import Optional, List, Callable
 from .models import Job, JobStatus, Priority, Event, EventType
 from .bus import get_bus
 
+# Jobs whose deadline is inside this horizon jump the whole queue.
+DEADLINE_URGENT_HORIZON_S = 1800
+
+
+def fair_claim_order(rows: List[dict]) -> List[dict]:
+    """v5.9.5 (DEC-023) — reorder a candidate page for claiming.
+
+    1. Deadline-urgent block first: rows with a `deadline` within
+       DEADLINE_URGENT_HORIZON_S (or already past), ordered by deadline asc.
+       This is how SLA-behind accounts self-prioritize.
+    2. Everything else keeps its incoming (priority desc, created asc) order
+       but is interleaved round-robin across account_id so a single account
+       flooding the queue cannot starve the rest. Ops/system jobs with no
+       account_id form their own bucket in the rotation.
+
+    Pure function over the fetched page — page-local fairness only, which is
+    acceptable at current volumes (Phase 7 supersedes with per-account queues).
+    """
+    if not rows:
+        return rows
+    now = time.time()
+    urgent, rest = [], []
+    for r in rows:
+        d = r.get("deadline")
+        if d is not None and float(d) <= now + DEADLINE_URGENT_HORIZON_S:
+            urgent.append(r)
+        else:
+            rest.append(r)
+    urgent.sort(key=lambda r: float(r.get("deadline") or 0))
+    # round-robin the remainder across accounts, preserving in-bucket order
+    buckets, order = {}, []
+    for r in rest:
+        k = str(r.get("account_id") or "_system")
+        if k not in buckets:
+            buckets[k] = []
+            order.append(k)
+        buckets[k].append(r)
+    interleaved = []
+    while any(buckets[k] for k in order):
+        for k in order:
+            if buckets[k]:
+                interleaved.append(buckets[k].pop(0))
+    return urgent + interleaved
+
 
 def _event(job: Job, type_: EventType, message: str = "", emitter: str = "queue") -> Event:
     return Event(
@@ -85,6 +129,11 @@ class JobQueue:
         UPDATE ... WHERE but not raw FOR UPDATE). The status='queued' guard plus
         a claimed_at CAS means two workers racing on the same row will only see
         one successful update.
+
+        v5.9.5 (DEC-023): the candidate page is re-ordered by fair_claim_order
+        (deadline-urgent jobs first, then per-account round-robin) so one noisy
+        account can no longer starve the others. CAS semantics are untouched;
+        any error in the reorder degrades to the old priority/created order.
         """
         try:
             tbl = self._table()
@@ -93,10 +142,14 @@ class JobQueue:
                  .lte("scheduled_for", time.time())
                  .order("priority", desc=True)
                  .order("created_at")
-                 .limit(max(limit * 3, 5)))
+                 .limit(max(limit * 4, 12)))
             if job_types:
                 q = q.in_("job_type", job_types)
             rows = q.execute().data or []
+            try:
+                rows = fair_claim_order(rows)
+            except Exception:
+                pass  # degrade to v5.9.4 ordering
             claimed = []
             for r in rows:
                 upd = (tbl.update({"status": JobStatus.CLAIMED.value,

@@ -22,7 +22,7 @@ from agentcore.runtime import get_runtime
 from agentcore import Worker, Job, EventType, Priority, kill_switch_on, DAILY_BUDGET_USD
 from workers.departments import register_all
 
-VERSION = "5.9.4"  # v5.9.4: $25/month per-account hard cap in ceo_decide  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
+VERSION = "5.9.5"  # v5.9.5: demand-governed ideation (windowed idempotency), SLA plan/monitor/self-heal, $0 paused-account prep, fair claim ordering, empty-topic root-cause fix, human_desk 20s->120s  # v5.9.4: $25/month per-account hard cap in ceo_decide  # v5.8.5: SHIP-BEST gate (grader ships best attempt >=7.0 instead of final-reject), provider inventory on boot, prepare-docs-while-paused.  # v5.8.3: scouted skills for 8 depts + free routing for distribution/research/community. v5.8.2: council, approval->render bridge, lessons loop, ceo fix  # v5.7: soft-pause (pause intake, finish in-flight), docs library+editor in web, /api/version
 
 
 INVENTORY_KEYS = [
@@ -137,7 +137,18 @@ def main():
             idempotency_key=f"snap:{int(now//3600)}"),
         Job(job_type="human_desk.sync",
             payload={}, priority=Priority.LOW,
-            idempotency_key=f"desksync:{int(now//20)}"),
+            idempotency_key=f"desksync:{int(now//120)}"),
+        # v5.9.5 — seed the SLA + paused-prep self-scheduling chains.
+        # Idempotency keys make reboots safe: an existing chain absorbs these.
+        Job(job_type="sla.plan_day", payload={"boot": True},
+            priority=Priority.LOW, scheduled_for=now + 45,
+            idempotency_key=f"slaplan:{time.strftime('%Y-%m-%d', time.gmtime(now))}"),
+        Job(job_type="sla.monitor", payload={"boot": True},
+            priority=Priority.LOW, scheduled_for=now + 120,
+            idempotency_key=f"slamon:{int((now + 120)//300)}"),
+        Job(job_type="paused.prep_cycle", payload={"boot": True},
+            priority=Priority.LOW, scheduled_for=now + 300,
+            idempotency_key=f"prep:{int((now + 300)//3600)}"),
     ]
     for j in boot_jobs:
         rt.queue.enqueue(j)

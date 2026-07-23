@@ -172,8 +172,15 @@ def rescan(w: Worker, job: Job, ctx: AgentContext):
     _reschedule(w)
 
 
+import os as _os
+# v5.9.5: 20s cadence generated ~14,400 sync jobs/week of pure overhead.
+# 120s is plenty for an approval desk a human checks a few times a day.
+HUMAN_DESK_SYNC_SECONDS = int(_os.environ.get("HUMAN_DESK_SYNC_SECONDS", "120"))
+
+
 def _reschedule(w: Worker):
+    nxt = time.time() + HUMAN_DESK_SYNC_SECONDS
     j = Job(job_type="human_desk.sync", payload={}, priority=Priority.LOW,
-            scheduled_for=time.time() + 20,
-            idempotency_key=f"desksync:{int(time.time()//20)}")
+            scheduled_for=nxt,
+            idempotency_key=f"desksync:{int(nxt // HUMAN_DESK_SYNC_SECONDS)}")
     w.queue.enqueue(j)
