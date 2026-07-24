@@ -1,169 +1,129 @@
-# AGENT-X — MASTER ROADMAP, RISKS & EXECUTIVE SUMMARY
-**Date:** 2026-07-24 · **Batch C** · Deliverables 5, 12, 13
-**Companions:** `docs/AUDIT-2026-07-24.md` (A) · `docs/ARCHITECTURE-TARGET.md` (B) · `docs/ACTION-PLAN.md` (WSJF) · `docs/LEDGER.md`
+# Agent-X — ROADMAP (rebuilt 2026-07-24, v5.11.19)
+
+Replaces all earlier roadmap versions (previous one archived as
+`ROADMAP-v1-archived.md`). Rebuilt by reading the batch history in
+`docs/LEDGER.md` end to end, because the append-only request table had
+accumulated duplicate rows per ID and could no longer be trusted for status.
+
+**Rule: this file states what is TRUE, not what is hoped.** ✅ means observed
+working in production or verified by test against real data. "Shipped but
+unproven" is its own state, 🟨, and is not counted as done.
 
 ---
 
-## 0 · LATE-BREAKING FINDING (supersedes part of Batch A/B)
+## 0. WHERE THE PROGRAM ACTUALLY STANDS
 
-While preparing this roadmap I traced *why* the three OpenRouter free routes never fire. The result changes
-the priority order, so it is recorded before the roadmap.
-
-**The free ladder is not the 5-rung constant in the code.** `council._order()` reads
-`settings.free_council_models` and — if that row exists — **replaces `_FREE_ORDER` entirely** rather than
-merging with it. That row is written autonomously by `strategy.arena_scout`.
-
-Live value of `settings.free_council_models` (updated 21:28 UTC by arena scout):
-```
-1. gemini      gemini-2.5-flash              "free tier"        ← 429 rate-limited
-2. groq        llama-3.3-70b-versatile       "free tier"        ← was 403, key now replaced
-3. openrouter  google/gemma-4-31b-it:free    "arena #52"
-4. openrouter  cohere/north-mini-code:free   "free route"
-5. openrouter  google/gemma-4-26b-a4b-it:free "free route"
-```
-
-Two conclusions, both important:
-
-1. **The recorded failures predate this row.** The last council failure (`gemini 429 | groq 403`) is stamped
-   ~38 minutes *before* this ladder was written. At that moment the ladder held only 2 rungs. The next
-   30-minute retry of the queued `write_script` jobs is the live test of whether rungs 3–5 now fire.
-   **Your Groq key replacement + this expanded ladder may unblock production without any code change.**
-   Verification query is in §5.
-2. **The structural defect remains regardless.** A self-improving component (`arena_scout`) can silently
-   *narrow* the safety ladder, and there is no floor. That is how a 5-rung fallback became a 2-rung fallback
-   with nobody noticing, and it is the mechanism behind the all-time zero-output record. `_order()` must
-   **merge** (arena picks first, `_FREE_ORDER` appended, deduped) so the hardcoded floor can never be
-   removed by an autonomous agent. This is a ~5-line fix and it is now the single highest-value item on the
-   roadmap — higher than paid escalation, because it costs $0 and hardens against recurrence.
-
-**Revised #1 priority:** ladder floor merge (REQ-LADDER-FLOOR) → then paid escalation (REQ-ESCALATE-1).
-
----
-
-## 5 · MASTER ROADMAP
-
-Rebuilt from the current audit, not continued from prior versions. Every phase states objective, priority,
-rationale, tasks, dependencies, deliverables, success metrics, effort and risk-if-skipped.
-
-### PHASE 0 — "FIRST POST" · Unblock output
-**Objective:** one real published post for one account. **Priority:** CRITICAL — nothing else matters until this exists.
-**Why it matters:** the platform has produced 0 published items in its entire history. Every other metric,
-grade, feature and strategy in this document is speculative until the loop closes once.
-
-| Tasks | REQ |
+| | |
 |---|---|
-| Merge (not replace) the free ladder — guarantee a hardcoded floor | REQ-LADDER-FLOOR |
-| SLA-aware paid escalation rung above free-exhausted | REQ-ESCALATE-1 |
-| Age out stalled items from the demand-governor in-flight count | REQ-GOV-2 |
-| Idempotency key on re-plan → write_script spawn | REQ-DEDUPE-1 |
-| Heartbeat write repair + surface silent skips | REQ-HEALTH-1, REQ-PREPOBS-1 |
-| SLA deadline default → 14:00 Asia/Dubai, per-account overridable | REQ-SLA-TZ |
-| End-to-end integration test: ideate → approved against stub provider | REQ-E2E-1 |
+| Version | v5.11.19 |
+| Tests | 270 passing; preflight + boot_check green |
+| Worker | healthy; heartbeat now written from the claim loop (structural liveness) |
+| Spend | ~$1.34/day (was $2.97 for the same window before the cheap-tier fix) |
+| Published | **3 reels rendered — every publish ran `dry-run`. NOTHING HAS EVER POSTED.** |
+| Accounts | 2 live (`puppy.parent`, `glowup.daily`), 105 paused |
+| Content mix | LIVE — 2 carousels, 2 reels, 5 stories in the last hour |
+| Agent grade | ~4.6/10 measured; ~7.0 forecast once shipped-but-unproven items are exercised |
 
-**Dependencies:** none (Groq key ✅ replaced by founder, OpenRouter key ✅ confirmed present).
-**Deliverables:** v5.9.6 zip, migration notes, changelog, updated tests.
-**Success metrics:** ≥1 item reaches `published`; `write_script` success rate > 80%; cost/post < $0.05.
-**Effort:** 1 batch. **Risk if skipped:** the company remains a $0-revenue engineering exercise indefinitely.
-
-### PHASE 1 — "PROVE THE LOOP" · Repeatable daily output for 2 accounts
-**Objective:** both live accounts hit quota before deadline, 7 consecutive days. **Priority:** CRITICAL.
-**Why:** proves the SLA design works before it is scaled to 105 accounts.
-
-Tasks: auto-approve rule above a grade threshold (removes the human bottleneck); publishing OAuth for one
-platform end-to-end; stage-deadline stamping (REQ-SLASTAGE-1); first cost-per-post measurement.
-**Dependencies:** Phase 0. **Deliverables:** publish pipeline live on 1 platform; SLA hit-rate dashboard.
-**Metrics:** 7-day SLA hit rate ≥ 90%; time-to-publish < 4h; zero manual interventions.
-**Effort:** 1–2 batches. **Risk if skipped:** scaling an unproven loop multiplies failure, not output.
-
-### PHASE 2 — "THROUGHPUT" · Physical parallelism
-**Objective:** 8× execution capacity inside the existing container. **Priority:** HIGH.
-**Why:** at `claim(limit=1)`, 105 accounts require ~7h of flawless sequential execution — the SLA is
-unreachable by construction.
-
-Tasks: per-provider rate-limit semaphores (REQ-RATELIMIT-1 — **must land before concurrency**);
-`claim(limit=N)` + thread pool (REQ-PARALLEL-1); job lanes light/heavy/free-only (REQ-LANES-1);
-thread-safe Supabase clients and event-bus context.
-**Dependencies:** Phase 1 (do not parallelize a broken loop). **Metrics:** ≥6 concurrent jobs; no OOM at
-512MB; 429 rate unchanged or lower. **Effort:** 1–2 batches. **Risk if skipped:** hard ceiling at ~10 accounts.
-
-### PHASE 3 — "SCALE & LEARN"
-**Objective:** 20+ active accounts meeting SLA; system tunes itself from real data. **Priority:** HIGH.
-Tasks: 2nd Railway replica (REQ-SCALE-WORKERS) after chain-multiplication fix (REQ-CHAIN-1); replace the
-45-min heuristic with measured p75 stage durations; overhead reduction (REQ-OVERHEAD-2 — 97% of jobs are
-self-maintenance); paused-prep redesign (REQ-PREP-REDESIGN) + resume bridge (REQ-PREP-PROMOTE).
-**Metrics:** 20 accounts at ≥95% SLA; self-maintenance < 50% of jobs; ≥20 graded prep items/paused account.
-**Effort:** 2–3 batches. **Risk if skipped:** paused inventory stays worthless; costs scale linearly with accounts.
-
-### PHASE 4 — "MONETIZE & HARDEN"
-**Objective:** first revenue attributed to a published post. **Priority:** MEDIUM.
-Tasks: Stripe Connect payout automation (REQ-PAYOUT-1); revenue-per-account attribution feeding budget
-priority; SLA UI (REQ-SLA-UI); per-account monthly-cap surfacing (REQ-BUDGET-2); dead-code removal
-(REQ-DEADCODE-1); admin audit log; secret rotation policy.
-**Metrics:** ≥1 attributed conversion; budget priority ranked by realized revenue.
-**Effort:** 2 batches. **Risk if skipped:** the platform optimizes cost forever with no revenue signal.
-
-### PHASE 5 — "HUNDREDS OF BRANDS"
-**Objective:** the stated end-state. **Priority:** FUTURE — do not start before Phase 3 completes.
-Tasks: per-account queue partitioning + leases (REQ-ISOLATION-1); per-account circuit breakers; multi-region
-render capacity; automated brand onboarding; learned model-selection per niche.
-**Metrics:** 100+ accounts, ≥95% SLA, cost/post flat or falling as volume rises.
-**Risk if skipped:** none near-term — this is insurance against a problem you do not yet have.
+**One sentence:** the engine works end to end and has never published anything,
+because platform OAuth does not exist yet.
 
 ---
 
-## 12 · RISKS & RECOMMENDATIONS
+## 1. BLOCKED ON FOUNDER — no engineering can move these
 
-| # | Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|---|
-| R-1 | **Autonomous config narrows safety defaults** (arena_scout replaced a 5-rung ladder with 2) | **Occurred** | **Critical** | Merge-not-replace with a hardcoded floor; alert when the ladder shrinks below 3 rungs |
-| R-2 | Free tiers saturate as accounts scale — 429s become the norm | High | Critical | Paid escalation + per-provider token buckets + staggered scheduling |
-| R-3 | Concurrency multiplies spend faster than output | Medium | High | Budget checks inside each thread, never once per batch; per-account cap enforced pre-call |
-| R-4 | Observability lies (heartbeat staleness) hide real failures | Occurred | High | Fix write path; alert on `now − last_heartbeat > 3×interval`; post-deploy smoke check |
-| R-5 | Key-person dependency — one founder holds all deploys, keys, approvals | High | Critical | Document runbook; auto-approve rules reduce human-in-loop; consider a trusted second operator |
-| R-6 | Platform policy risk (IG/TikTok inauthentic-content enforcement) | Medium | High | Original scripts only (already policy); AI disclosure; conservative per-account posting cadence |
-| R-7 | Trademark collision with agentx.so blocks go-to-market | Medium | High | **Decide before any paid marketing** — REQ-TRADEMARK 🔵 |
-| R-8 | Publishing OAuth incomplete — approved content cannot post | High | Critical | Phase 1; one platform end-to-end before breadth |
-| R-9 | Prep inventory ages into staleness before resume | Medium | Medium | Decay classification + 30-day refresh on promote (DEC-032) |
-| R-10 | No staging environment; production is the test bed | High | Medium | Post-deploy smoke check asserting version + first job success |
-
-**Top recommendations, in order**
-1. **Ship the ladder floor merge first.** $0 cost, fixes the mechanism that caused total output failure, and prevents recurrence by any future autonomous agent.
-2. **Do not scale before one post publishes.** Every throughput improvement multiplies a loop that currently produces zero.
-3. **Measure cost-per-published-post from day one.** It is the only metric that makes the budget system's success legible; today its denominator is zero.
-4. **Resolve the trademark before marketing spend.** It is cheap now and expensive after brand equity accrues.
-5. **Treat autonomous self-modification as a risk class.** Arena scout narrowing the ladder is the first instance; any agent that writes config another agent depends on needs a floor and an alert.
+| ID | What | Why it matters |
+|---|---|---|
+| **REQ-PUB-TOKENS** | Publishing OAuth (IG / TikTok / YouTube) | **THE blocker.** `publish_in`/`publish_ti`/`publish_yo` run `dry-run`. Publisher is stuck at 1/10. Engagement data, the survival loop and pricing evidence are all gated on this. |
+| **REQ-KEYROTATE-1** | Rotate the Groq key exposed in a screenshot | Groq is the healthiest free rung (0 x 429). A leaked key is a live risk. |
+| **REQ-TOKEN-ROTATE-2** | Rotate the two `axmcp_` tokens pasted in chat | Settings -> MCP. |
+| **REQ-COMPETITORS** | Give 5-10 real handles (pets, skincare) | I cannot scrape Instagram — ToS, and it contradicts the honesty policy. Curated seeds beat a scraped list. |
 
 ---
 
-## 13 · EXECUTIVE SUMMARY
+## 2. AWAITING FOUNDER DECISION
 
-**Where the project stands.** Agent-X is a well-engineered platform that has never delivered its product.
-The infrastructure grades **7.5/10** — durable Postgres job queue with 99.93% success across 39,150 jobs,
-event sourcing, layered cost governance, RLS on 100% of tables, a CI gate, and a test suite built from real
-production incidents. The content pipeline grades **3.0/10** — 7,408 board items cleared, **zero published,
-all time**. Overall: **5.9/10 — an excellent engine with no output.**
+| ID | Question | Recommendation |
+|---|---|---|
+| **REQ-AGENT-PURPOSE** | `cto`, `strategist`, `planner`, `analyst` run and produce nothing measurable | Retire `cto` + `analyst`; give `planner` the format-mix job and `strategist` the niche-angle job |
+| **REQ-STUDIO-CONSOLE** | In-site manual creation console | AGAINST the broad version (rebuilds OpenArt, contradicts the autonomy moat). FOR a narrow "fix this draft" panel |
+| **REQ-TRADEMARK** | "Agent-X" vs agentx.so | Resolve before public marketing |
+| **REQ-MCP-CLAIMS** | Public description of MCP integration | Honest scope: reads the platform, queues/approves. Not "AI that runs your business" |
+| **REQ-HEYGEN** | Avatar video | NO — $1-5/min against a $2/day price; faceless needs no presenter |
 
-**Why.** Not architecture, not agents, not budget. The writer's fallback ladder ended at *"delay 30 minutes"*
-with no rung that escalates to a paid model — while $23.85 of a $25 monthly cap sat unused. Worse, the
-autonomous `arena_scout` agent had silently **replaced** the 5-rung free ladder with a 2-rung one; when
-Gemini rate-limited and the Groq key expired, free capacity hit exactly zero and the factory idled with a
-full wallet. One missing rung and one missing floor, sitting directly on the critical path, dragging a
-7.5-quality system to a 3.0 business result.
+---
 
-**What genuinely improved.** Nine prior findings verified closed this audit: RLS exposure 9 tables → 0;
-ideation churn ~517/day → 13/day; spend $6.70 → $1.15/day; the empty-topic fatal class eliminated; CI gate
-live; canonical schema restored; v5.9.5 deployed with SLA planning and monitoring confirmed populating real
-per-account state. The engineering discipline is working — the ledger, decision log and incident-derived
-tests are above the standard of most funded startups.
+## 3. SHIPPED BUT UNPROVEN — verify before building further
 
-**What it will take.** Phase 0 is one batch of work and produces the first published post. Phase 1 proves the
-loop repeats for two accounts. Phase 2 delivers ~8× throughput via threads inside the container you already
-pay for — no new infrastructure. Only then does scaling to 105 accounts become an engineering problem rather
-than a gamble. At full scale the economics hold comfortably: ~$135/month against a $2,625 theoretical cap —
-your binding constraint was never money, it was free-tier rate limits.
+Deployed and tested; NOT yet observed working on real content.
 
-**The one-line version.** *The company is one fallback rung away from having a product, and the fix costs
-nothing. Everything after that is throughput.*
+| ID | What | How to verify |
+|---|---|---|
+| **REQ-VISUALS-REAL** | Free keyless image rung before gradient fallback | Approve a reel; `settings.visuals_health.gradient_frames` must stay 0 and ledger must show `pollinations-free` |
+| **REQ-ART-SUBJECT** | Art Director names photographable scenes per niche | Watch for `art_start`, then real subjects in frame prompts |
+| **REQ-IDEOGRAM** | Ideogram endpoint implemented + `text_heavy` tier | Render a carousel; ledger should show `ideogram-v3` |
+| **REQ-RENDER-MEMORY** | zoompan 1296x2304 -> 1188x2112, ffmpeg `-threads 1` | A reel renders without the worker restarting |
+| **REQ-DUP-HOOK** | Hook and CTA spoken once | Listen to the next reel's opening and closing |
+| **REQ-REWRITE-NOT-REJECT** | Grader parks instead of discarding | `cqo_to_human` events appear; grader stops adding to `rejected` |
+| **REQ-JSON-REPAIR** | Near-valid model JSON repaired | Carousel writes stop failing on `Expecting value:` |
+| **REQ-MCP-EXACT-COUNTS** | Connector counts exact | Re-add connector, run `agentx_pipeline_state`; `jobs done` ~40,000+, not 987 |
 
-**Immediate next step:** approve Batch #2 (Phase 0). Verification query for whether your key updates already
-unblocked production is in §5 of `docs/ACTION-PLAN.md`.
+---
+
+## 4. OPEN ENGINEERING — priority order
+
+### Phase A — before a 5-day content run
+
+| ID | What | Size | Why now |
+|---|---|---|---|
+| **REQ-PUBLISH-HONESTY** | Stop marking items `published` when publish ran dry-run | 1 pt | The board lies today; every metric built on it is unreliable |
+| **REQ-LADDER-ORDER** | Promote Groq above Gemini in the free text ladder | 1 pt | Groq 0 x 429; Gemini 7 x 429 penalised; OpenRouter 30 x 429. Healthiest rung is not first |
+| **REQ-STORY-VERIFY** | Confirm `write_story` completes end to end | 1 pt | 7 story briefs created, no `story_done` observed |
+| **REQ-CAROUSEL-VERIFY** | Confirm carousel renders + uploads slides | 1 pt | One carousel failed on JSON; repair unproven |
+
+### Phase B — quality and learning
+
+| ID | What | Size |
+|---|---|---|
+| **REQ-SKILL-PROMPTS** | Adapt 3 public repos into `pipeline/skills/` (media playbooks -> `creative/`, humanizer -> `cqo/`, hooks -> `creative/`) | 3 pt |
+| **REQ-LEARN-1** | Replace the 45-min SLA heuristic with measured p75 | 2 pt |
+| **REQ-PREP-REDESIGN** | Paused-account prep: subordinate, capped, decay-classified, graded | 3 pt |
+| **REQ-PREP-PROMOTE** | On resume, promote banked prep into the live funnel | 2 pt |
+| **REQ-DEADCODE-1** | Delete `pipeline/agent/orchestrator.py` + legacy modules; refresh `docs/AGENTS_ROSTER.md` | 2 pt |
+
+### Phase C — scale (pointless below ~10 accounts)
+
+| ID | What | Size |
+|---|---|---|
+| **REQ-ISOLATION-1** | Per-account queues + leases | 5 pt |
+| **REQ-CIRCUIT-ACCT** | Per-account circuit breakers | 3 pt |
+| **REQ-SCALE-WORKERS** | 2nd Railway worker replica | 2 pt |
+| **REQ-RENDER-REGION** | Multi-region render capacity | 5 pt |
+| **REQ-ONBOARD-AUTO** | Automated brand onboarding | 5 pt |
+| **REQ-MODEL-NICHE** | Learned per-niche model selection | 3 pt |
+| **REQ-BUDGET-2** | Per-account monthly cap + spend bar in UI | 2 pt |
+| **REQ-SLA-UI** | SLA chips + prep filter in Studio | 2 pt |
+| **REQ-WEB-404** | `/dashboard/store`, `/digital`, `/affiliate` 404 | 1 pt |
+
+### Phase D — revenue
+
+| ID | What | Size |
+|---|---|---|
+| **REQ-PAYOUT-1** | Stripe Connect payout automation (50% affiliate) | 5 pt |
+| **REQ-SURVIVAL-1** | Close the economic loop: revenue -> account budget -> model tier -> pause. Automaton-style but honest: agents do not self-improve; the SYSTEM self-regulates | 8 pt |
+
+---
+
+## 5. STANDING RULES — do not drop
+
+1. **Ledger is append-only.** §1B request tracker, §2 decision log. Never rewrite.
+2. **Every response ends with an Instruction Verification Report** — nothing silently dropped.
+3. **Gates before packaging:** `py_compile` per module, `pytest` (270), `preflight.py`,
+   `boot_check.py`, isolated `tsc` for web. Red means do not ship.
+4. **`web/version.json` is the ONE version constant** — Python and web both read it.
+5. **A swallowed exception is a silent feature deletion.** Four production faults from
+   this pattern: gradient fallback logging `ok=True`; `_public_url` returning `None`;
+   the `_dt` NameError that disabled the entire content mix; `Priority.MEDIUM` that made
+   carousels impossible. When adding `try/except`, decide explicitly whether it must be loud.
+6. **Never claim self-improvement.** No weights change. Prompts, skills, memory lessons and
+   founder feedback improve — all measurable via `ops.scorecard`, which may return
+   "flat" or "regressing".

@@ -138,6 +138,7 @@ Business Impact · Engineering Impact · Completion Date · Notes.
 | REQ-NOTOPIC-2 | Recover a missing topic from the board instead of failing the job | P1 | ✅ | 1 | none | 1 pt | Medium — 8 jobs discarded over a value already stored | board_get fallback, prefix-stripped | 2026-07-24 | v5.11.17 |
 | REQ-JSON-REPAIR | Repair near-valid model JSON instead of discarding the generation | P1 | ✅ | 1 | none | 2 pt | High — a live carousel died on one character after a completed model call | Shared jsonx.loads_loose in all 4 parsers | 2026-07-24 | v5.11.18. DEC-069 |
 | REQ-MCP-EXACT-COUNTS | MCP counts saturated at exactly 1000 — jobs done reported 987 vs 40,554 actual | **P0** | ✅ | 1 | REQ-MCP-CONNECTOR | 2 pt | **Extreme — the connector is the ONLY diagnostic surface for users without DB access, and it under-reported by up to 41x** | Exact head counts; all 5 queries bounded | 2026-07-24 | v5.11.19. DEC-070 |
+| REQ-ROADMAP-REBUILD | Rebuild ROADMAP.md from the batch history; add HANDOFF-PROMPT.md | P1 | ✅ | — | none | 2 pt | High — the append-only request table had duplicate rows per ID and could no longer be trusted for status | Docs only | 2026-07-24 | v5.11.20 |
 | REQ-CIRCUIT-ACCT | Per-account circuit breakers | P3 | 🟡 | 5 | REQ-ISOLATION-1 | 8 pt | Medium at scale | Lane-scoped breakers | — | WSJF 1.8 |
 | REQ-RENDER-REGION | Multi-region render capacity | P3 | 🟡 | 5 | volume | 8 pt | Low now | Infra | — | WSJF 0.9 |
 | REQ-ONBOARD-AUTO | Automated brand onboarding | P3 | 🟡 | 5 | Phase 3 | 8 pt | High at 100+ brands | Self-serve flow | — | WSJF 1.9 |
