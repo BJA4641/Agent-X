@@ -94,7 +94,7 @@ function buildToolsList() {
   return {
     tools: [
       {
-        name: "agentx.queue_topic",
+        name: "agentx_queue_topic",
         description: "Queue a new topic for the Agent-X content crew. They will script, shoot, edit and hand a draft back for your approval. Use this whenever the user wants a new Reel/TikTok/Short made.",
         inputSchema: {
           type: "object",
@@ -106,7 +106,7 @@ function buildToolsList() {
         }
       },
       {
-        name: "agentx.list_feed",
+        name: "agentx_list_feed",
         description: "Show the latest agent activity feed — what your agents are working on right now (last N events).",
         inputSchema: {
           type: "object",
@@ -114,12 +114,12 @@ function buildToolsList() {
         }
       },
       {
-        name: "agentx.list_drafts",
+        name: "agentx_list_drafts",
         description: "List content drafts that are waiting for your approval (status=drafted). Approve or reject each from here.",
         inputSchema: { type: "object", properties: {} }
       },
       {
-        name: "agentx.approve_draft",
+        name: "agentx_approve_draft",
         description: "Approve a drafted item so it gets scheduled and published. Pass the item_id (from list_drafts).",
         inputSchema: {
           type: "object",
@@ -128,7 +128,7 @@ function buildToolsList() {
         }
       },
       {
-        name: "agentx.reject_draft",
+        name: "agentx_reject_draft",
         description: "Reject a drafted item. Agents won't publish it; optionally give a reason so they learn.",
         inputSchema: {
           type: "object",
@@ -140,17 +140,17 @@ function buildToolsList() {
         }
       },
       {
-        name: "agentx.wallet_status",
+        name: "agentx_wallet_status",
         description: "Check your current wallet balance and total spent.",
         inputSchema: { type: "object", properties: {} }
       },
       {
-        name: "agentx.projects_list",
+        name: "agentx_projects_list",
         description: "List your active projects / niches.",
         inputSchema: { type: "object", properties: {} }
       },
       {
-        name: "agentx.kill_switch",
+        name: "agentx_kill_switch",
         description: "Pause (true) or resume (false) ALL agents immediately.",
         inputSchema: {
           type: "object",
@@ -159,31 +159,53 @@ function buildToolsList() {
         }
       },
       {
-        name: "agentx.diagnostics",
+        name: "agentx_account_control",
+        description: "Pause or resume a single account, or set its daily budget / posts-per-day. Founder-approved write access (v5.10.7). Always report what changed.",
+        inputSchema: { type: "object", properties: {
+          handle: { type: "string", description: "account handle, e.g. puppy.parent" },
+          action: { type: "string", enum: ["pause", "resume", "status"] },
+          daily_budget_usd: { type: "number" },
+          posts_per_day: { type: "number" } }, required: ["handle"] },
+      },
+      {
+        name: "agentx_budget_control",
+        description: "Read or set the global daily budget and per-account monthly cap. Setting a budget is deliberate spend authorisation — echo the old and new values back.",
+        inputSchema: { type: "object", properties: {
+          daily_budget_usd: { type: "number" },
+          account_monthly_cap_usd: { type: "number" } } },
+      },
+      {
+        name: "agentx_retry_failed",
+        description: "Requeue failed or stuck jobs so they run again immediately (clears backoff). Optionally filter by job_type.",
+        inputSchema: { type: "object", properties: {
+          job_type: { type: "string" }, limit: { type: "number" } } },
+      },
+      {
+        name: "agentx_diagnostics",
         description: "One-shot health snapshot: worker version + heartbeat age, free-model ladder (usable/dropped rungs), last escalation verdict, cost per published post, and today's spend. Use this FIRST when something looks wrong.",
         inputSchema: { type: "object", properties: {} },
       },
       {
-        name: "agentx.failures",
+        name: "agentx_failures",
         description: "Recent failures with FULL error text: failed jobs and error/critical agent events. Use to find which agent broke and why.",
         inputSchema: { type: "object", properties: {
           limit: { type: "number", description: "max rows per category (default 15)" },
           agent: { type: "string", description: "optional: filter events to one agent, e.g. brain, cqo, cfo" } } },
       },
       {
-        name: "agentx.agent_chatter",
+        name: "agentx_agent_chatter",
         description: "The agent conversation log, optionally filtered by agent or action. This is what the agents 'say' to each other as they work.",
         inputSchema: { type: "object", properties: {
           limit: { type: "number" }, agent: { type: "string" },
           action: { type: "string" }, since_minutes: { type: "number" } } },
       },
       {
-        name: "agentx.pipeline_state",
+        name: "agentx_pipeline_state",
         description: "Where every board item and job currently sits — counts by status, plus what is queued and in flight. Answers 'why is nothing publishing'.",
         inputSchema: { type: "object", properties: {} },
       },
       {
-        name: "agentx.trends",
+        name: "agentx_trends",
         description: "Browse currently-trending content ideas across the web for your niche.",
         inputSchema: {
           type: "object",
@@ -199,10 +221,19 @@ function buildToolsList() {
 
 // ---------- tool handlers ----------
 async function runTool(name: string, params: any, userId: string) {
+  // v5.11.2 REQ-MCP-TOOLNAMES: Claude validates tool names against
+  // ^[a-zA-Z0-9_-]{1,64}$ — dots are NOT allowed. Every tool here shipped as
+  // "agentx.foo", so the connector authorised, loaded the tool list, and then
+  // the whole conversation was rejected with:
+  //   tools.305.FrontendRemoteMcpToolDefinition.name: String should match ...
+  // Canonical names are now "agentx_foo". Existing Desktop/Cursor configs that
+  // still send the dotted form keep working via this normalisation.
+  name = String(name || "").replace(/^agentx\./, "agentx_");
+
   const sb = supabaseAdmin();
   const TENANT = process.env.TENANT_ID || "me";
 
-  if (name === "agentx.queue_topic") {
+  if (name === "agentx_queue_topic") {
     const topic = String(params?.topic || "").trim();
     if (!topic) throw new Error("topic is required");
     const { data, error } = await sb.from("board_items").insert({
@@ -218,7 +249,7 @@ async function runTool(name: string, params: any, userId: string) {
     return { queued: true, item: data };
   }
 
-  if (name === "agentx.list_feed") {
+  if (name === "agentx_list_feed") {
     const limit = Math.min(Number(params?.limit) || 20, 100);
     const { data } = await sb.from("agent_events")
       .select("agent,action,message,status,cost_usd,created_at")
@@ -227,12 +258,12 @@ async function runTool(name: string, params: any, userId: string) {
     return { events: data || [] };
   }
 
-  if (name === "agentx.list_drafts") {
+  if (name === "agentx_list_drafts") {
     const { data } = await sb.from("board_items")
       .select("id,topic,status,created_at,payload")
       .eq("tenant_id", TENANT).eq("status", "drafted")
       .order("created_at", { ascending: false }).limit(25);
-    return { drafts: (data || []).map(d => ({
+    return { drafts: (data || []).map((d: any) => ({
         id: d.id, topic: d.topic, created_at: d.created_at,
         hook: d.payload?.script?.hook,
         video_url: d.payload?.video_url || null,
@@ -240,7 +271,7 @@ async function runTool(name: string, params: any, userId: string) {
     })) };
   }
 
-  if (name === "agentx.approve_draft") {
+  if (name === "agentx_approve_draft") {
     const id = await resolveItemId(sb, params?.item_id, TENANT, "drafted");
     const { error } = await sb.from("board_items").update({ status: "approved" }).eq("id", id);
     if (error) throw error;
@@ -251,7 +282,7 @@ async function runTool(name: string, params: any, userId: string) {
     return { approved: true, item_id: id };
   }
 
-  if (name === "agentx.reject_draft") {
+  if (name === "agentx_reject_draft") {
     const id = await resolveItemId(sb, params?.item_id, TENANT, "drafted");
     const reason = String(params?.reason || "Rejected via MCP.").slice(0, 400);
     const { error } = await sb.from("board_items").update({
@@ -266,20 +297,20 @@ async function runTool(name: string, params: any, userId: string) {
     return { rejected: true, item_id: id };
   }
 
-  if (name === "agentx.wallet_status") {
+  if (name === "agentx_wallet_status") {
     const { data } = await sb.from("wallets").select("balance_usd,lifetime_topup,lifetime_spent")
       .eq("user_id", userId).maybeSingle();
     return { wallet: data || { balance_usd: 0, lifetime_topup: 0, lifetime_spent: 0 } };
   }
 
-  if (name === "agentx.projects_list") {
+  if (name === "agentx_projects_list") {
     const { data } = await sb.from("projects")
       .select("id,name,niche,platforms,status,created_at")
       .eq("user_id", userId).eq("status", "active").order("created_at");
     return { projects: data || [] };
   }
 
-  if (name === "agentx.kill_switch") {
+  if (name === "agentx_kill_switch") {
     const on = Boolean(params?.on);
     const { error } = await sb.from("settings").upsert(
       { tenant_id: TENANT, key: "kill_switch", value: { on } },
@@ -288,7 +319,75 @@ async function runTool(name: string, params: any, userId: string) {
     return { kill_switch: on };
   }
 
-  if (name === "agentx.diagnostics") {
+  if (name === "agentx_account_control") {
+    const handle = String(params?.handle || "").replace(/^@/, "");
+    if (!handle) throw new Error("handle is required");
+    const { data: acct } = await sb.from("project_accounts")
+      .select("id,name,handle,status,paused,daily_budget_usd,posts_per_day")
+      .eq("handle", handle).maybeSingle();
+    if (!acct) throw new Error(`no account with handle ${handle}`);
+    const before = { ...(acct as any) };
+    const patch: any = {};
+    if (params?.action === "pause") { patch.paused = true; patch.status = "paused"; }
+    if (params?.action === "resume") { patch.paused = false; patch.status = "ready"; }
+    if (typeof params?.daily_budget_usd === "number") patch.daily_budget_usd = params.daily_budget_usd;
+    if (typeof params?.posts_per_day === "number") patch.posts_per_day = params.posts_per_day;
+    if (Object.keys(patch).length === 0) return { account: before, changed: false };
+    const { error } = await sb.from("project_accounts").update(patch).eq("id", (acct as any).id);
+    if (error) throw error;
+    await sb.from("agent_events").insert({
+      tenant_id: TENANT, agent: "human_desk", status: "info", action: "mcp_account_control",
+      message: `account ${handle} updated via MCP: ${JSON.stringify(patch)}`,
+    });
+    return { account: handle, before, changed: patch };
+  }
+
+  if (name === "agentx_budget_control") {
+    const out: any = {};
+    const readKey = async (k: string) => {
+      const { data } = await sb.from("settings").select("value").eq("tenant_id", TENANT)
+        .eq("key", k).maybeSingle();
+      return (data as any)?.value ?? null;
+    };
+    out.before = { daily_budget: await readKey("daily_budget"),
+                   account_monthly_budget: await readKey("account_monthly_budget") };
+    const writes: any = {};
+    if (typeof params?.daily_budget_usd === "number") {
+      await sb.from("settings").upsert(
+        { tenant_id: TENANT, key: "daily_budget", value: { usd: params.daily_budget_usd } },
+        { onConflict: "tenant_id,key" });
+      writes.daily_budget = params.daily_budget_usd;
+    }
+    if (typeof params?.account_monthly_cap_usd === "number") {
+      await sb.from("settings").upsert(
+        { tenant_id: TENANT, key: "account_monthly_budget",
+          value: { usd: params.account_monthly_cap_usd, note: "set via MCP" } },
+        { onConflict: "tenant_id,key" });
+      writes.account_monthly_cap = params.account_monthly_cap_usd;
+    }
+    out.changed = writes;
+    out.after = { daily_budget: await readKey("daily_budget"),
+                  account_monthly_budget: await readKey("account_monthly_budget") };
+    return out;
+  }
+
+  if (name === "agentx_retry_failed") {
+    const limit = Math.min(Number(params?.limit) || 20, 100);
+    let q = sb.from("jobs").select("id,job_type,status")
+      .in("status", ["failed", "queued"]).limit(limit);
+    if (params?.job_type) q = q.eq("job_type", String(params.job_type));
+    const { data: rows } = await q;
+    const ids = (rows || []).map((r: any) => r.id);
+    if (ids.length === 0) return { requeued: 0 };
+    const { error } = await sb.from("jobs")
+      .update({ status: "queued", scheduled_for: Math.floor(Date.now() / 1000),
+                claimed_at: null, error: "requeued via MCP" })
+      .in("id", ids);
+    if (error) throw error;
+    return { requeued: ids.length, job_types: [...new Set((rows || []).map((r: any) => r.job_type))] };
+  }
+
+  if (name === "agentx_diagnostics") {
     const out: any = {};
     const { data: wh } = await sb.from("worker_health").select("*");
     out.workers = (wh || []).map((r: any) => ({
@@ -311,7 +410,7 @@ async function runTool(name: string, params: any, userId: string) {
     return out;
   }
 
-  if (name === "agentx.failures") {
+  if (name === "agentx_failures") {
     const limit = Math.min(Number(params?.limit) || 15, 50);
     const jobsQ = sb.from("jobs").select("job_type,error,attempts,created_at")
       .eq("status", "failed").order("created_at", { ascending: false }).limit(limit);
@@ -333,7 +432,7 @@ async function runTool(name: string, params: any, userId: string) {
     };
   }
 
-  if (name === "agentx.agent_chatter") {
+  if (name === "agentx_agent_chatter") {
     const limit = Math.min(Number(params?.limit) || 50, 200);
     let q = sb.from("agent_events").select("agent,action,status,message,created_at,item_id,job_id")
       .order("created_at", { ascending: false }).limit(limit);
@@ -347,7 +446,7 @@ async function runTool(name: string, params: any, userId: string) {
     return { count: (data || []).length, events: data || [] };
   }
 
-  if (name === "agentx.pipeline_state") {
+  if (name === "agentx_pipeline_state") {
     const out: any = {};
     const { data: board } = await sb.from("board_items").select("status");
     const bc: Record<string, number> = {};
@@ -368,7 +467,7 @@ async function runTool(name: string, params: any, userId: string) {
     return out;
   }
 
-  if (name === "agentx.trends") {
+  if (name === "agentx_trends") {
     const limit = Math.min(Number(params?.limit) || 10, 30);
     let q = sb.from("trend_items").select("niche,platform,title,url,heat,engagement,published_at")
       .eq("tenant_id", TENANT).order("heat", { ascending: false });
@@ -483,4 +582,5 @@ async function handleSingle(body: JsonRpcReq, req: Request): Promise<JsonRpcRes>
   return { jsonrpc: "2.0", id, error: { code: JSONRPC_METHOD_NOT_FOUND, message: "Unknown method: " + body.method } };
 }
 
+export { handle };   // v5.11.1: re-used by the /api/mcp/<token> catch-all
 export { handle as GET, handle as POST, handle as OPTIONS };

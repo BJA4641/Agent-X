@@ -1,16 +1,21 @@
-AGENT-X v5.11.0 — THE STALE-DASHBOARD FIX
-=========================================
+AGENT-X v5.11.2 — CONNECTOR FIX
+===============================
 
-UPLOAD THESE 3 FILES:
+WHY YOU COULDN'T SEND MESSAGES:
+Claude requires MCP tool names to match ^[a-zA-Z0-9_-]{1,64}$ — no dots.
+All 16 of our tools were named "agentx.something". The connector authorised
+fine, then the tool list failed validation and blocked the whole chat.
+Renamed to "agentx_something". Nothing to do with what you wrote.
 
-  1. web/lib/supabase/server.ts                  <-- THE FIX. Stops Next.js
-                                                     caching database reads.
-  2. web/version.json                            <-- 5.11.0
-  3. pipeline/workers/departments/portfolio.py   <-- STILL MISSING from v5.10.7.
-                                                     This is what CI is red about.
+BEFORE UPLOADING: turn the Agent-X connector OFF in Claude settings so you can
+keep chatting. Turn it back on after Vercel finishes deploying.
 
-After Vercel redeploys, the banner should read:
-    web v5.11.0 · worker v5.11.0 · beat <60s
+5 FILES — keep these EXACT paths:
+  1. pipeline/workers/departments/portfolio.py   <-- STILL MISSING. CI is red.
+  2. web/app/api/mcp/route.ts                    <-- the tool-name fix
+  3. web/app/api/mcp/[...rest]/route.ts          <-- NEW FOLDER named [...rest]
+  4. web/lib/supabase/server.ts                  <-- no-cache fix
+  5. web/version.json                            <-- 5.11.2
 
-If it still shows an old worker version, hard-refresh once (Ctrl+Shift+R) —
-your browser may hold the old /api/version response.
+CONNECTOR URL (exact, nothing after /mcp, both OAuth boxes empty):
+  https://agent-x-two.vercel.app/api/mcp
