@@ -582,5 +582,12 @@ async function handleSingle(body: JsonRpcReq, req: Request): Promise<JsonRpcRes>
   return { jsonrpc: "2.0", id, error: { code: JSONRPC_METHOD_NOT_FOUND, message: "Unknown method: " + body.method } };
 }
 
-export { handle };   // v5.11.1: re-used by the /api/mcp/<token> catch-all
+// v5.11.3: `export { handle }` was here and BROKE EVERY VERCEL BUILD.
+// A Next.js route.ts may only export GET/HEAD/POST/PUT/DELETE/PATCH/OPTIONS and
+// the config keys (dynamic, revalidate, runtime, maxDuration, ...). Any other
+// named export fails type validation at build time, so four deployments errored
+// in a row and the tool-name fix never reached production — which is why the
+// connector kept rejecting the conversation with a name that was already fixed
+// in the repo. If the catch-all is ever wanted, move the handler into
+// web/lib/mcp/handler.ts and import it from both routes.
 export { handle as GET, handle as POST, handle as OPTIONS };

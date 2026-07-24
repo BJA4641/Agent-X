@@ -1,21 +1,26 @@
-AGENT-X v5.11.2 — CONNECTOR FIX
-===============================
+AGENT-X v5.11.3 — FIXES THE FAILING VERCEL BUILDS
+=================================================
 
-WHY YOU COULDN'T SEND MESSAGES:
-Claude requires MCP tool names to match ^[a-zA-Z0-9_-]{1,64}$ — no dots.
-All 16 of our tools were named "agentx.something". The connector authorised
-fine, then the tool list failed validation and blocked the whole chat.
-Renamed to "agentx_something". Nothing to do with what you wrote.
+WHY YOUR LAST 4 DEPLOYS ERRORED:
+I added `export { handle };` to web/app/api/mcp/route.ts in v5.11.1.
+Next.js only allows a route file to export GET/POST/OPTIONS and config keys.
+Any other export = build failure. So v5.11.2 (the tool-name fix) never went
+live, and the connector kept failing with the SAME error against fixed code.
 
-BEFORE UPLOADING: turn the Agent-X connector OFF in Claude settings so you can
-keep chatting. Turn it back on after Vercel finishes deploying.
+DO THIS, IN THIS ORDER:
 
-5 FILES — keep these EXACT paths:
-  1. pipeline/workers/departments/portfolio.py   <-- STILL MISSING. CI is red.
-  2. web/app/api/mcp/route.ts                    <-- the tool-name fix
-  3. web/app/api/mcp/[...rest]/route.ts          <-- NEW FOLDER named [...rest]
-  4. web/lib/supabase/server.ts                  <-- no-cache fix
-  5. web/version.json                            <-- 5.11.2
+  1. DELETE the folder:  web/app/api/mcp/[...rest]
+     (it holds a 1-byte junk file and is not needed)
 
-CONNECTOR URL (exact, nothing after /mcp, both OAuth boxes empty):
-  https://agent-x-two.vercel.app/api/mcp
+  2. UPLOAD these 2 files:
+       web/app/api/mcp/route.ts     <-- build fix + correct tool names
+       web/version.json             <-- 5.11.3
+
+  3. WATCH VERCEL until a deployment shows "Ready" (not "Error").
+
+  4. Refresh the dashboard. The banner must read:
+         web v5.11.3 · worker v5.11.3
+     If web still says 5.11.0, the build has not succeeded — do not connect yet.
+
+  5. ONLY THEN re-enable the Agent-X connector in Claude.
+     URL exactly: https://agent-x-two.vercel.app/api/mcp
