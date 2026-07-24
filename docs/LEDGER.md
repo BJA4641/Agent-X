@@ -133,6 +133,9 @@ Business Impact · Engineering Impact · Completion Date · Notes.
 | REQ-DUP-HOOK | Hook and CTA were narrated twice — beat 0 IS the hook beat | P1 | ✅ | 1 | none | 1 pt | High — founder-reported; every reel opened with a stutter and paid TTS for it | Dedupe by normalised line | 2026-07-24 | v5.11.16. DEC-068 |
 | REQ-LEGACY-GHOSTS | 4 retired legacy agents shown as permanently idle in the roster | P2 | ✅ | 1 | none | 1 pt | Medium — read as "4 agents are broken" when they had been replaced | Removed from AGENT_META | 2026-07-24 | v5.11.16 |
 | REQ-GRADE-WINDOW | Agent grades used all-time data including a retired architecture | P2 | ✅ | 1 | REQ-AGENT-SCORECARD | 1 pt | Medium — my own error: system graded 2/10 on errors that stopped 5 days ago | Grade on a 24h window | 2026-07-24 | v5.11.16 |
+| REQ-MIX-DT-BUG | `_dt` undefined in tick() — the ENTIRE format mix never ran | **P0** | ✅ | 1 | REQ-CONTENT-MIX | 1 pt | **Extreme — 0 carousels, 0 stories; my own v5.11.11 defect, live in production** | Module-level datetime import | 2026-07-24 | v5.11.17 |
+| REQ-PRIORITY-MEDIUM | Priority.MEDIUM does not exist — every carousel spawn raised AttributeError | **P0** | ✅ | 1 | none | 1 pt | **Extreme — zero carousels ever produced, silently** | Priority.NORMAL + a test scanning all spawn sites | 2026-07-24 | v5.11.17 |
+| REQ-NOTOPIC-2 | Recover a missing topic from the board instead of failing the job | P1 | ✅ | 1 | none | 1 pt | Medium — 8 jobs discarded over a value already stored | board_get fallback, prefix-stripped | 2026-07-24 | v5.11.17 |
 | REQ-CIRCUIT-ACCT | Per-account circuit breakers | P3 | 🟡 | 5 | REQ-ISOLATION-1 | 8 pt | Medium at scale | Lane-scoped breakers | — | WSJF 1.8 |
 | REQ-RENDER-REGION | Multi-region render capacity | P3 | 🟡 | 5 | volume | 8 pt | Low now | Infra | — | WSJF 0.9 |
 | REQ-ONBOARD-AUTO | Automated brand onboarding | P3 | 🟡 | 5 | Phase 3 | 8 pt | High at 100+ brands | Self-serve flow | — | WSJF 1.9 |

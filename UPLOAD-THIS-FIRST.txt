@@ -1,29 +1,25 @@
-AGENT-X v5.11.10 — RED BANNER + RENDER OOM
-==========================================
+AGENT-X v5.11.17 — TWO LIVE ERRORS, FIRING EVERY TICK
+=====================================================
 
-!! DO THIS FIRST — NO FILE UPLOAD NEEDED !!
+Found through the MCP connector (agentx_failures), not guesswork:
 
-  RAILWAY IS RUNNING v5.11.6. YOUR REPO IS AT v5.11.9.
-  Railway never rebuilt. Every pipeline fix since v5.11.6 is NOT deployed.
+  coo: "format mix skipped: name '_dt' is not defined"
+       -> my v5.11.11 bug. The ENTIRE content mix never ran.
+          This is why you still had 0 carousels and 0 stories.
 
-  Railway -> your Agent-X service -> Deployments -> Redeploy (latest commit)
+  coo: "carousel spawn skipped: Priority has no attribute 'MEDIUM'"
+       -> Priority.MEDIUM never existed. Every carousel spawn threw
+          and was swallowed by a try/except, so no carousel was EVER made.
 
-  That alone fixes half the red banner.
+Both were downgraded to warnings by their guards, which is why they ran
+unnoticed for hours.
 
-THEN upload these 9 files:
-  pipeline/agentcore/worker.py                    <-- heartbeat from claim loop
-  pipeline/workers/departments/ops.py             <-- VERSION_HINT
-  pipeline/agent/composer.py                      <-- OOM fix (zoompan surface)
-  pipeline/agent/visuals.py                       <-- real images, not gradients
-  pipeline/agent/grader.py
-  pipeline/workers/departments/art_director.py    <-- real scenes per niche
-  pipeline/workers/departments/editorial.py
+UPLOAD 4 FILES:
+  pipeline/workers/departments/portfolio.py   <-- both fixes
+  pipeline/workers/departments/creative.py    <-- topic recovery
   pipeline/tests/test_v5101_ratelimit.py
-  prompts/script_v3.md
-  web/version.json                                <-- 5.11.10
+  web/version.json                            <-- 5.11.17
 
-WHY THE BANNER LIED:
-  At 02:15 your worker had written a provider report 3 minutes earlier, but
-  worker_health had been frozen for 29 minutes. Liveness depended on a
-  background thread that is not running in the deployed build. It now beats
-  from the job claim loop — the one thing that must run for the worker to work.
+After deploy, expect within ~2 minutes:
+  coo: "🎛️ format mix for @puppy.parent: 1x carousel, 5x story"
+If you see that line, the mix is finally running.

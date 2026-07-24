@@ -17,6 +17,9 @@ MAX_INFLIGHT_PER_ACCOUNT = 2
 POSTS_PER_DAY_DEFAULT = 2
 # v5.11.14: 60s is fine for the tick itself, but it spawned a killswitch check
 # EVERY time (1,201/day). The check now runs on a slower multiple.
+import datetime as _dt          # v5.11.17: was imported LOCALLY in some functions
+                              # only, so tick() raised "name '_dt' is not defined"
+                              # and the ENTIRE format mix silently never ran.
 import os as _os_early
 TICK_SECONDS = int(_os_early.environ.get("TICK_SECONDS", "60"))
 KILLSWITCH_EVERY_N_TICKS = int(_os_early.environ.get("KILLSWITCH_EVERY_N_TICKS", "5"))
@@ -304,7 +307,10 @@ def _maybe_spawn_carousel(w, job, sb, bus, acct):
         datekey = time.strftime("%Y%m%d", today)
         j = Job(job_type="editorial.plan_carousel",
                 payload={"account_id": acct["id"], "project_id": acct.get("project_id")},
-                priority=Priority.MEDIUM, account_id=acct["id"],
+                # v5.11.17: Priority.MEDIUM has never existed. Every carousel
+                # spawn raised AttributeError and was swallowed by the guard —
+                # which is why zero carousels were ever produced.
+                priority=Priority.NORMAL, account_id=acct["id"],
                 project_id=acct.get("project_id"),
                 idempotency_key=f"carousel:{acct['id']}:{datekey}")
         w.queue.enqueue(j)

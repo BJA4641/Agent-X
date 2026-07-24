@@ -174,7 +174,34 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
     rewrite = int(job.payload.get("rewrite_attempt", 0))
 
     if not topic:
-        w.fail_job(job, "creative.write_script: no topic", fatal=True)
+        # v5.11.17 REQ-NOTOPIC-2 — recover before discarding.
+        #
+        # Eight jobs died on this line. The topic is spawned from two places:
+        # editorial.plan_one (which always sets it) and cqo's rewrite path,
+        # which falls back to `script.get("title")` and can end up with "".
+        # The item on the board still knows its own topic, so failing here threw
+        # away a claim over a value we already had.
+        recovered = ""
+        try:
+            if sb and item_id:
+                row = board_get(sb, item_id) or {}
+                recovered = (row.get("topic") or "").strip()
+                # strip the format prefix the board adds, e.g. "[carousel] x"
+                if recovered.startswith("["):
+                    recovered = recovered.split("]", 1)[-1].strip()
+                if not recovered:
+                    prev = ((row.get("payload") or {}).get("script") or {})
+                    recovered = (prev.get("title") or "").strip()
+        except Exception:
+            recovered = ""
+        if recovered:
+            topic = recovered
+            bus.agent("brain", f"🔁 topic was missing on the job — recovered "
+                               f"\"{topic[:60]}\" from the board instead of failing",
+                      "info", "topic_recovered", job_id=job.id, item_id=item_id)
+        else:
+            w.fail_job(job, "creative.write_script: no topic (and none on the board item)",
+                       fatal=True)
         return
 
     # v5.5 CEO GATE: ask CEO before spending any money

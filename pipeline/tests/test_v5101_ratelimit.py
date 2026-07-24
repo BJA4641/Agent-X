@@ -869,3 +869,49 @@ def test_distinct_beats_all_survive():
         "cta": "E."})
     for line in ("A.", "B.", "C.", "D.", "E."):
         assert line in out
+
+
+# ------------------------------------------------- v5.11.17 live-error fixes
+
+def test_datetime_is_module_level_in_portfolio():
+    """`_dt` was imported LOCALLY inside some functions, so tick() raised
+    "name '_dt' is not defined" and the ENTIRE format mix silently never ran —
+    which is why there were no carousels and no stories."""
+    import workers.departments.portfolio as pf
+    assert hasattr(pf, "_dt")
+    assert pf._dt.date.today() is not None
+
+
+def test_no_invalid_priority_members_anywhere():
+    """Priority.MEDIUM has never existed. Every carousel spawn raised
+    AttributeError and was swallowed by a guard."""
+    import os, re
+    from agentcore import Priority
+    valid = {a for a in dir(Priority) if a.isupper()}
+    here = os.path.dirname(os.path.abspath(__file__))
+    dept = os.path.normpath(os.path.join(here, "..", "workers", "departments"))
+    for fn in os.listdir(dept):
+        if not fn.endswith(".py"):
+            continue
+        body = open(os.path.join(dept, fn), encoding="utf-8").read()
+        for m in re.finditer(r"priority=Priority\.([A-Z_]+)", body):
+            assert m.group(1) in valid, f"{fn}: Priority.{m.group(1)} does not exist"
+
+
+def test_missing_topic_is_recovered_from_the_board():
+    """8 jobs died on a value the board already had."""
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr.write_script)
+    assert "topic_recovered" in src
+    assert "board_get(sb, item_id)" in src
+    i_rec = src.index("recovered = (row.get")
+    i_fail = src.index("fail_job(job, \"creative.write_script: no topic")
+    assert i_rec < i_fail, "recovery must be attempted BEFORE failing"
+
+
+def test_board_format_prefix_is_stripped_on_recovery():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr.write_script)
+    assert 'startswith("[")' in src, "topics like '[carousel] x' must lose the prefix"
