@@ -1,0 +1,17 @@
+AGENT-X v5.10.9 — CI FIX
+========================
+
+CI went red because ONE file from the v5.10.7 zip never uploaded.
+Everything else landed fine.
+
+UPLOAD THESE 4 FILES (exact paths, preserve folders):
+
+  1. pipeline/workers/departments/portfolio.py   <-- THE MISSING ONE. Fixes CI.
+  2. pipeline/preflight.py                       <-- new: names missing files in future
+  3. .github/workflows/test.yml                  <-- runs preflight before the tests
+  4. web/version.json                            <-- 5.10.9
+
+After uploading, CI should go green within ~30 seconds.
+
+If it goes red again, open the failed run and look at the "Preflight" step.
+It now prints exactly which file to re-upload, instead of cryptic test names.

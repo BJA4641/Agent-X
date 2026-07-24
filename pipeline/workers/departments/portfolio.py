@@ -23,6 +23,24 @@ IDEATE_COOLDOWN_S = int(_os.environ.get("IDEATE_COOLDOWN_S", "1800"))
 # demand governor (REQ-GOV-2). Must exceed STALE_IDEA_HOURS so the sweep gets
 # first attempt at rescuing it.
 INFLIGHT_MAX_AGE_H = int(_os.environ.get("INFLIGHT_MAX_AGE_H", "6"))
+# v5.10.7 REQ-BACKPRESSURE-1: an unapproved draft has produced ZERO business
+# value and has already cost money. Producing a twelfth draft while eleven wait
+# on a human is spend with no possible return. Production pauses until the queue
+# drains below this depth.
+MAX_AWAITING_APPROVAL = int(_os.environ.get("MAX_AWAITING_APPROVAL", "5"))
+
+
+def awaiting_approval(sb, account_id=None) -> int:
+    """Drafts sitting in the founder's approval queue."""
+    if sb is None:
+        return 0
+    try:
+        q = sb.table("board_items").select("id", count="exact").eq("status", "drafted")
+        if account_id:
+            q = q.eq("account_id", str(account_id))
+        return int(q.execute().count or 0)
+    except Exception:
+        return 0
 
 
 def _produced_today(sb, account_id) -> int:
@@ -140,6 +158,14 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
         # IDEATE_COOLDOWN_S window (windowed idempotency key makes floods
         # structurally impossible regardless of tick cadence).
         produced = _produced_today(sb, acct["id"])
+        waiting = awaiting_approval(sb, acct["id"])
+        if waiting >= MAX_AWAITING_APPROVAL:
+            bus.agent("coo", f"🧺 @{acct.get('handle','?')} has {waiting} draft(s) awaiting your "
+                             f"approval (cap {MAX_AWAITING_APPROVAL}) — pausing new production until "
+                             f"the queue drains. Nothing is lost; the drafts are ready when you are.",
+                      "warn", "backpressure", job_id=job.id, account_id=acct["id"])
+            touched.append(acct.get("handle"))
+            continue
         need = max(0, target - produced - inflight)
         if need > 0 and inflight < MAX_INFLIGHT_PER_ACCOUNT:
             bucket = int(time.time() // IDEATE_COOLDOWN_S)
