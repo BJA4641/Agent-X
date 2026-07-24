@@ -408,3 +408,41 @@ def test_grader_is_not_pinned_to_a_premium_model():
     src = inspect.getsource(grader)
     assert 'model="claude-sonnet-4-5"' not in src, "grading must not hard-pin a premium model"
     assert 'GRADER_TIER' in src
+
+
+# ------------------------------------------------- v5.11.5 REQ-TOPIC-DEDUPE
+
+def test_topic_normalisation_ignores_case_punctuation_emoji():
+    from workers.departments.editorial import _norm_topic
+    a = _norm_topic("Black Spots Gone Instantly!")
+    b = _norm_topic("black spots gone instantly")
+    assert a == b
+    c = _norm_topic("Who else has a VERY particular bed time routine? 🧖🏾‍♀️💕✨")
+    d = _norm_topic("who else has a very particular bed time routine")
+    assert c == d
+
+
+def test_duplicates_dropped_within_one_batch():
+    """5 drafts of 'Black Spots Gone Instantly!' reached the approval queue —
+    each a separate paid write and grade for the same idea."""
+    from workers.departments.editorial import _drop_recent_duplicates
+    out = _drop_recent_duplicates(None, "acct", [
+        ("Black Spots Gone Instantly!", "t"),
+        ("black spots gone instantly", "t"),
+        ("BLACK SPOTS GONE INSTANTLY", "t"),
+        ("A Genuinely New Topic", "t"),
+    ])
+    assert [t for t, _ in out] == ["Black Spots Gone Instantly!", "A Genuinely New Topic"]
+
+
+def test_dedupe_is_fail_safe_without_a_database():
+    from workers.departments.editorial import recent_topics, _drop_recent_duplicates
+    assert recent_topics(None, "acct") == set()
+    assert len(_drop_recent_duplicates(None, "acct", [("x", "t")])) == 1
+
+
+def test_dedupe_runs_before_planning_spends_money():
+    import inspect
+    from workers.departments import editorial as ed
+    src = inspect.getsource(ed.ideate)
+    assert src.index("_drop_recent_duplicates") < src.index("for topic, bucket in topics")

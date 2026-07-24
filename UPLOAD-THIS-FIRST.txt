@@ -1,30 +1,16 @@
-AGENT-X v5.11.4 — COSMETIC ONLY
-===============================
+AGENT-X v5.11.5 — DUPLICATES, REJECT REASONS, HONEST DRAFT COPY
+===============================================================
 
-YOUR CODE WAS ALREADY CORRECT. Verified against your live repo:
-  version.json .......... 5.11.3
-  MCP tool names ........ 16, ZERO dots, tools.0 = agentx_queue_topic
-  invalid exports ....... 0
-  [...rest] folder ...... deleted
+4 FILES:
+  pipeline/workers/departments/editorial.py   <-- topic dedupe (14-day window)
+  pipeline/tests/test_v5101_ratelimit.py      <-- 4 new tests
+  web/components/StudioBoard.tsx              <-- reject reasons + honest copy
+  web/version.json                            <-- 5.11.5
 
-The dots you saw were DOCUMENTATION TEXT on the Settings page
-(web/components/McpPanel.tsx) — never sent to Claude. Now corrected so it
-stops being misleading.
-
-THE REAL REMAINING STEP — Claude caches the tool list per connector:
-
-  1. Claude -> Settings -> Connectors
-  2. DELETE the Agent-X connector completely (do not just toggle it off)
-  3. Add custom connector:
-       Name: Agent-X
-       URL:  https://agent-x-two.vercel.app/api/mcp
-       Both OAuth boxes: EMPTY
-  4. Authorise when the sign-in page appears
-
-Deleting is what forces Claude to re-fetch the tool list. Toggling off/on
-reuses the cached (dotted) one, which is why the same error kept appearing.
-
-These 3 files are optional polish — upload whenever convenient:
-  web/app/api/mcp/route.ts
-  web/components/McpPanel.tsx
-  web/version.json
+WHAT CHANGES FOR YOU:
+  * No more 5 drafts of the same topic. Dedupe happens BEFORE any money
+    is spent writing them.
+  * Reject menu now includes "duplicate topic", "not my brand", "other".
+  * The misleading "No browser preview (worker had no Supabase storage)"
+    line is gone. It now says the truth: a draft is a SCRIPT, and the reel
+    renders after you approve it.

@@ -14,6 +14,7 @@ v5.3 FIXES:
     the active account isn't AI-related.
 """
 from __future__ import annotations
+import os
 import time
 from agentcore import Worker, Job, AgentContext, Priority, ledger as _l
 from ..common import (board_add, board_patch, brand_context_for,
@@ -119,6 +120,12 @@ def ideate(w: Worker, job: Job, ctx: AgentContext):
               "info", "ideate_start", job_id=job.id)
 
     topics = _pick_topics(target, account=account, account_id=account_id)
+    # v5.11.5 REQ-TOPIC-DEDUPE: the picker reads scouted trends, which keep
+    # returning the same headline day after day. That produced 5 drafts titled
+    # "Black Spots Gone Instantly!" and 3 of "Can Salish do her skincare in 1
+    # minute?" — each one a separate paid write, a separate grade, and a separate
+    # item in the founder's approval queue for the SAME idea.
+    topics = _drop_recent_duplicates(sb, account_id, topics)
     if not topics:
         bus.agent("strategist", "no topics chosen — standing down this tick",
                   "warn", "ideate_empty", job_id=job.id)
@@ -320,3 +327,47 @@ def _niche_evergreens(niche: str) -> list:
         "The AI setting everyone should turn off",
         "The hidden AI button that does the work for you",
     ]
+
+
+TOPIC_DEDUPE_DAYS = int(os.environ.get("TOPIC_DEDUPE_DAYS", "14"))
+
+
+def _norm_topic(t: str) -> str:
+    """Loose match: case, punctuation and emoji should not defeat dedupe."""
+    import re as _re
+    return _re.sub(r"[^a-z0-9 ]+", "", (t or "").lower()).strip()[:120]
+
+
+def recent_topics(sb, account_id, days: int = None) -> set:
+    """Topics this account already has on the board within the window."""
+    if sb is None:
+        return set()
+    days = days or TOPIC_DEDUPE_DAYS
+    try:
+        import datetime as _dt
+        since = (_dt.datetime.utcnow() - _dt.timedelta(days=days)).isoformat() + "Z"
+        q = (sb.table("board_items").select("topic")
+             .gte("created_at", since).limit(500))
+        if account_id:
+            q = q.eq("account_id", str(account_id))
+        rows = q.execute().data or []
+        return {_norm_topic(r.get("topic") or "") for r in rows if r.get("topic")}
+    except Exception:
+        return set()
+
+
+def _drop_recent_duplicates(sb, account_id, topics: list) -> list:
+    """Filter (topic, bucket) pairs against the board AND against each other."""
+    seen = recent_topics(sb, account_id)
+    out = []
+    for pair in topics or []:
+        try:
+            topic = pair[0]
+        except Exception:
+            continue
+        key = _norm_topic(topic)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(pair)
+    return out

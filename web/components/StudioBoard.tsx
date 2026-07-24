@@ -16,7 +16,12 @@ export default function StudioBoard({ items, killOn, softOn, econOn }: { items: 
   const [econ, setEcon] = useState(!!econOn);
   const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
-  const REASONS = ["weak hook", "boring visuals", "off topic", "too generic", "wrong tone"];
+  // v5.11.5 REQ-REJECT-REASONS: "duplicate" and "other" were missing, so the
+  // founder had no honest way to reject 7 repeats of the same topic — and every
+  // reason chosen is fed back to the writer as a lesson, meaning a wrong reason
+  // actively teaches the wrong thing.
+  const REASONS = ["duplicate topic", "weak hook", "boring visuals", "off topic",
+                   "too generic", "wrong tone", "not my brand", "other"];
 
   function copyFor(it: Item, platform: "instagram" | "tiktok" | "youtube") {
     const caps = it.payload?.captions || {};
@@ -135,7 +140,16 @@ export default function StudioBoard({ items, killOn, softOn, econOn }: { items: 
                     </div>
                   )}
                   {it.status === "drafted" && !it.payload?.video_url && (
-                    <p className="note">No browser preview (worker had no Supabase storage) — check the file on the worker before approving.</p>
+                    /* v5.11.5 REQ-DRAFT-COPY: this used to read "No browser preview
+                       (worker had no Supabase storage)", which implied a storage
+                       failure. Nothing is broken — a DRAFTED item is a script, and
+                       the video is only rendered AFTER approval. The old wording
+                       made a healthy pipeline look faulty. */
+                    <p className="note">
+                      📝 Script ready — no video yet. Approve and the reel renders
+                      (voice, frames, cuts); it appears here when finished. Read the
+                      hook and caption below to decide.
+                    </p>
                   )}
                   {it.payload?.captions?.instagram && ["drafted", "approved", "scheduled"].includes(it.status) && (
                     <div style={{ marginTop: 10 }}>
