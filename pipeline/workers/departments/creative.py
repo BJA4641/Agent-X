@@ -571,13 +571,40 @@ def _hook_word(text: str) -> str:
         return "WATCH"
 
 
+def _norm_line(t: str) -> str:
+    """Loose comparison key — punctuation and case must not defeat dedupe."""
+    import re as _re
+    return _re.sub(r"[^a-z0-9 ]+", "", (t or "").lower()).strip()
+
+
 def _assemble_narration(script: dict) -> str:
-    parts = [script.get("hook") or ""]
+    """v5.11.16 REQ-DUP-HOOK — the hook was being SPOKEN TWICE.
+
+    The founder watched the first three reels and asked why the intro and
+    closing line repeat "as if intended". Cause: the writer prompt defines
+    beat 0 as the hook beat and the last beat as the CTA beat, so the hook text
+    lives BOTH in script["hook"] AND in beats[0]["voiceover"]. This function
+    prepended the hook and then looped every beat including beat 0 — and did
+    the same at the end with the CTA. Every reel opened and closed with a
+    stutter, and it cost real ElevenLabs seconds to say each line twice.
+    """
+    hook = (script.get("hook") or "").strip()
+    cta = (script.get("cta") or "Follow for more.").strip()
+    parts = [hook] if hook else []
+    seen = {_norm_line(hook)} if hook else set()
+
     for b in (script.get("beats") or []):
-        t = b.get("voiceover") or b.get("text") or ""
-        if t:
-            parts.append(t)
-    parts.append(script.get("cta") or "Follow for more.")
+        t = (b.get("voiceover") or b.get("text") or "").strip()
+        if not t:
+            continue
+        key = _norm_line(t)
+        if not key or key in seen:
+            continue          # beat 0 duplicates the hook; the CTA beat repeats the CTA
+        parts.append(t)
+        seen.add(key)
+
+    if _norm_line(cta) not in seen:
+        parts.append(cta)
     return " ".join(p for p in parts if p).strip()
 
 

@@ -19,11 +19,9 @@ const DEMO_EVENTS: Evt[] = [
 const AGENT_META: Record<string,{label:string;color:string;emoji:string}> = {
   system:      { label: "System",     color: "#94a3b8", emoji: "⚙️" },
   scout:       { label: "Scout",      color: "#f97316", emoji: "🔭" },
-  research:    { label: "Researcher", color: "#06b6d4", emoji: "🔎" },
   architect:   { label: "Architect",  color: "#a78bfa", emoji: "🏛️" },
   strategist:  { label: "Strategist", color: "#eab308", emoji: "📋" },
   planner:     { label: "Planner",    color: "#a78bfa", emoji: "📅" },
-  strategy:    { label: "Planner",    color: "#a78bfa", emoji: "🧠" },
   brain:       { label: "Writer",     color: "#60a5fa", emoji: "✍️" },
   visuals:     { label: "Visuals",    color: "#ec4899", emoji: "🎨" },
   voice:       { label: "Voice",      color: "#34d399", emoji: "🎙️" },
@@ -33,9 +31,7 @@ const AGENT_META: Record<string,{label:string;color:string;emoji:string}> = {
   seo:         { label: "SEO",        color: "#8b5cf6", emoji: "🔖" },
   publisher:   { label: "Publisher",  color: "#10b981", emoji: "📤" },
   analyst:     { label: "Analytics",  color: "#f472b6", emoji: "📊" },
-  community:   { label: "Community",  color: "#14b8a6", emoji: "💬" },
   digest:      { label: "Digest",     color: "#94a3b8", emoji: "📬" },
-  budget:      { label: "Budget",     color: "#eab308", emoji: "💰" },
   you:         { label: "You",        color: "#e2e8f0", emoji: "👤" },
 };
 
@@ -134,6 +130,11 @@ export default function WorkspacePage() {
   // mark the ones that have not spoken recently as idle, which is the honest
   // picture: they are registered and waiting for work, not missing.
   const seen = new Set(events.map(e=>e.agent));
+  // v5.11.16: `research`, `strategy`, `community` and `budget` were LEGACY agent
+  // names from pipeline/agent/orchestrator.py, retired 2026-07-19 when the v5
+  // architecture took over. They kept appearing in the roster as permanently
+  // idle, which read as "four agents are broken" when they had simply been
+  // replaced — by scout, strategist, human_desk and cfo respectively.
   const roster = Object.keys(AGENT_META).filter(a => a !== "you" && a !== "digest");
   const agents = [...Array.from(seen), ...roster.filter(a => !seen.has(a))];
   const shown = filter === "all" ? events : events.filter(e=>e.agent===filter);

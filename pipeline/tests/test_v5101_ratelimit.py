@@ -827,3 +827,45 @@ def test_founder_reject_reason_reaches_memory():
     src = inspect.getsource(hd)
     assert "REASON:" in src
     assert "rejection" in src and "reason" in src
+
+
+# ------------------------------------------------- v5.11.16 REQ-DUP-HOOK
+
+def test_hook_is_never_spoken_twice():
+    """The writer prompt makes beat 0 the hook beat, so the hook lived in BOTH
+    script["hook"] and beats[0]["voiceover"]. Every reel opened with a stutter
+    and paid ElevenLabs to say the line twice."""
+    from workers.departments.creative import _assemble_narration
+    out = _assemble_narration({
+        "hook": "Most smart feeders starve puppies.",
+        "beats": [{"voiceover": "Most smart feeders starve puppies."},
+                  {"voiceover": "Check the portion dial first."}],
+        "cta": "Follow for more."})
+    assert out.count("Most smart feeders") == 1
+
+
+def test_cta_is_never_spoken_twice():
+    from workers.departments.creative import _assemble_narration
+    out = _assemble_narration({
+        "hook": "Stop.", "beats": [{"voiceover": "Follow for more."}],
+        "cta": "Follow for more."})
+    assert out.count("Follow for more") == 1
+
+
+def test_dedupe_ignores_case_and_punctuation():
+    from workers.departments.creative import _assemble_narration
+    out = _assemble_narration({
+        "hook": "Stop scrolling!",
+        "beats": [{"voiceover": "stop scrolling"}, {"voiceover": "Real content."}],
+        "cta": "Save this."})
+    assert out.lower().count("stop scrolling") == 1
+    assert "Real content." in out
+
+
+def test_distinct_beats_all_survive():
+    from workers.departments.creative import _assemble_narration
+    out = _assemble_narration({
+        "hook": "A.", "beats": [{"voiceover": "B."}, {"voiceover": "C."}, {"voiceover": "D."}],
+        "cta": "E."})
+    for line in ("A.", "B.", "C.", "D.", "E."):
+        assert line in out
