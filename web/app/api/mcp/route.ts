@@ -10,15 +10,25 @@
  * Transport: HTTP+JSON (Streamable HTTP variant, simplest to host on Vercel).
  *
  * Tools exposed:
- *   - agentx.queue_topic    { topic: string, project?: string }
- *   - agentx.list_feed      { limit?: number }
- *   - agentx.list_drafts    {}
- *   - agentx.approve_draft  { item_id: string }
- *   - agentx.reject_draft   { item_id: string, reason?: string }
- *   - agentx.wallet_status  {}
- *   - agentx.projects_list  {}
- *   - agentx.kill_switch    { on: boolean }
- *   - agentx.trends         { niche?: string, limit?: number }
+ *   - agentx_queue_topic    { topic: string, project?: string }
+ *   - agentx_list_feed      { limit?: number }
+ *   - agentx_list_drafts    {}
+ *   - agentx_approve_draft  { item_id: string }
+ *   - agentx_reject_draft   { item_id: string, reason?: string }
+ *   - agentx_wallet_status  {}
+ *   - agentx_projects_list  {}
+ *   - agentx_kill_switch    { on: boolean }
+ *   - agentx_trends         { niche?: string, limit?: number }
+ *   - agentx_diagnostics    {}   health, ladder, escalation, spend in one call
+ *   - agentx_failures       { limit?, agent? }   full untruncated errors
+ *   - agentx_agent_chatter  { limit?, agent?, action?, since_minutes? }
+ *   - agentx_pipeline_state {}   board + job counts, queued by type
+ *   - agentx_account_control{ handle, action?, daily_budget_usd?, posts_per_day? }
+ *   - agentx_budget_control { daily_budget_usd?, account_monthly_cap_usd? }
+ *   - agentx_retry_failed   { job_type?, limit? }
+ *
+ * NOTE: names use UNDERSCORES. Claude validates remote tool names against
+ * ^[a-zA-Z0-9_-]{1,64}$ — a dot rejects the ENTIRE conversation (v5.11.2).
  *
  * This endpoint is intentionally permissive (CORS * on POST) so MCP clients
  * work; but every action is scoped to the user who owns the token.

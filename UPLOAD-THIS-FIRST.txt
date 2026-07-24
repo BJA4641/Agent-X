@@ -1,26 +1,30 @@
-AGENT-X v5.11.3 — FIXES THE FAILING VERCEL BUILDS
-=================================================
+AGENT-X v5.11.4 — COSMETIC ONLY
+===============================
 
-WHY YOUR LAST 4 DEPLOYS ERRORED:
-I added `export { handle };` to web/app/api/mcp/route.ts in v5.11.1.
-Next.js only allows a route file to export GET/POST/OPTIONS and config keys.
-Any other export = build failure. So v5.11.2 (the tool-name fix) never went
-live, and the connector kept failing with the SAME error against fixed code.
+YOUR CODE WAS ALREADY CORRECT. Verified against your live repo:
+  version.json .......... 5.11.3
+  MCP tool names ........ 16, ZERO dots, tools.0 = agentx_queue_topic
+  invalid exports ....... 0
+  [...rest] folder ...... deleted
 
-DO THIS, IN THIS ORDER:
+The dots you saw were DOCUMENTATION TEXT on the Settings page
+(web/components/McpPanel.tsx) — never sent to Claude. Now corrected so it
+stops being misleading.
 
-  1. DELETE the folder:  web/app/api/mcp/[...rest]
-     (it holds a 1-byte junk file and is not needed)
+THE REAL REMAINING STEP — Claude caches the tool list per connector:
 
-  2. UPLOAD these 2 files:
-       web/app/api/mcp/route.ts     <-- build fix + correct tool names
-       web/version.json             <-- 5.11.3
+  1. Claude -> Settings -> Connectors
+  2. DELETE the Agent-X connector completely (do not just toggle it off)
+  3. Add custom connector:
+       Name: Agent-X
+       URL:  https://agent-x-two.vercel.app/api/mcp
+       Both OAuth boxes: EMPTY
+  4. Authorise when the sign-in page appears
 
-  3. WATCH VERCEL until a deployment shows "Ready" (not "Error").
+Deleting is what forces Claude to re-fetch the tool list. Toggling off/on
+reuses the cached (dotted) one, which is why the same error kept appearing.
 
-  4. Refresh the dashboard. The banner must read:
-         web v5.11.3 · worker v5.11.3
-     If web still says 5.11.0, the build has not succeeded — do not connect yet.
-
-  5. ONLY THEN re-enable the Agent-X connector in Claude.
-     URL exactly: https://agent-x-two.vercel.app/api/mcp
+These 3 files are optional polish — upload whenever convenient:
+  web/app/api/mcp/route.ts
+  web/components/McpPanel.tsx
+  web/version.json

@@ -114,13 +114,13 @@ export default function McpPanel() {
 
       <h3 style={{ marginTop: 24 }}>Tools exposed to Claude</h3>
       <ul style={{ fontSize: 13, lineHeight: 1.6, maxWidth: 720 }}>
-        <li><b>agentx.queue_topic</b> — queue a new Reel/Short</li>
-        <li><b>agentx.list_drafts / approve_draft / reject_draft</b> — manage your approval queue</li>
-        <li><b>agentx.list_feed</b> — latest agent activity</li>
-        <li><b>agentx.wallet_status</b> — check balance/spend</li>
-        <li><b>agentx.projects_list</b> — your active niches</li>
-        <li><b>agentx.kill_switch</b> — pause / resume agents</li>
-        <li><b>agentx.trends</b> — trending content in your niche</li>
+        <li><b>agentx_queue_topic</b> — queue a new Reel/Short</li>
+        <li><b>agentx_list_drafts / approve_draft / reject_draft</b> — manage your approval queue</li>
+        <li><b>agentx_list_feed</b> — latest agent activity</li>
+        <li><b>agentx_wallet_status</b> — check balance/spend</li>
+        <li><b>agentx_projects_list</b> — your active niches</li>
+        <li><b>agentx_kill_switch</b> — pause / resume agents</li>
+        <li><b>agentx_trends</b> — trending content in your niche</li>
       </ul>
     </div>
   );
