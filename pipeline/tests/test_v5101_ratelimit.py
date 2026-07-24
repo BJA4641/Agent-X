@@ -622,3 +622,53 @@ def test_ffmpeg_thread_count_is_capped():
     from agent import composer
     src = inspect.getsource(composer._run)
     assert "-threads" in src, "each ffmpeg thread allocates its own frame buffers"
+
+
+# ------------------------------------------------- v5.11.11 REQ-CONTENT-MIX
+
+def test_daily_mix_matches_the_founders_spec():
+    """3 reels for one account, 0 for the other, 0 carousels, 0 stories —
+    because ideation only ever spawned the reel path."""
+    from workers.departments.portfolio import DAILY_FORMAT_MIX
+    assert DAILY_FORMAT_MIX["reel"] >= 1
+    assert DAILY_FORMAT_MIX["carousel"] >= 1
+    assert DAILY_FORMAT_MIX["story"] >= 5
+
+
+def test_formats_needed_subtracts_what_exists():
+    from workers.departments.portfolio import formats_needed
+    assert formats_needed(None, "a", produced={}) == {"reel": 1, "carousel": 1, "story": 5}
+    assert "reel" not in formats_needed(None, "a", produced={"reel": 3})
+    assert formats_needed(None, "a", produced={"reel": 1, "carousel": 1, "story": 5}) == {}
+
+
+def test_every_format_has_a_handler():
+    from workers.departments.portfolio import DAILY_FORMAT_MIX, FORMAT_JOB
+    from workers.departments import register_all
+    class _W:
+        def __init__(self): self.h = {}
+        def register(self, t, f): self.h[t] = f
+    w = _W(); register_all(w)
+    for fmt in DAILY_FORMAT_MIX:
+        assert FORMAT_JOB[fmt] in w.h, f"{fmt} has no handler"
+
+
+def test_story_path_is_light_and_free():
+    """A story must never enter the heavy lane or escalate to a paid model —
+    its whole purpose is cheap daily volume."""
+    import inspect
+    from agentcore.worker import lane_for
+    from workers.departments import creative as cr
+    assert lane_for("creative.write_story") == "light"
+    src = inspect.getsource(cr.write_story)
+    assert "free_chat" in src
+    # check for CALLS, not prose — the docstring legitimately says "never escalate"
+    for banned in ("force_paid=", "llm.chat(", "_escalate_to_paid("):
+        assert banned not in src, f"story path must stay free, found {banned!r}"
+
+
+def test_mix_is_spawned_before_the_reel_path():
+    import inspect
+    from workers.departments import portfolio as pf
+    src = inspect.getsource(pf.tick)
+    assert src.index("formats_needed(") < src.index("need = max(0, target")

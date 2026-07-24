@@ -29,6 +29,63 @@ INFLIGHT_MAX_AGE_H = int(_os.environ.get("INFLIGHT_MAX_AGE_H", "6"))
 # drains below this depth.
 MAX_AWAITING_APPROVAL = int(_os.environ.get("MAX_AWAITING_APPROVAL", "5"))
 
+# v5.11.11 REQ-CONTENT-MIX — a real account does not post one format.
+#
+# Observed 2026-07-24: three reels for @puppy.parent, zero for @glowup.daily,
+# zero carousels and zero stories — because ideation only ever spawned the reel
+# path. A working brand day is a MIX, and the cheap formats carry the volume:
+# a carousel is ~$0.015 and a story ~$0.003, against ~$0.02-0.10 for a reel.
+#
+# Format -> how many per account per day. Env-tunable; set any to 0 to disable.
+DAILY_FORMAT_MIX = {
+    "reel":     int(_os.environ.get("MIX_REEL", "1")),
+    "carousel": int(_os.environ.get("MIX_CAROUSEL", "1")),
+    "story":    int(_os.environ.get("MIX_STORY", "5")),
+}
+FORMAT_JOB = {
+    "reel": "editorial.plan_one",
+    "carousel": "editorial.plan_carousel",
+    "story": "editorial.plan_story",
+}
+
+
+def formats_needed(sb, account_id, mix: dict = None, produced: dict = None) -> dict:
+    """How many of each format this account still owes TODAY.
+
+    Pure enough to test: pass `produced` to skip the DB entirely.
+    """
+    mix = mix or DAILY_FORMAT_MIX
+    if produced is None:
+        produced = produced_by_format_today(sb, account_id)
+    need = {}
+    for fmt, target in mix.items():
+        got = int(produced.get(fmt) or 0)
+        if target > got:
+            need[fmt] = target - got
+    return need
+
+
+def produced_by_format_today(sb, account_id) -> dict:
+    """Count board items created today per format for this account."""
+    out = {}
+    if sb is None:
+        return out
+    try:
+        import datetime as _dt2
+        start = _dt2.datetime.utcnow().replace(hour=0, minute=0, second=0,
+                                               microsecond=0).isoformat() + "Z"
+        rows = (sb.table("board_items").select("payload,topic")
+                .eq("account_id", str(account_id))
+                .gte("created_at", start).limit(300).execute().data) or []
+        for r in rows:
+            fmt = ((r.get("payload") or {}).get("format")
+                   or ("carousel" if str(r.get("topic", "")).startswith("[carousel]") else
+                       "story" if str(r.get("topic", "")).startswith("[story]") else "reel"))
+            out[fmt] = int(out.get(fmt) or 0) + 1
+    except Exception:
+        pass
+    return out
+
 
 def awaiting_approval(sb, account_id=None) -> int:
     """Drafts sitting in the founder's approval queue."""
@@ -166,6 +223,31 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
                       "warn", "backpressure", job_id=job.id, account_id=acct["id"])
             touched.append(acct.get("handle"))
             continue
+        # v5.11.11 REQ-CONTENT-MIX: fill the cheap formats first. Stories and
+        # carousels do not touch ffmpeg, so they keep an account posting daily
+        # even while a reel is queued behind the heavy lane.
+        try:
+            owed = formats_needed(sb, acct["id"])
+            for fmt, count in owed.items():
+                if fmt == "reel":
+                    continue                      # the reel path is handled below
+                jt = FORMAT_JOB.get(fmt)
+                if not jt:
+                    continue
+                for k in range(min(count, 5)):
+                    job_of(w, jt, {"account_id": acct["id"]},
+                           parent=job, account_id=acct["id"],
+                           project_id=acct.get("project_id"),
+                           priority=Priority.NORMAL,
+                           idempotency_key=f"mix:{acct['id']}:{fmt}:{k}:{_dt.date.today()}")
+            if owed:
+                bus.agent("coo", f"🎛️ format mix for @{acct.get('handle','?')}: "
+                                 + ", ".join(f"{v}x {k}" for k, v in owed.items()),
+                          "info", "format_mix", job_id=job.id, account_id=acct["id"])
+        except Exception as e:
+            bus.agent("coo", f"format mix skipped: {str(e)[:90]}", "warn",
+                      "format_mix_err", job_id=job.id)
+
         need = max(0, target - produced - inflight)
         if need > 0 and inflight < MAX_INFLIGHT_PER_ACCOUNT:
             bucket = int(time.time() // IDEATE_COOLDOWN_S)

@@ -16,6 +16,7 @@ from ..common import (board_patch_payload, board_get, OUTPUT_DIR,
 def register(w: Worker):
     w.register("creative.write_script", write_script)
     w.register("creative.render",       render)
+    w.register("creative.write_story",  write_story)   # v5.11.11 REQ-CONTENT-MIX
     w.register("creative.render_video", render_video)
     w.register("creative.write_carousel",  write_carousel)
     w.register("creative.render_carousel", render_carousel)
@@ -1057,3 +1058,69 @@ def _render_attempt_guard(ctx, job):
                          f"the previous attempt did not finish.",
                   "warn", "render_retry", job_id=job.id, item_id=item_id)
     return True
+
+
+def write_story(w: Worker, job: Job, ctx: AgentContext):
+    """v5.11.11 — a single vertical image + one line of text. No TTS, no ffmpeg.
+
+    Deliberately the cheapest path in the system: it must never escalate to a
+    paid model and must never enter the heavy render lane, because its purpose
+    is daily volume, not production value.
+    """
+    bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
+    item_id = job.payload.get("item_id")
+    account_id = job.account_id or job.payload.get("account_id")
+    topic = (job.payload.get("topic") or "").strip()
+    if not topic:
+        w.fail_job(job, "write_story: no topic", fatal=True)
+        return
+
+    line, caption = topic[:90], topic
+    try:
+        from agentcore.council import free_chat
+        out, _c, _l = free_chat(
+            f"Write ONE short line of on-image text for a social story about: {topic}\n"
+            "Max 9 words. No hashtags, no emoji, no quotes. Then a newline, then a "
+            "1-sentence caption. Return exactly two lines, nothing else.",
+            max_tokens=80)
+        parts = [p.strip() for p in (out or "").strip().splitlines() if p.strip()]
+        if parts:
+            line = parts[0][:90]
+            caption = (parts[1] if len(parts) > 1 else parts[0])[:220]
+    except Exception:
+        pass          # free-only by design; the topic itself is a usable fallback
+
+    img_path = None
+    try:
+        from agent import visuals as _v
+        out_dir = OUTPUT_DIR
+        img_path = os.path.join(out_dir, f"{str(item_id)[:8]}_story.jpg")
+        _v.hook_poster_frame(line, img_path, item_id=item_id,
+                             style=job.payload.get("style", "cinemagraph"))
+    except Exception as e:
+        bus.agent("visuals", f"story image failed ({str(e)[:80]}) — text-only story",
+                  "warn", "story_image_fail", job_id=job.id, item_id=item_id)
+
+    url = None
+    if sb and img_path and os.path.exists(img_path):
+        try:
+            from agent import delivery as _dl
+            url = _dl.upload_images(sb, [img_path], item_id)
+            url = url[0] if url else None
+        except Exception:
+            url = None
+
+    if sb and item_id:
+        try:
+            board_patch_payload(sb, item_id, {
+                "format": "story", "story_text": line,
+                "captions": {"instagram": {"caption": caption, "hashtags": []}},
+                "image_urls": [url] if url else [],
+            })
+            board_patch(sb, item_id, status="drafted")
+        except Exception:
+            pass
+    bus.agent("editor", f"📖 story ready — \"{line[:60]}\"", "success",
+              "story_done", job_id=job.id, item_id=item_id)
+    w.queue.complete(job, {"ok": True, "format": "story", "uploaded": bool(url)})

@@ -26,6 +26,7 @@ def register(w: Worker):
     w.register("editorial.ideate", ideate)
     w.register("editorial.plan_one", plan_one)
     w.register("editorial.plan_carousel", plan_carousel)
+    w.register("editorial.plan_story", plan_story)   # v5.11.11
 
 
 def plan_carousel(w: Worker, job: Job, ctx: AgentContext):
@@ -454,3 +455,37 @@ def angle_from_trend(title: str, niche: str = "") -> str:
     if len(stripped) < 8:
         return (niche or "daily tips").strip() + " routine that actually works"
     return stripped
+
+
+def plan_story(w: Worker, job: Job, ctx: AgentContext):
+    """v5.11.11 REQ-CONTENT-MIX — the cheapest format, and the one that carries
+    daily volume.
+
+    A story is ONE vertical image plus a single line of on-image text. No voice,
+    no video assembly, no ffmpeg — so it costs roughly $0.003 and cannot OOM the
+    container. Five stories a day per account is what makes an account look
+    alive between reels; posting one reel and nothing else reads as abandoned.
+    """
+    bus = ctx.deps["bus"]
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
+    account_id = job.account_id or job.payload.get("account_id")
+    account = load_account(sb, account_id) if (sb and account_id) else {}
+    topic = (job.payload.get("topic") or "").strip()
+    if not topic:
+        picked = _pick_topics(1, account=account, account_id=account_id)
+        if not picked:
+            w.queue.complete(job, {"ok": False, "reason": "no_topic"})
+            return
+        topic = picked[0][0]
+
+    row = board_add(sb, f"[story] {topic}",
+                    {"format": "story", "bucket": job.payload.get("bucket", "story")},
+                    status="idea", account_id=account_id) if sb else {"id": None}
+    item_id = row.get("id")
+    bus.agent("strategist", f"📖 story brief: \"{topic[:70]}\"", "info",
+              "story_brief", job_id=job.id, item_id=item_id, account_id=account_id)
+    job_of(w, "creative.write_story", {
+        "item_id": item_id, "topic": topic, "account_id": account_id,
+        "project_id": job.project_id,
+    }, parent=job, account_id=account_id, priority=job.priority)
+    w.queue.complete(job, {"ok": True, "item_id": item_id, "format": "story"})
