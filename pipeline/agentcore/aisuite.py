@@ -283,6 +283,26 @@ def _call_t2i(m: dict, prompt: str, size: str) -> str:
         if "b64_json" in r["data"][0]:
             return _save_bytes(base64.b64decode(r["data"][0]["b64_json"]), "png")
         return _download(r["data"][0]["url"], "jpg")
+    if endpoint == "ideogram":
+        # v5.11.7 REQ-IDEOGRAM. The catalog has listed ideogram-v3 since v5.4 and
+        # IDEOGRAM_API_KEY is set in both Railway and Vercel — but no handler
+        # existed here, so selecting it fell through to "unknown endpoint" and the
+        # provider was effectively decorative. Ideogram is the best available model
+        # for TEXT INSIDE AN IMAGE, which is exactly what carousels and thumbnails
+        # need; general image models still mangle lettering.
+        ratio = "9x16" if h > w else ("1x1" if h == w else "16x9")
+        r = _post_json("https://api.ideogram.ai/v1/ideogram-v3/generate",
+                       {"prompt": prompt, "aspect_ratio": ratio,
+                        "rendering_speed": m.get("rendering_speed", "DEFAULT"),
+                        "num_images": 1},
+                       {"Api-Key": key}, timeout=180)
+        data = (r.get("data") or [])
+        if not data:
+            raise RuntimeError(f"ideogram returned no image: {str(r)[:200]}")
+        img_url = data[0].get("url")
+        if not img_url:
+            raise RuntimeError("ideogram response missing url")
+        return _download(img_url, "png")
     if endpoint == "bfl":
         # Black Forest Labs
         r = _post_json(f"https://api.us1.bfl.ai/v1/{m.get('bfl_model','flux-pro-1.1')}",

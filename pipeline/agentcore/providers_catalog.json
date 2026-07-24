@@ -431,7 +431,20 @@
         "endpoint": "fal",
         "fal_model": "fal-ai/hunyuan-image"
       }
-    ]
+    ],
+    "_tiers": {
+      "text_heavy": [
+        "ideogram-v3",
+        "gpt-image-1.5",
+        "gemini-3-pro-image"
+      ],
+      "cheap": [
+        "gemini-2.5-flash-image",
+        "flux-schnell-fal",
+        "pollinations-free"
+      ]
+    },
+    "_note_ideogram": "ideogram-v3 is the only model here that reliably renders legible TEXT inside an image. Use tier 'text_heavy' for carousel slides, thumbnails and any frame with on-image copy. v5.11.7."
   },
   "image_edit": {
     "_label": "Image \u2192 Image (inpaint / outpaint / edit)",

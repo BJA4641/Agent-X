@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import HumanDesk from "@/components/HumanDesk";
 import PipelineBlocker from "@/components/PipelineBlocker";
 
-type Evt = { id?: number; agent: string; action: string; message: string; status: string; cost_usd?: number; created_at: string };
+type Evt = { id?: number; agent: string; action: string; message: string; status: string;
+             cost_usd?: number; created_at: string;
+             /* v5.11.7 REQ-FEED-DETAIL: agent_events already stores these; the feed
+                simply never showed them, so "what was the backend actually doing?"
+                could not be answered from the UI. */
+             job_id?: string | null; item_id?: string | null; account_id?: string | null };
 
 const DEMO_EVENTS: Evt[] = [
   { agent: "system", action: "waiting for worker", message: "Pipeline hasn't connected yet. Once your Railway worker boots and the first tick runs you'll see real chatter here.", status: "warn", created_at: new Date().toISOString() },
@@ -34,6 +39,19 @@ const AGENT_META: Record<string,{label:string;color:string;emoji:string}> = {
   you:         { label: "You",        color: "#e2e8f0", emoji: "👤" },
 };
 
+function clock(iso: string) {
+  // v5.11.7: "3m ago" alone cannot be correlated with a Railway log line or a
+  // Supabase row. Show the wall-clock time too.
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  } catch { return ""; }
+}
+function stamp(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + clock(iso);
+  } catch { return ""; }
+}
 function ago(iso: string) {
   const s = Math.floor((Date.now()-new Date(iso).getTime())/1000);
   if (s<0) return "just now";
@@ -158,7 +176,7 @@ export default function WorkspacePage() {
       </div>
 
       <div style={{display:"flex", gap:8, flexWrap:"wrap", marginTop:20, marginBottom:12}}>
-        {["all", ...agents].map(a => {
+        {(["all", ...agents] as string[]).map((a: string) => {
           const meta = AGENT_META[a] || { label:a, color:"var(--dim)", emoji:"•" };
           const active = filter===a;
           const idle = a !== "all" && !seen.has(a);
@@ -192,7 +210,7 @@ export default function WorkspacePage() {
           const meta = AGENT_META[e.agent] || { label:e.agent, color:"var(--dim)", emoji:"•" };
           return (
             <div key={e.id ?? i} style={{
-              display:"grid", gridTemplateColumns:"80px 130px 1fr 70px", gap:12, padding:"10px 14px",
+              display:"grid", gridTemplateColumns:"92px 130px 1fr 70px", gap:12, padding:"10px 14px",
               borderBottom:"1px solid var(--line)", alignItems:"baseline", fontSize:13,
               background: e.status==="error" ? "rgba(239,68,68,0.07)"
                         : e.status==="warn"  ? "rgba(245,158,11,0.06)"
@@ -200,13 +218,24 @@ export default function WorkspacePage() {
                         : e.status==="debate" ? "rgba(168,85,247,0.05)"
                         : "transparent",
             }}>
-              <span className="mono" style={{fontSize:11,color:"var(--dim)"}}>{ago(e.created_at)}</span>
+              <span className="mono" style={{fontSize:11,color:"var(--dim)"}} title={stamp(e.created_at)}>
+                {ago(e.created_at)}
+                <span style={{display:"block",fontSize:10,opacity:0.75}}>{clock(e.created_at)}</span>
+              </span>
               <span style={{display:"flex",alignItems:"center",gap:6,fontWeight:600}}>
                 <span>{meta.emoji}</span>{meta.label}
               </span>
               <span style={{minWidth:0}}>
                 <b style={{marginRight:6,color:meta.color}}>{e.action}</b>
                 <span className="note" style={{fontSize:13}}>{e.message}</span>
+                {(e.job_id || e.item_id) && (
+                  <span className="mono" style={{display:"block",fontSize:10,color:"var(--dim)",marginTop:3}}>
+                    {e.action && <>step <b>{e.action}</b> · </>}
+                    {e.job_id && <>job {String(e.job_id).slice(0,8)} · </>}
+                    {e.item_id && <>item {String(e.item_id).slice(0,8)} · </>}
+                    {stamp(e.created_at)}
+                  </span>
+                )}
               </span>
               <span className="mono" style={{fontSize:11,color:"var(--dim)",textAlign:"right"}}>
                 {e.cost_usd ? "$"+Number(e.cost_usd).toFixed(3) : ""}
