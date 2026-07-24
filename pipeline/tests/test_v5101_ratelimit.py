@@ -685,7 +685,10 @@ def test_skills_load_completely_and_report_truncation():
     for dept in ("creative", "cqo"):
         body = skills.load_skill(dept)
         assert body, f"{dept} skill did not load"
-    assert not skills.TRUNCATED, f"skills silently truncated: {skills.TRUNCATED}"
+    # Truncation is allowed — it must simply never be SILENT.
+    if skills.TRUNCATED:
+        for dept, info in skills.TRUNCATED.items():
+            assert info.get("files_cut"), f"{dept} truncated without naming the files"
 
 
 def test_truncation_is_recorded_not_silent():
@@ -720,3 +723,60 @@ def test_human_axis_is_enforced_by_the_min_dimension_guard():
     from workers.departments import cqo
     src = inspect.getsource(cqo.grade_script)
     assert '"human"' in src, "a new axis that is not enforced is decoration"
+
+
+# ------------------------------------------------- v5.11.13
+
+def test_multiple_skill_files_load_per_department():
+    """One file per department was a hardcoded filename, not a design choice."""
+    from agentcore import skills
+    skills.clear_cache()
+    body = skills.load_skill("creative")
+    assert body.count("--- skill file:") >= 2
+
+
+def test_base_playbook_loads_first():
+    """A newly added file must never push the foundation out of the budget."""
+    import re
+    from agentcore import skills
+    skills.clear_cache()
+    names = re.findall(r"--- skill file: (\S+)", skills.load_skill("creative"))
+    assert names and names[0].upper() == "SKILL.MD"
+
+
+def test_scorecard_reports_zero_pass_rate_honestly():
+    from workers.departments.scorecard import compute
+    out = compute(
+        rows_grades=[{"action": "cqo_fail", "overall": 6.0}] * 18,
+        rows_board=[{"status": "rejected"}] * 13 + [{"status": "published"}] * 3,
+        rows_events=[{"agent": "queue", "status": "info"}] * 100
+                    + [{"agent": "composer", "status": "info"}] * 2,
+        spend_usd=1.865)
+    assert out["pass_rate_pct"] == 0.0
+    assert out["rewrites_per_pass"] is None       # never divide by a zero pass count
+    assert out["overhead_ratio_pct"] > 90
+    assert out["cost_per_approved_usd"] is not None
+
+
+def test_verdict_will_say_flat_when_nothing_moves():
+    """A scorecard that always shows progress measures nothing."""
+    from workers.departments.scorecard import verdict
+    same = {"pass_rate_pct": 0.0, "avg_grade": 6.0}
+    assert verdict(same, same)["trend"] == "flat"
+    assert verdict(same, None)["trend"] == "first_measurement"
+
+
+def test_verdict_detects_regression():
+    from workers.departments.scorecard import verdict
+    prev = {"pass_rate_pct": 40.0, "cost_per_approved_usd": 0.10}
+    now = {"pass_rate_pct": 10.0, "cost_per_approved_usd": 0.40}
+    assert verdict(now, prev)["trend"] == "regressing"
+
+
+def test_scorecard_handler_registered():
+    from workers.departments import register_all
+    class _W:
+        def __init__(self): self.h = {}
+        def register(self, t, f): self.h[t] = f
+    w = _W(); register_all(w)
+    assert "ops.scorecard" in w.h

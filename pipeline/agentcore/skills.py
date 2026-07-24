@@ -36,17 +36,57 @@ def load_skill(dept: str) -> str:
         return ""
     if dept in _CACHE:
         return _CACHE[dept]
-    path = os.path.join(_BASE, dept, "SKILL.md")
+    # v5.11.13 REQ-SKILL-MULTI — a department wears several hats.
+    #
+    # Until now this loaded exactly ONE file, `<dept>/SKILL.md`. That is why
+    # there is a single skill per department: not a design choice, a hardcoded
+    # filename. The writer alone needs hook craft, beat structure, humanisation
+    # and per-niche voice — four concerns that do not belong in one file, and
+    # cannot be swapped or disabled independently when they are.
+    #
+    # Now: EVERY .md in `<dept>/` loads, alphabetically, sharing the budget.
+    # Prefix with a number to control order — 00_hooks.md, 10_beats.md — and
+    # SKILL.md keeps working unchanged for anyone who never adds a second file.
     text = ""
     try:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                raw = f.read()
-            text = raw[:_MAX_CHARS]
-            if len(raw) > _MAX_CHARS:
-                # Loud, not silent: a truncated skill is guidance the agents
-                # never received, and the failure is otherwise invisible.
-                _note_truncated(dept, len(raw), _MAX_CHARS)
+        folder = os.path.join(_BASE, dept)
+        files = []
+        if os.path.isdir(folder):
+            # SKILL.md is the base playbook and always loads FIRST, so a newly
+            # added file can never push the foundation out of the budget.
+            # Everything else is alphabetical — prefix with digits to order.
+            allmd = [fn for fn in os.listdir(folder)
+                     if fn.lower().endswith((".md", ".markdown"))]
+            base = [fn for fn in allmd if fn.upper() == "SKILL.MD"]
+            rest = sorted(fn for fn in allmd if fn.upper() != "SKILL.MD")
+            files = base + rest
+        elif os.path.exists(os.path.join(_BASE, dept + ".md")):
+            files = []
+        chunks, used, dropped = [], 0, []
+        for fn in files:
+            fp = os.path.join(folder, fn)
+            try:
+                with open(fp, "r", encoding="utf-8") as f:
+                    raw = f.read().strip()
+            except Exception:
+                continue
+            if not raw:
+                continue
+            header = f"\n\n--- skill file: {fn} ---\n"
+            room = _MAX_CHARS - used - len(header)
+            if room <= 200:
+                dropped.append(fn)
+                continue
+            body = raw[:room]
+            if len(raw) > room:
+                dropped.append(fn)
+            chunks.append(header + body)
+            used += len(header) + len(body)
+        text = "".join(chunks).strip()
+        if dropped:
+            _note_truncated(dept, used + 1, _MAX_CHARS, dropped)
+        if False:
+            pass
     except Exception:
         text = ""
     _CACHE[dept] = text
@@ -67,13 +107,14 @@ def clear_cache():
 TRUNCATED: dict = {}
 
 
-def _note_truncated(dept: str, actual: int, cap: int):
+def _note_truncated(dept: str, actual: int, cap: int, files: list = None):
     """Record and print truncation so a too-long skill cannot fail quietly."""
-    TRUNCATED[dept] = {"chars": actual, "cap": cap, "lost": actual - cap}
+    TRUNCATED[dept] = {"chars": actual, "cap": cap, "lost": max(0, actual - cap),
+                       "files_cut": list(files or [])}
     try:
-        print(f"[skills] WARNING: {dept}/SKILL.md is {actual} chars, cap is {cap} — "
-              f"{actual - cap} chars were NOT sent to the agent. Trim the file or "
-              f"raise MAX_SKILL_CHARS.")
+        detail = (" files cut or trimmed: " + ", ".join(files)) if files else ""
+        print(f"[skills] WARNING: {dept} skills exceed the {cap}-char budget.{detail} "
+              f"Trim them or raise MAX_SKILL_CHARS — cut text never reaches the agent.")
     except Exception:
         pass
 
