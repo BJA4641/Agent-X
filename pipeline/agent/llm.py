@@ -5,7 +5,7 @@ falling back to legacy direct-provider code ONLY if aisuite throws (misconfigure
 missing deps, etc). This makes the /dashboard/models model picker actually control inference.
 """
 import os
-import json, time, urllib.request, traceback
+import json, time, urllib.request, urllib.error, traceback
 from . import config
 
 DEFAULT_MODEL = {
@@ -111,6 +111,47 @@ def _chat_legacy(prompt: str, max_tokens: int = 800):
     raise RuntimeError(f"no LLM provider succeeded: {last}")
 
 def _call(prov, model, prompt, max_tokens):
+    """v5.11.21 REQ-PROVIDER-HEALTH-TEXT (DEC-073): this is the single choke
+    point every text call passes through (council drafts, judges, free_chat,
+    paid chat) — so it is the ONE correct place to report provider health.
+
+    Before this, only the image suite (aisuite.py) ever called
+    costmode.mark_error. The text path raised raw urllib HTTPErrors: a groq
+    key rotated at the provider returned 403 on EVERY call for 10+ hours while
+    settings.free_ladder_report kept saying "usable" — because nothing told
+    costmode. A dead rung that reports healthy is worse than no rung: the
+    council kept spending its two draft slots on it (see council.py DEC-073).
+
+    On HTTP error: classify + cooldown via costmode.mark_error (403→dead_key,
+    429→rate_limited, 402→out_of_credit) and re-raise with provider/model/status
+    in the message so operators see "groq/llama-3.3-70b: HTTP 403" instead of
+    a bare urllib traceback. On success: mark_ok clears any stale cooldown.
+    """
+    try:
+        out = _call_raw(prov, model, prompt, max_tokens)
+        try:
+            from agentcore import costmode as _cm
+            _cm.mark_ok(prov)
+        except Exception:
+            pass
+        return out
+    except urllib.error.HTTPError as e:
+        body = ""
+        try:
+            body = (e.read() or b"").decode("utf-8", "replace")[:300]
+        except Exception:
+            pass
+        try:
+            from agentcore import costmode as _cm
+            _cm.mark_error(prov, int(e.code), body or str(e))
+        except Exception:
+            pass
+        raise RuntimeError(
+            f"{prov}/{model}: HTTP {e.code} {e.reason}"
+            + (f" — {body[:160]}" if body else "")) from None
+
+
+def _call_raw(prov, model, prompt, max_tokens):
     if prov == "anthropic":
         import anthropic
         msg = anthropic.Anthropic().messages.create(model=model, max_tokens=max_tokens,

@@ -6,7 +6,11 @@ aren't present so local dev never posts.
 """
 from __future__ import annotations
 import time
-from agentcore import Worker, Job, AgentContext
+# v5.11.21: Priority added — it was USED at two call sites below but never
+# imported. The NameError was swallowed by the asset-store try/except, so the
+# "store published assets for CEO reuse" feature silently never ran. Fifth
+# instance of the swallowed-NameError pattern (see LEDGER REQ-PRIORITY-IMPORT).
+from agentcore import Worker, Job, AgentContext, Priority
 from ..common import board_patch_payload, board_patch, job_of
 
 
@@ -44,21 +48,45 @@ def publish(w: Worker, job: Job, ctx: AgentContext):
         w.fail_job(job, f"publish failed: {e}", fatal=False)
         return
 
-    if sb and item_id:
-        try:
-            sb.table("board_items").update({
-                "status": "published",
-                "payload": {**item["payload"], "publish_receipts": receipts},
-                "scheduled_at": "now()",
-            }).eq("id", str(item_id)).execute()
-        except Exception:
-            board_patch_payload(sb, item_id, {"publish_receipts": receipts})
-
+    # ---- v5.11.21 REQ-PUBLISH-HONESTY (DEC-072) ------------------------------
+    # Decide live vs dry BEFORE touching the board. The old code set
+    # status="published" unconditionally — so 3 board items claimed "published"
+    # while every receipt in their payload said dry_run:true. Nothing has ever
+    # actually been posted (REQ-PUB-TOKENS is still open); a status that says
+    # otherwise poisons produced-counts, SLA math, and the founder's trust in
+    # the dashboard. A dry-run is a REHEARSAL: record the receipts, keep the
+    # item approved, say so out loud.
     live = [r for r in receipts if not r.get("dry_run")]
     dry = [r for r in receipts if r.get("dry_run")]
-    bus.agent("publisher",
-              f"📤 done — {len(live)} live, {len(dry)} dry-run. Receipts: {[r['platform'] for r in receipts]}",
-              "success", "publish_done", job_id=job.id, item_id=item_id)
+    published_live = bool(live)
+
+    if sb and item_id:
+        if published_live:
+            try:
+                sb.table("board_items").update({
+                    "status": "published",
+                    "payload": {**item["payload"], "publish_receipts": receipts},
+                    "scheduled_at": "now()",
+                }).eq("id", str(item_id)).execute()
+            except Exception:
+                board_patch_payload(sb, item_id, {"publish_receipts": receipts})
+        else:
+            board_patch_payload(sb, item_id, {"publish_receipts": receipts,
+                                              "dry_run_only": True,
+                                              "dry_run_at": time.time()})
+
+    if published_live:
+        bus.agent("publisher",
+                  f"📤 done — {len(live)} live, {len(dry)} dry-run. Receipts: {[r['platform'] for r in receipts]}",
+                  "success", "publish_done", job_id=job.id, item_id=item_id)
+    else:
+        bus.agent("publisher",
+                  f"🧪 dry-run only ({len(dry)} platform(s), no credentials live) — "
+                  f"item stays APPROVED, not published. Connect OAuth to go live (REQ-PUB-TOKENS).",
+                  "warn", "publish_dry_run", job_id=job.id, item_id=item_id)
+        # No asset banking, no 24h metrics, no cross-promotion for a rehearsal.
+        w.queue.complete(job, {"ok": True, "dry_run_only": True, "receipts": receipts})
+        return
 
     # P0 FIX: store published assets into asset_library so CEO reuse works
     if sb and item_id:

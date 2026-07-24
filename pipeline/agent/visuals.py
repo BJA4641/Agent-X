@@ -57,14 +57,44 @@ STYLES = {
         "bg_top": (20, 40, 30), "bg_bot": (180, 140, 80),
         "accent": (255, 220, 150),
     },
+    # ----- v5.11.22 REQ-IMG-REALISM (DEC-075) -----
+    # Founder feedback: carousel slides read as obviously-AI (plastic skin,
+    # painterly fur, uncanny lighting). Two authentic-photo styles that steer
+    # every provider toward candid, true-to-life output; carousels draw from
+    # these via REALISTIC_STYLES below. Negative phrasing ("no CGI…") matters:
+    # it is the strongest lever current image models expose against the
+    # synthetic look.
+    "real-daylight": {
+        "prompt": ("authentic candid photograph, natural window daylight, true-to-life colors, "
+                   "realistic skin texture and fur detail, slight natural imperfections, "
+                   "everyday home setting, shot on a modern phone camera, sharp focus, "
+                   "no CGI, no illustration, no 3D render, no airbrushed skin, not painterly"),
+        "bg_top": (238, 234, 228), "bg_bot": (190, 178, 165),
+        "accent": (60, 120, 200),
+    },
+    "real-ugc": {
+        "prompt": ("realistic UGC-style photo like a customer snapped it, soft indoor lighting, "
+                   "handheld framing slightly off-center, genuine textures and reflections, "
+                   "believable everyday scene, documentary realism, "
+                   "no CGI, no illustration, no fantasy lighting, no plastic-smooth surfaces"),
+        "bg_top": (232, 228, 224), "bg_bot": (170, 165, 158),
+        "accent": (220, 90, 70),
+    },
 }
 
-def pick_style(item_id, override: str = None) -> str:
+# Styles safe for content that must look like a real photo (carousel slides).
+REALISTIC_STYLES = ["real-daylight", "real-ugc", "cinematic-stock"]
+
+def pick_style(item_id, override: str = None, pool: str = None) -> str:
+    """pool="realistic" (v5.11.22) restricts the deterministic pick to
+    photo-real styles — carousels use this so slides stop looking AI-made.
+    Explicit override and the STYLE env var still win."""
     if override in STYLES: return override
     env = config.get("STYLE", "auto")
     if env in STYLES: return env
     import hashlib
-    return list(STYLES)[int(hashlib.sha256(str(item_id).encode()).hexdigest(), 16) % len(STYLES)]
+    names = REALISTIC_STYLES if pool == "realistic" else list(STYLES)
+    return names[int(hashlib.sha256(str(item_id).encode()).hexdigest(), 16) % len(names)]
 
 
 _gemini_cooldown_until = 0.0

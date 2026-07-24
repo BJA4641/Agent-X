@@ -87,6 +87,14 @@ def heartbeat(w: Worker, job: Job, ctx: AgentContext):
         except Exception as e:
             bus.agent("infrastructure", f"heartbeat write failed: {str(e)[:120]}", "warn",
                       "hb_err", job_id=job.id)
+    # v5.11.21 REQ-REAPER-1 (DEC-074): reap stale claims roughly every 5 min
+    # (time-bucket gate so the 30s heartbeat doesn't hammer the table).
+    if sb and int(time.time()) % 300 < HEARTBEAT_INTERVAL_S + 5:
+        try:
+            _reap_stale_jobs(sb, bus, w.id)
+        except Exception as e:
+            bus.agent("infrastructure", f"reaper error (non-fatal): {str(e)[:120]}",
+                      "warn", "reaper_err", job_id=job.id)
     # Self-schedule next heartbeat
     j = Job(job_type="ops.heartbeat",
             payload={"started_at": started, "version": version},
@@ -95,6 +103,67 @@ def heartbeat(w: Worker, job: Job, ctx: AgentContext):
             idempotency_key=f"hb:{w.id}:{int(time.time()//HEARTBEAT_INTERVAL_S)}")
     w.queue.enqueue(j)
     w.queue.complete(job, {"ok": True})
+
+
+STALE_JOB_MIN = int(os.environ.get("STALE_JOB_MIN", "90"))
+
+
+def _reap_stale_jobs(sb, bus, worker_id: str, limit: int = 25) -> int:
+    """v5.11.21 REQ-REAPER-1 (DEC-074): recover jobs orphaned by a dead worker.
+
+    A job claimed by a worker that then crashed (OOM, deploy, Railway restart)
+    sits in claimed/in_progress FOREVER — no code path ever revisits it. Live
+    examples on 2026-07-24: a human_desk.sync claimed 22:41 the previous night
+    and two creative renders claimed by generations that OOM-died mid-render.
+    Each orphan permanently occupies its idempotency key and (for renders) its
+    board item, so the loss compounds: the item can never re-render.
+
+    Threshold is 90 min by default (env STALE_JOB_MIN), NOT 45: with N render
+    jobs claimed in one batch and the heavy-lane semaphore at 1, the last job
+    legitimately waits (N-1) x render-time while already claimed. Reaping a
+    job that is actually still running requeues it — the crash guard and
+    quarantine bound the damage, but 90 min makes it rare instead of routine.
+
+    Policy per orphan: attempts+1; if attempts would exceed max_attempts the
+    job FAILS loudly (visible in dashboards), else it requeues immediately.
+    The update is CAS'd on status still being claimed/in_progress so a job
+    that completes between our read and write is left alone.
+    """
+    cutoff = time.time() - STALE_JOB_MIN * 60
+    try:
+        rows = (sb.table("jobs")
+                  .select("id,job_type,attempts,max_attempts,claimed_at")
+                  .in_("status", ["claimed", "in_progress"])
+                  .lt("claimed_at", cutoff)
+                  .limit(limit).execute().data) or []
+    except Exception:
+        return 0
+    reaped = 0
+    for r in rows:
+        attempts = int(r.get("attempts") or 0) + 1
+        if attempts >= int(r.get("max_attempts") or 2):
+            patch = {"status": "failed", "attempts": attempts,
+                     "error": f"reaped: stuck claimed/in_progress > {STALE_JOB_MIN} min "
+                              f"(worker likely died mid-job); attempts exhausted",
+                     "finished_at": time.time()}
+            verdict = "failed"
+        else:
+            patch = {"status": "queued", "attempts": attempts, "claimed_by": None,
+                     "error": f"reaped: stuck claimed/in_progress > {STALE_JOB_MIN} min — requeued",
+                     "scheduled_for": time.time()}
+            verdict = "requeued"
+        try:
+            (sb.table("jobs").update(patch)
+               .eq("id", r["id"])
+               .in_("status", ["claimed", "in_progress"])   # CAS: skip if it finished
+               .execute())
+            reaped += 1
+            bus.agent("infrastructure",
+                      f"🪦 reaped stale {r.get('job_type')} ({str(r['id'])[:8]}) → {verdict} "
+                      f"(attempt {attempts})", "warn", "job_reaped")
+        except Exception:
+            continue
+    return reaped
 
 
 def snapshot(w: Worker, job: Job, ctx: AgentContext):

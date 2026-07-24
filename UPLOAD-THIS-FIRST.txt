@@ -1,27 +1,35 @@
-AGENT-X v5.11.19 — MCP CONNECTOR WAS LYING
-==========================================
+AGENT-X v5.11.22 — UPLOAD GUIDE (supersedes the v5.11.21 zip — this one contains BOTH batches)
 
-You asked me to verify the connector against Supabase. It failed:
+WHAT'S IN HERE (2 batches, 1 upload):
+ A) v5.11.21 stability: dedupe fix (once~ keys), full council ladder walk, honest
+    publish (no fake "published"), Priority import fix, stale-job reaper.
+ B) v5.11.22 quality: 7-day topic memory (no more repeated trends), carousels
+    titled from their own content, un-stretched slides, photo-realistic style pool.
 
-    metric           MCP     Supabase    error
-    board cleared    984     7,402       7.5x under
-    jobs done        987     40,554      41x  under
-    jobs queued      3       25          8x   under
-    jobs in_progress absent  5           not reported at all
+UPLOAD (GitHub web UI, drag all files keeping paths):
+  pipeline/agent/llm.py
+  pipeline/agent/visuals.py
+  pipeline/agentcore/council.py
+  pipeline/agentcore/jobs.py
+  pipeline/agentcore/version.py
+  pipeline/preflight.py
+  pipeline/workers/departments/portfolio.py
+  pipeline/workers/departments/editorial.py
+  pipeline/workers/departments/distribution.py
+  pipeline/workers/departments/ops.py
+  pipeline/workers/departments/creative.py
+  pipeline/tests/test_v51121_dedupe.py
+  pipeline/tests/test_v51122_quality.py
+  web/version.json
+  docs/LEDGER.md
 
-MCP board total = 1000 exactly. MCP jobs total = 1000 exactly.
-The tools ran select() with no limit; PostgREST caps at 1000 rows; the code
-counted the rows it got back. Every count saturated silently.
+THEN (Railway):
+ 1. Variables → replace GROQ_API_KEY with a fresh key from console.groq.com (old one is 403-dead).
+ 2. Redeploy the worker.
 
-This matters because the connector is meant to be the ONLY diagnostic surface
-for users who never touch the database.
-
-FIXED: exact head-counts (count:"exact", head:true) — transfers no rows, so it
-is cheaper as well as correct. All 5 MCP queries audited and bounded.
-
-UPLOAD 2 FILES:
-  web/app/api/mcp/route.ts
-  web/version.json          <-- 5.11.19
-
-AFTER DEPLOY: delete and re-add the connector (Claude caches the tool list),
-then ask me to run agentx_pipeline_state. jobs done should read ~40,000+.
+VERIFY AFTER DEPLOY (30–60 min):
+ - Studio: new carousels have DIFFERENT, descriptive titles.
+ - Slides: people/pets no longer stretched; more photographic look.
+ - No topic repeats from the last 7 days.
+ - agent_events: carousel_noop / carousel_dup_noop appear instead of dup floods.
+ - No item shows "published" unless a receipt is live (dry runs stay approved).

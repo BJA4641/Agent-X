@@ -246,7 +246,7 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
                            parent=job, account_id=acct["id"],
                            project_id=acct.get("project_id"),
                            priority=Priority.NORMAL,
-                           idempotency_key=f"mix:{acct['id']}:{fmt}:{k}:{_dt.date.today()}")
+                           idempotency_key=f"once~mix:{acct['id']}:{fmt}:{k}:{_dt.date.today()}")
             if owed:
                 bus.agent("coo", f"🎛️ format mix for @{acct.get('handle','?')}: "
                                  + ", ".join(f"{v}x {k}" for k, v in owed.items()),
@@ -263,7 +263,7 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
                 "target_posts": min(need, MAX_INFLIGHT_PER_ACCOUNT - inflight),
             }, parent=job, account_id=acct["id"], project_id=acct.get("project_id"),
                priority=Priority.HIGH,
-               idempotency_key=f"ideate:{acct['id']}:{bucket}")
+               idempotency_key=f"once~ideate:{acct['id']}:{bucket}")
         elif need <= 0:
             bus.agent("coo", f"@{acct.get('handle','?')} quota met for today "
                              f"({produced} produced + {inflight} in-flight ≥ {target}) — no ideation",
@@ -304,6 +304,15 @@ def _maybe_spawn_carousel(w, job, sb, bus, acct):
         today = time.gmtime()
         if today.tm_wday not in _CAROUSEL_DAYS.get(min(cw, 7), set()):
             return
+        # v5.11.21 REQ-DEDUPE-1 (DEC-071): belt-and-braces demand check. The
+        # once~ idempotency key below is the structural fix; this check makes
+        # the intent local and survivable even if keys are ever cleared. One
+        # carousel item created today == cadence satisfied, full stop.
+        try:
+            if int((produced_by_format_today(sb, acct["id"]) or {}).get("carousel") or 0) >= 1:
+                return
+        except Exception:
+            pass
         datekey = time.strftime("%Y%m%d", today)
         j = Job(job_type="editorial.plan_carousel",
                 payload={"account_id": acct["id"], "project_id": acct.get("project_id")},
@@ -312,7 +321,7 @@ def _maybe_spawn_carousel(w, job, sb, bus, acct):
                 # which is why zero carousels were ever produced.
                 priority=Priority.NORMAL, account_id=acct["id"],
                 project_id=acct.get("project_id"),
-                idempotency_key=f"carousel:{acct['id']}:{datekey}")
+                idempotency_key=f"once~carousel:{acct['id']}:{datekey}")
         w.queue.enqueue(j)
         bus.agent("coo", f"🖼️ carousel day for @{acct.get('handle','?')} — planning one",
                   "info", "carousel_spawn", job_id=job.id, account_id=acct["id"])

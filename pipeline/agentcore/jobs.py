@@ -109,12 +109,31 @@ class JobQueue:
         chain (ops.heartbeat, ops.snapshot, human_desk.sync) died right after boot
         because the successor's 30s/1h time-bucket key collided with the job that
         had just finished 4 seconds earlier. One heartbeat per boot, forever —
-        which is why audits kept calling a LIVE worker dead."""
+        which is why audits kept calling a LIVE worker dead.
+
+        v5.11.21 REQ-DEDUPE-1 (DEC-071): keys prefixed `once~` block re-enqueue
+        in ANY terminal or pending status — done and failed included.
+
+        The v5.6.1 pending-only rule was right for self-scheduling chains and
+        catastrophically wrong for calendar-bucketed work. `carousel:{acct}:{date}`
+        was meant to mean "one carousel per account per day"; under pending-only
+        semantics it means "one AT A TIME per day" — the moment the first plan
+        job completed, the next portfolio tick re-enqueued the same key freely.
+        Measured 2026-07-24: 55 approved board items, all the SAME carousel
+        topic, one per tick for ten straight hours, each burning render CPU and
+        free-image quota, and together poisoning `produced_today` so the CFO
+        declined paid escalation while the writers were starving.
+
+        Two key namespaces, one column, zero schema change:
+          plain key   → pending-only dedupe (chains keep self-scheduling)
+          once~key    → forever dedupe within the key (calendar buckets hold)
+        """
         try:
-            res = (self._table().select("*").eq("idempotency_key", key)
-                   .in_("status", [JobStatus.QUEUED.value, JobStatus.CLAIMED.value,
-                                    JobStatus.IN_PROGRESS.value, JobStatus.WAIT_HUMAN.value])
-                   .limit(1).execute())
+            q = self._table().select("*").eq("idempotency_key", key)
+            if not key.startswith("once~"):
+                q = q.in_("status", [JobStatus.QUEUED.value, JobStatus.CLAIMED.value,
+                                     JobStatus.IN_PROGRESS.value, JobStatus.WAIT_HUMAN.value])
+            res = q.limit(1).execute()
             if res.data:
                 return self._from_row(res.data[0])
         except Exception:

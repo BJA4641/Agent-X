@@ -35,8 +35,14 @@ _FREE_ORDER = [
     # ranked against arena.ai open-weight leaderboard. The old entry here
     # ("moonshotai/kimi-k2:free") NO LONGER EXISTS as a free route, which is why
     # openrouter drafts kept failing and the writer fell through to paid Claude.
-    ("gemini",     "gemini-2.5-flash"),                    # free tier, most generous
+    # v5.11.21 REQ-LADDER-ORDER (DEC-073): groq FIRST. Measured 2026-07-24:
+    # gemini absorbed every draft slot and hit 429 thirty-eight times in six
+    # hours while groq sat idle at rung 2. Groq is the fastest rung when its
+    # key is healthy — and when it is NOT healthy (403 dead key), llm._call now
+    # reports it to costmode and _providers() drops the rung automatically, so
+    # putting it first costs nothing even while the key is broken.
     ("groq",       "llama-3.3-70b-versatile"),             # free tier, fastest
+    ("gemini",     "gemini-2.5-flash"),                    # free tier, most generous
     ("openrouter", "google/gemma-4-31b-it:free"),          # Apache-2.0, arena top-10 open weight
     ("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free"),
     ("openrouter", "openai/gpt-oss-20b:free"),
@@ -274,28 +280,79 @@ def _report_council_failure(detail: str):
         print(f"[council] could not record failure: {e}")
 
 
+def _walk_ladder(provs, prompt, max_tokens, want: int, errors: list):
+    """v5.11.21 REQ-LADDER-WALK (DEC-073) — collect up to `want` successful
+    free generations by walking the WHOLE ladder, with the same local pacing
+    free_chat uses.
+
+    The old debate() iterated `provs[:2]` — the first two rungs and nothing
+    else. On 2026-07-24 gemini was 429-limited and the groq key was dead
+    (403 on every call), so debate() raised "all free drafts failed" after
+    exactly two attempts while FIVE healthy openrouter rungs below were never
+    tried. A 7-rung ladder that only ever exercises rungs 1-2 is a 2-rung
+    ladder with better marketing.
+
+    Contract: try each usable rung in order; skip locally-dry buckets; note
+    429s into ratelimit; stop when `want` candidates are collected or the
+    ladder is exhausted. Appends per-rung failures to `errors` (caller owns
+    reporting). Returns [(label, text)].
+    """
+    got = []
+    for prov, model in provs:
+        if len(got) >= want:
+            break
+        try:
+            from agentcore import ratelimit as _rl
+            ok, waited = _rl.acquire(prov)
+            if not ok:
+                errors.append(f"{prov}/{model}: rate-limited locally, "
+                              f"next token in {waited:.1f}s — skipped to next rung")
+                continue
+        except Exception:
+            pass
+        try:
+            text, label = _call_free(prov, model, prompt, max_tokens)
+            try:
+                from agentcore import ratelimit as _rl2
+                _rl2.note_success(prov)
+            except Exception:
+                pass
+            got.append((label, text))
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg or "rate limit" in msg.lower() or "too many requests" in msg.lower():
+                try:
+                    from agentcore import ratelimit as _rl3
+                    _rl3.note_rate_limited(prov)
+                except Exception:
+                    pass
+            errors.append(f"{prov}/{model}: {msg[:160]}")
+            continue
+    return got
+
+
 def debate(prompt: str, max_tokens: int = 1800):
     """Full council: 2 free drafts → free critique/merge → final text.
     Degrades gracefully: 1 provider → draft + self-critique pass.
     Returns (text, 0.0, label)."""
-    provs = _providers()
+    try:
+        provs, dropped = _providers(explain=True)
+    except TypeError:
+        provs, dropped = _providers(), []
     if not provs:
-        _report_council_failure("no usable free provider (check keys and cooldowns)")
+        _report_council_failure("no usable free provider (check keys and cooldowns)"
+                                + ("  ||  dropped: " + "; ".join(dropped) if dropped else ""))
         raise RuntimeError("council: no free providers configured")
 
     t0 = time.time()
-    candidates = []           # [(label, text)]
     draft_errors = []
-    for prov, model in provs[:2]:
-        try:
-            text, label = _call_free(prov, model, prompt, max_tokens)
-            candidates.append((label, text))
-        except Exception as e:
-            draft_errors.append(f"{prov}/{model}: {str(e)[:160]}")
-            traceback.print_exc()
-            continue
+    # v5.11.21: walk the FULL ladder for the 2 draft slots (was provs[:2]).
+    candidates = _walk_ladder(provs, prompt, max_tokens, want=2, errors=draft_errors)
     if not candidates:
         detail = " | ".join(draft_errors) if draft_errors else "no providers"
+        if dropped:
+            detail += "  ||  NOT ATTEMPTED: " + "; ".join(dropped)
+        detail += f"  ||  attempted={len(draft_errors)} usable_rungs={len(provs)}"
         _report_council_failure(detail)
         raise RuntimeError(f"council: all free drafts failed -> {detail}")
 

@@ -42,11 +42,39 @@ def plan_carousel(w: Worker, job: Job, ctx: AgentContext):
             account = (res.data or [None])[0]
         except Exception:
             account = None
-    picked = _pick_topics(1, account=account, account_id=account_id)
+    # ----- v5.11.21 REQ-DEDUPE-1 (DEC-071) DEMAND RE-CHECK AT CLAIM TIME -----
+    # ideate() has had this governor since v5.9.5; plan_carousel never did.
+    # On 2026-07-24 the pending-only idempotency hole re-spawned this handler
+    # once per tick for ten hours: 55 board items, all the same topic, all
+    # rendered, all auto-approved. The spawn-side fix is once~ keys; THIS check
+    # is the claim-side guarantee that a stale or duplicate plan job costs a
+    # no-op instead of a full write→render→approve chain.
+    if sb and account_id:
+        try:
+            from ..departments.portfolio import produced_by_format_today, DAILY_FORMAT_MIX
+            got = int((produced_by_format_today(sb, account_id) or {}).get("carousel") or 0)
+            target = max(1, int(DAILY_FORMAT_MIX.get("carousel") or 1))
+            if got >= target:
+                bus.agent("strategist",
+                          f"carousel quota already met at claim time ({got}/{target}) — no-op",
+                          "info", "carousel_noop", job_id=job.id, account_id=account_id)
+                w.queue.complete(job, {"ok": True, "noop": "quota_met"})
+                return
+        except Exception:
+            pass
+    picked = _pick_topics(1, account=account, account_id=account_id,
+                          avoid=_topics_recent(sb, account_id))
     if not picked:
         w.queue.complete(job, {"ok": False, "reason": "no_topic"})
         return
     topic, bucket = picked[0]
+    # Same-topic guard: an identical title already moving today means this job
+    # is a duplicate regardless of how it was spawned.
+    if sb and _topic_exists_today(sb, account_id, f"[carousel] {topic}"):
+        bus.agent("strategist", f"duplicate carousel topic today — no-op: \"{topic[:60]}\"",
+                  "info", "carousel_dup_noop", job_id=job.id, account_id=account_id)
+        w.queue.complete(job, {"ok": True, "noop": "duplicate_topic"})
+        return
     row = board_add(sb, f"[carousel] {topic}",
                     {"bucket": bucket, "format": "carousel"},
                     status="idea", account_id=account_id) if sb else {"id": None}
@@ -120,7 +148,8 @@ def ideate(w: Worker, job: Job, ctx: AgentContext):
     bus.agent("strategist", f"📋 ideating {target} topic(s) for @{acct_name} (niche: {niche or 'general'})",
               "info", "ideate_start", job_id=job.id)
 
-    topics = _pick_topics(target, account=account, account_id=account_id)
+    topics = _pick_topics(target, account=account, account_id=account_id,
+                          avoid=_topics_recent(sb, account_id))
     # v5.11.5 REQ-TOPIC-DEDUPE: the picker reads scouted trends, which keep
     # returning the same headline day after day. That produced 5 drafts titled
     # "Black Spots Gone Instantly!" and 3 of "Can Salish do her skincare in 1
@@ -200,13 +229,44 @@ def _is_generic_ai(low: str) -> bool:
                                   " ai ", "free ai", "ai app", "ai setting", "a.i"))
 
 
-def _pick_topics(n: int, account=None, account_id=None) -> list:
-    """Return [(topic, bucket)] — niche-aware."""
+def _topics_recent(sb, account_id, days: int = 7) -> set:
+    """v5.11.22 REQ-TOPIC-MEMORY (DEC-075): lowercase set of topics this account
+    already used in the last N days (any status, incl. cleared/rejected). Fed
+    into _pick_topics as an avoid-list so the picker learns from its own
+    history instead of re-selecting the same trend every cycle — the 55×
+    "Spots Gone Instantly" wave was the same scout trend re-picked for ten
+    hours because nothing removed a used topic from the pool. Fail-open: on
+    any error return empty set (never block ideation)."""
+    if not (sb and account_id):
+        return set()
+    try:
+        import datetime as _dt
+        cutoff = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)).isoformat()
+        res = (sb.table("board_items").select("topic")
+                 .eq("account_id", str(account_id))
+                 .gte("created_at", cutoff).limit(400).execute())
+        out = set()
+        for r in (res.data or []):
+            t = str(r.get("topic") or "").strip().lower()
+            if t.startswith("[carousel] "):
+                t = t[len("[carousel] "):]
+            if t.startswith("[story] "):
+                t = t[len("[story] "):]
+            if t:
+                out.add(t)
+        return out
+    except Exception:
+        return set()
+
+
+def _pick_topics(n: int, account=None, account_id=None, avoid: set = None) -> list:
+    """Return [(topic, bucket)] — niche-aware. `avoid` = lowercase topics to
+    never re-pick (v5.11.22 topic memory)."""
     niche = ((account or {}).get("niche") or "").lower().replace("_", " ").replace("-", " ")
     name = (account or {}).get("name") or (account or {}).get("handle") or ""
 
     topics: list = []
-    seen: set = set()
+    seen: set = set(avoid or ())
 
     # 1) Ask legacy strategy for topics; pass niche hint if available
     try:
@@ -254,7 +314,10 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
                 if not title or len(title.strip()) < 8: continue
                 low = title.lower()
                 if niche_kw and any(kw in low for kw in niche_kw) and low not in seen:
-                    topics.append((angle_from_trend(title, niche)[:120], "trend")); seen.add(low)
+                    cand = angle_from_trend(title, niche)[:120]
+                    if cand.lower() in seen:  # v5.11.22 topic memory — angled form already used
+                        continue
+                    topics.append((cand, "trend")); seen.add(low); seen.add(cand.lower())
             # Second pass: any trend (but if niche is set, skip generic AI ones)
             for t in trends:
                 if len(topics) >= n: break
@@ -264,7 +327,10 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
                 if niche and niche not in ("ai","ai tools","ai_tools","tech") and _is_generic_ai(" " + low + " "):
                     continue  # skip generic AI topics if this isn't an AI account
                 if low not in seen:
-                    topics.append((angle_from_trend(title, niche)[:120], "trend")); seen.add(low)
+                    cand = angle_from_trend(title, niche)[:120]
+                    if cand.lower() in seen:  # v5.11.22 topic memory
+                        continue
+                    topics.append((cand, "trend")); seen.add(low); seen.add(cand.lower())
         except Exception:
             pass
 
@@ -331,6 +397,28 @@ def _niche_evergreens(niche: str) -> list:
 
 
 TOPIC_DEDUPE_DAYS = int(os.environ.get("TOPIC_DEDUPE_DAYS", "14"))
+
+
+def _topic_exists_today(sb, account_id, topic: str) -> bool:
+    """v5.11.21 REQ-DEDUPE-1 (DEC-071): True if an item with this EXACT topic
+    string was already created today (UTC) and is still moving through the
+    funnel or already shipped. Terminal negatives (rejected/cleared/failed) do
+    NOT count — a rejected attempt should not block a fresh take on the topic.
+    Fail-open: any query error returns False (a duplicate slipping through is
+    a cost bug; blocking legitimate production is an outage)."""
+    try:
+        day_start = time.strftime("%Y-%m-%dT00:00:00Z", time.gmtime())
+        q = (sb.table("board_items")
+               .select("id", count="exact", head=True)
+               .eq("topic", topic)
+               .gte("created_at", day_start)
+               .in_("status", ["idea", "drafted", "approved", "scheduled", "published"]))
+        if account_id:
+            q = q.eq("account_id", account_id)
+        res = q.execute()
+        return int(getattr(res, "count", 0) or 0) > 0
+    except Exception:
+        return False
 
 
 def _norm_topic(t: str) -> str:
@@ -470,13 +558,38 @@ def plan_story(w: Worker, job: Job, ctx: AgentContext):
     sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
     account_id = job.account_id or job.payload.get("account_id")
     account = load_account(sb, account_id) if (sb and account_id) else {}
+    # ----- v5.11.21 REQ-DEDUPE-1 (DEC-071) DEMAND RE-CHECK AT CLAIM TIME -----
+    # Same governor as plan_carousel / ideate. Stories are the volume format
+    # (5/day default), so a duplicate stampede here multiplies fastest: the
+    # 2026-07-24 logs show eight parallel "[story] Spots Gone Instantly"
+    # writers hammering a rate-limited gemini — the duplicates were CAUSING
+    # the 429s that then starved legitimate work.
+    if sb and account_id:
+        try:
+            from ..departments.portfolio import produced_by_format_today, DAILY_FORMAT_MIX
+            got = int((produced_by_format_today(sb, account_id) or {}).get("story") or 0)
+            target = max(1, int(DAILY_FORMAT_MIX.get("story") or 5))
+            if got >= target:
+                bus.agent("strategist",
+                          f"story quota already met at claim time ({got}/{target}) — no-op",
+                          "info", "story_noop", job_id=job.id, account_id=account_id)
+                w.queue.complete(job, {"ok": True, "noop": "quota_met"})
+                return
+        except Exception:
+            pass
     topic = (job.payload.get("topic") or "").strip()
     if not topic:
-        picked = _pick_topics(1, account=account, account_id=account_id)
+        picked = _pick_topics(1, account=account, account_id=account_id,
+                              avoid=_topics_recent(sb, account_id))
         if not picked:
             w.queue.complete(job, {"ok": False, "reason": "no_topic"})
             return
         topic = picked[0][0]
+    if sb and _topic_exists_today(sb, account_id, f"[story] {topic}"):
+        bus.agent("strategist", f"duplicate story topic today — no-op: \"{topic[:60]}\"",
+                  "info", "story_dup_noop", job_id=job.id, account_id=account_id)
+        w.queue.complete(job, {"ok": True, "noop": "duplicate_topic"})
+        return
 
     row = board_add(sb, f"[story] {topic}",
                     {"format": "story", "bucket": job.payload.get("bucket", "story")},

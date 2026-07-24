@@ -732,6 +732,24 @@ def write_carousel(w: Worker, job: Job, ctx: AgentContext):
             sb.table("board_items").update({"status": "drafted"}).eq("id", str(item_id)).execute()
         except Exception:
             pass
+        # v5.11.22 REQ-CAROUSEL-TITLES (DEC-075): the board topic was the raw
+        # scout trend ("Spots Gone Instantly") — identical across every account
+        # and every spawn, so Studio showed 55 cards with the same name even
+        # though each script was distinct and on-niche. The writer already
+        # produces its own title; make the board item wear it.
+        try:
+            gen_title = str(data.get("title") or "").strip()
+            # Live data (2026-07-24): the model often ECHOES the topic back as
+            # its title, so an echo is treated as "no title" and slide 1's hook
+            # heading is used instead — that line is always content-specific.
+            if not (8 <= len(gen_title) <= 110) or gen_title.lower() == str(topic).strip().lower():
+                gen_title = str((slides[0] or {}).get("heading") or "").strip()
+            if 8 <= len(gen_title) <= 110 and gen_title.lower() != str(topic).strip().lower():
+                sb.table("board_items").update(
+                    {"topic": f"[carousel] {gen_title}"[:140]}
+                ).eq("id", str(item_id)).execute()
+        except Exception:
+            pass
     bus.agent("brain", f"🖼️ carousel written: {len(slides)} slides — \"{data.get('title','')[:60]}\"",
               "success", "carousel_written", job_id=job.id, item_id=item_id)
     job_of(w, "creative.render_carousel", {
@@ -746,8 +764,15 @@ def _slide_card(img, heading: str, body: str, idx: int, total: int):
     import textwrap as _tw
     FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    img = img.convert("RGB").resize((1080, 1920))
-    img = img.crop((0, 285, 1080, 285 + 1350))  # center-crop to 4:5
+    # v5.11.22 REQ-IMG-ASPECT (DEC-075): the old resize((1080,1920)) forced a
+    # 2:3 or square source into 9:16 NON-UNIFORMLY (people/pets visibly
+    # stretched tall) before cropping to 4:5. ImageOps.fit scales while
+    # PRESERVING aspect ratio and center-crops to the final 4:5 canvas in one
+    # step — nothing is ever distorted. centering=(0.5, 0.42) biases slightly
+    # above center so faces (usually upper-third of AI images) survive the crop.
+    from PIL import ImageOps as _IO
+    img = _IO.fit(img.convert("RGB"), (1080, 1350), method=_I.LANCZOS,
+                  centering=(0.5, 0.42))
     overlay = _I.new("RGBA", img.size, (0, 0, 0, 0))
     d = _ID.Draw(overlay)
     d.rounded_rectangle([40, 760, 1040, 1310], radius=36, fill=(10, 10, 14, 200))
@@ -778,7 +803,12 @@ def render_carousel(w: Worker, job: Job, ctx: AgentContext):
     if not slides:
         w.fail_job(job, "render_carousel: no slides", fatal=True); return
 
-    style = _v.pick_style(item_id)
+    # v5.11.22 REQ-IMG-REALISM: carousels are static photos people zoom into —
+    # they must read as real, so restrict to the photo-real style pool.
+    try:
+        style = _v.pick_style(item_id, pool="realistic")
+    except TypeError:  # older visuals.py without pool param
+        style = _v.pick_style(item_id)
     tmpdir = tempfile.mkdtemp(prefix="carousel_")
     paths = []
     from PIL import Image as _I

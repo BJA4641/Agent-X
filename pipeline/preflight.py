@@ -55,6 +55,15 @@ REQUIRED = [
     # v5.10.7 — backpressure  (THIS is the one that silently failed to upload)
     ("workers.departments.portfolio", "awaiting_approval", "v5.10.7", "pipeline/workers/departments/portfolio.py"),
     ("workers.departments.portfolio", "MAX_AWAITING_APPROVAL", "v5.10.7", "pipeline/workers/departments/portfolio.py"),
+    # v5.11.21 — dedupe namespace, full-ladder council, honest publish, reaper
+    ("agentcore.council", "_walk_ladder", "v5.11.21", "pipeline/agentcore/council.py"),
+    ("agent.llm", "_call_raw", "v5.11.21", "pipeline/agent/llm.py"),
+    ("workers.departments.editorial", "_topic_exists_today", "v5.11.21", "pipeline/workers/departments/editorial.py"),
+    ("workers.departments.ops", "_reap_stale_jobs", "v5.11.21", "pipeline/workers/departments/ops.py"),
+    ("workers.departments.ops", "STALE_JOB_MIN", "v5.11.21", "pipeline/workers/departments/ops.py"),
+    # v5.11.22 — topic memory, content-derived carousel titles, photo-real slides
+    ("workers.departments.editorial", "_topics_recent", "v5.11.22", "pipeline/workers/departments/editorial.py"),
+    ("agent.visuals", "REALISTIC_STYLES", "v5.11.22", "pipeline/agent/visuals.py"),
 ]
 
 
