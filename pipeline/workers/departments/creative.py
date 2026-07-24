@@ -712,7 +712,14 @@ def write_carousel(w: Worker, job: Job, ctx: AgentContext):
         text, cost, mlabel = _llm.chat(prompt, max_tokens=900)
         _ledger.record("carousel_writer", model=mlabel, cost_usd=cost, item_id=item_id)
         import json as _json
-        data = _json.loads(text[text.find("{"): text.rfind("}")+1])
+        # v5.11.18 REQ-JSON-REPAIR: a live carousel job died on
+        # "Expecting value: line 26 column 101" — one malformed character threw
+        # away a completed model call. Free models emit trailing commas, smart
+        # quotes and truncated responses; none of those change the content.
+        from agentcore.jsonx import loads_loose as _ll
+        data = _ll(text)
+        if data is None:
+            raise ValueError("carousel JSON unparseable even after repair")
         slides = data.get("slides") or []
         assert 3 <= len(slides) <= 7 and all(sl.get("heading") for sl in slides)
     except Exception as e:

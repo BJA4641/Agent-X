@@ -166,7 +166,10 @@ def grade_post(script: dict, account_id=None, project_id=None, post_id=None, ite
                     else:
                         raise  # no free grader + paid not allowed → skipped verdict below
                 ledger.record("grader", model=mlabel, cost_usd=cost, item_id=item_id)
-            parsed = json.loads(text[text.find("{"): text.rfind("}")+1])
+            from agentcore.jsonx import loads_loose as _ll
+            parsed = _ll(text)          # v5.11.18 REQ-JSON-REPAIR
+            if parsed is None:
+                raise ValueError("grade JSON unparseable even after repair")
             scores = {k: _clamp(int(parsed.get(k, 5)), 1, 10)
                       for k in ("hook","visuals","pacing","audio","caption","cta")}
             overall = round(sum(scores.values()) / 6.0, 1)
@@ -238,7 +241,10 @@ def rewrite_script(previous_script: dict, verdict: dict, topic: str,
             else:
                 raise
         ledger.record("brain_rewrite", model=mlabel, cost_usd=cost)
-        parsed = json.loads(text[text.find("{"): text.rfind("}")+1])
+        from agentcore.jsonx import loads_loose as _ll2
+        parsed = _ll2(text)
+        if parsed is None:
+            raise ValueError("grade JSON unparseable even after repair")
         return parsed
     except Exception as e:
         ledger.record("brain_rewrite", ok=False, detail=str(e)[:200])

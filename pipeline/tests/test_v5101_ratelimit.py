@@ -915,3 +915,45 @@ def test_board_format_prefix_is_stripped_on_recovery():
     from workers.departments import creative as cr
     src = inspect.getsource(cr.write_script)
     assert 'startswith("[")' in src, "topics like '[carousel] x' must lose the prefix"
+
+
+# ------------------------------------------------- v5.11.18 REQ-JSON-REPAIR
+
+def test_repairs_every_shape_seen_in_production():
+    """A live carousel job died on "Expecting value: line 26 column 101" —
+    one malformed character discarded a completed model call."""
+    from agentcore.jsonx import loads_loose
+    assert loads_loose('{"a": 1, "b": [1,2,],}') == {"a": 1, "b": [1, 2]}
+    assert loads_loose('```json\n{"a": 1}\n```') == {"a": 1}
+    assert loads_loose('Sure! {"a": 1} Hope that helps.') == {"a": 1}
+    assert loads_loose('{\u201ca\u201d: 1}') == {"a": 1}
+    assert loads_loose('{a: 1}') == {"a": 1}
+
+
+def test_truncated_response_keeps_what_completed():
+    from agentcore.jsonx import loads_loose
+    out = loads_loose('{"slides": [{"text": "hello"}, {"text": "wor')
+    assert out and out["slides"][0]["text"] == "hello"
+
+
+def test_valid_json_is_untouched_and_garbage_still_fails():
+    from agentcore.jsonx import loads_loose
+    assert loads_loose('{"a": 1}') == {"a": 1}
+    assert loads_loose("no json here at all") is None
+    assert loads_loose("", default={}) == {}
+    assert loads_loose(None) is None
+
+
+def test_repairs_never_invent_values():
+    """Every repair fixes punctuation or framing — none may change meaning."""
+    from agentcore.jsonx import loads_loose
+    assert loads_loose('{"n": 7,}') == {"n": 7}
+    assert loads_loose('{"s": "keep me"}')["s"] == "keep me"
+
+
+def test_all_model_json_parsers_use_the_repairer():
+    import inspect
+    from workers.departments import creative, art_director
+    from agent import brain, grader
+    for mod in (creative, art_director, brain, grader):
+        assert "loads_loose" in inspect.getsource(mod), mod.__name__

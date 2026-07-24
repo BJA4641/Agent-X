@@ -147,7 +147,10 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
                 text, cost, mlabel = _council.debate_or_chat(_prompt_with_context(), max_tokens=1800)
             else:
                 text, cost, mlabel = _council.debate(_prompt_with_context(), max_tokens=1800)
-            script = json.loads(text[text.find("{"): text.rfind("}")+1])
+            from agentcore.jsonx import loads_loose as _ll
+            script = _ll(text)          # v5.11.18: repair before discarding
+            if script is None:
+                raise ValueError("script JSON unparseable even after repair")
             # v5.10.7 REQ-LEDGER-DEDUPE: aisuite already recorded the true cost of
             # this call as "aisuite.text". Recording it again here DOUBLED every
             # paid write in run_ledger — today's ledger showed $2.97 when ~$1.50

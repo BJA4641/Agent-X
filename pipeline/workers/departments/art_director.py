@@ -148,7 +148,10 @@ def _parse_shots(text: str, n: int) -> list:
     if start == -1 or end == -1 or end <= start:
         return []
     try:
-        data = json.loads(raw[start:end + 1])
+        from agentcore.jsonx import loads_loose as _ll
+        data = _ll(raw[start:end + 1])   # v5.11.18
+        if data is None:
+            return []
     except Exception:
         return []
     if not isinstance(data, list):
