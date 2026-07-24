@@ -301,6 +301,22 @@ def render(w: Worker, job: Job, ctx: AgentContext):
     """Render video from an ALREADY-GRADED script. Reuses the legacy produce()
     pipeline's render steps (voice/visuals/composer/captions) but we OWN the
     flow here so we control retries/cost and never loop forever."""
+    # v5.11.6 REQ-CRASHLOOP-1 — a render that kills the worker must not be
+    # retried forever. Observed 2026-07-24: the worker OOM'd mid-frame-render,
+    # Railway restarted it, the SAME job was re-claimed, and it died again — a
+    # loop that re-billed ElevenLabs on every pass ($0.0975 and climbing) while
+    # producing nothing. The queue's attempt counter does not see this: the
+    # process dies before the job can be marked failed, so attempts stays 0.
+    # We therefore stamp our own counter on the board item BEFORE doing any
+    # heavy work, and quarantine the item once it has taken the worker down.
+    _crash_guard = None
+    try:
+        _crash_guard = _render_attempt_guard(ctx, job)
+        if _crash_guard is False:
+            return
+    except Exception:
+        pass
+
     from agent import (voice as _voice, visuals as _v, captions as _cap,
                        overlays as _ov, music as _music, sfx as _sfx,
                        composer as _comp, captions as _capmod)
@@ -387,7 +403,18 @@ def render(w: Worker, job: Job, ctx: AgentContext):
             bus.agent("voice", "🎙️ recording narration…", "info", "voice_start",
                       job_id=job.id, item_id=item_id)
             try:
-                words = _capmod.timed_words(narration, audio, item_id=item_id, style=style)
+                # v5.11.6 REQ-VOICE-CACHE: on a crash-retry the narration is
+                # identical, but the previous run already paid ElevenLabs for it.
+                # Reuse the audio file on disk when it exists and is non-empty.
+                if os.path.exists(audio) and os.path.getsize(audio) > 1024:
+                    bus.agent("voice", "🎙️ reusing narration from the previous attempt ($0)",
+                              "info", "voice_cached", job_id=job.id, item_id=item_id)
+                    words = _capmod.timed_words(narration, audio, item_id=item_id,
+                                                style=style, reuse_existing=True) \
+                        if "reuse_existing" in getattr(_capmod.timed_words, "__code__", type("x",(),{"co_varnames":()})).co_varnames \
+                        else _capmod.timed_words(narration, audio, item_id=item_id, style=style)
+                else:
+                    words = _capmod.timed_words(narration, audio, item_id=item_id, style=style)
                 _engine = getattr(_capmod, "LAST_ENGINE", "edge")
                 bus.agent("voice", f"🎙️ narration recorded — {len(words)} words via {_engine}", "success",
                           "voice_done", job_id=job.id, item_id=item_id)
@@ -973,3 +1000,60 @@ def _do_paid_write(w, job, bus, topic, item_id, account_id, project_id):
                   "success", "escalate_ok", job_id=job.id, item_id=item_id)
         return script
     return None
+
+
+# --------------------------------------------------------------- v5.11.6
+
+RENDER_MAX_CRASHES = int(os.environ.get("RENDER_MAX_CRASHES", "2"))
+
+
+def _render_attempt_guard(ctx, job):
+    """Count render starts per item. Returns False if the item is quarantined.
+
+    A crash-loop is invisible to the job queue — the container dies before the
+    job row can be updated — so the counter lives on the board item and is
+    written BEFORE the heavy work begins.
+    """
+    sb = ctx.deps.get("supabase") and ctx.deps["supabase"]()
+    bus = ctx.deps["bus"]
+    item_id = job.payload.get("item_id")
+    if sb is None or not item_id:
+        return True
+    try:
+        row = (sb.table("board_items").select("payload,topic")
+               .eq("id", str(item_id)).limit(1).execute().data or [{}])[0]
+    except Exception:
+        return True
+    payload = dict(row.get("payload") or {})
+    starts = int(payload.get("render_starts") or 0) + 1
+    payload["render_starts"] = starts
+    if starts > RENDER_MAX_CRASHES:
+        payload["quarantine_reason"] = (
+            f"render started {starts} times without completing — the worker died "
+            f"mid-render each time (likely out of memory). Quarantined so it stops "
+            f"crash-looping and re-billing voice.")
+        try:
+            sb.table("board_items").update(
+                {"status": "failed", "payload": payload}).eq("id", str(item_id)).execute()
+        except Exception:
+            pass
+        bus.agent("ops", f"🚨 render quarantined after {starts} crashes — "
+                         f"\"{(row.get('topic') or '')[:60]}\". The worker was dying "
+                         f"mid-render; this item will not be retried until you reset it.",
+                  "critical", "render_quarantine", job_id=job.id, item_id=item_id)
+        try:
+            w = ctx.deps.get("worker")
+            if w is not None:
+                w.queue.complete(job, {"ok": False, "quarantined": True})
+        except Exception:
+            pass
+        return False
+    try:
+        sb.table("board_items").update({"payload": payload}).eq("id", str(item_id)).execute()
+    except Exception:
+        pass
+    if starts > 1:
+        bus.agent("ops", f"⚠️ render attempt {starts}/{RENDER_MAX_CRASHES + 1} for this item — "
+                         f"the previous attempt did not finish.",
+                  "warn", "render_retry", job_id=job.id, item_id=item_id)
+    return True

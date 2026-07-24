@@ -446,3 +446,37 @@ def test_dedupe_runs_before_planning_spends_money():
     from workers.departments import editorial as ed
     src = inspect.getsource(ed.ideate)
     assert src.index("_drop_recent_duplicates") < src.index("for topic, bucket in topics")
+
+
+# ------------------------------------------------- v5.11.6
+
+def test_approval_routes_through_the_art_director():
+    """The Art Director shipped in v5.10.0 and never ran once: the approve path
+    spawned creative.render directly, skipping art.direct entirely."""
+    import inspect
+    from workers.departments import human_desk as hd
+    src = inspect.getsource(hd)
+    assert '"art.direct"' in src
+    i_art = src.index('"art.direct"')
+    seg = src[max(0, i_art - 1200):i_art]
+    assert 'approved' in seg
+
+
+def test_render_has_a_crashloop_guard_before_heavy_work():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr.render)
+    assert "_render_attempt_guard" in src
+    assert src.index("_render_attempt_guard") < src.index("narration")
+
+
+def test_quarantine_threshold_is_small():
+    from workers.departments import creative as cr
+    assert cr.RENDER_MAX_CRASHES <= 3, "a crash-looping render must stop quickly"
+
+
+def test_voice_is_not_rebilled_on_retry():
+    import inspect
+    from workers.departments import creative as cr
+    src = inspect.getsource(cr.render)
+    assert "voice_cached" in src and "os.path.getsize(audio)" in src

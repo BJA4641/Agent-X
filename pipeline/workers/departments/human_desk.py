@@ -112,16 +112,24 @@ def _approved_sweep(w: Worker, job: Job, sb, bus, max_renders: int = 2):
                 and not payload.get("video_path")
                 and not payload.get("render_enqueued")):
             from ..common import job_of as _job_of
-            _job_of(w, "creative.render",
+            # v5.11.6 REQ-ART-BYPASS: this spawned creative.render DIRECTLY,
+            # skipping art.direct entirely. The Art Director (v5.10.0) therefore
+            # never ran on a single founder-approved item — every frame was
+            # rendered from whatever the writer left in beat.visual_prompt, which
+            # is the exact "draw a sentence" problem art direction exists to fix.
+            # art.direct is fail-open: it always hands off to creative.render.
+            _job_of(w, "art.direct",
                     {"item_id": item_id, "script": payload.get("script"),
+                     "topic": it.get("topic") or "",
+                     "account_id": it.get("account_id"),
                      "style": payload.get("style")},
                     account_id=it.get("account_id"),
-                    idempotency_key=f"render:{item_id}",
+                    idempotency_key=f"art:{item_id}",
                     priority=Priority.HIGH)
             payload["render_enqueued"] = True
             sb.table("board_items").update({"payload": payload}).eq("id", item_id).execute()
             bus.agent("human_desk",
-                      f"🎬 founder approved \"{(it.get('topic') or '')[:60]}\" — render queued",
+                      f"🎬 founder approved \"{(it.get('topic') or '')[:60]}\" — art direction then render queued",
                       "success", "approve_to_render", job_id=job.id, item_id=item_id)
             renders += 1
 
