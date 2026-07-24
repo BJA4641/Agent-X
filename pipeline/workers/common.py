@@ -456,3 +456,44 @@ def schedule_next(w, job_type: str, interval_s: float, payload: dict = None,
         return True
     except Exception:
         return False
+
+
+def lessons_for(sb, account_id, limit: int = 6, days: int = 14) -> str:
+    """v5.11.23 REQ-LESSONS-LOOP (DEC-076): the concrete learning channel.
+
+    The UI's reject dialog promises "the agents read this" — this function is
+    what makes that sentence TRUE. It collects the human rejection reasons for
+    this account from the last `days` days (payload.rejection.reason, written
+    by Studio and the account Live-content tab) and returns a ready-to-inject
+    prompt block. Writers prepend it, so every rejection permanently steers
+    the next generation away from the mistake.
+
+    Honesty note: this is retrieval, not self-modification — the agents do
+    not rewrite their own code; they consult their track record. Fail-open:
+    any error returns "" and never blocks a write.
+    """
+    if not (sb and account_id):
+        return ""
+    try:
+        import datetime as _dt
+        cutoff = (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)).isoformat()
+        res = (sb.table("board_items")
+                 .select("topic,payload")
+                 .eq("account_id", str(account_id)).eq("status", "rejected")
+                 .gte("updated_at", cutoff)
+                 .order("updated_at", desc=True).limit(limit * 3).execute())
+        seen, lines = set(), []
+        for r in (res.data or []):
+            reason = str(((r.get("payload") or {}).get("rejection") or {}).get("reason") or "").strip()
+            if not reason or reason.lower() in ("not specified",) or reason.lower() in seen:
+                continue
+            seen.add(reason.lower())
+            lines.append(f"- {reason[:160]}")
+            if len(lines) >= limit:
+                break
+        if not lines:
+            return ""
+        return ("LESSONS from posts the owner rejected — do NOT repeat these mistakes:\n"
+                + "\n".join(lines) + "\n")
+    except Exception:
+        return ""

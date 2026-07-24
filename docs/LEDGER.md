@@ -265,3 +265,42 @@ Mandated fields: ID · Date · Decision · Reasoning · Alternatives · Expected
 - creative._slide_card: `ImageOps.fit(…, (1080,1350), LANCZOS, centering=(0.5,0.42))` replaces stretch-then-crop — no more distorted subjects.
 - visuals.py: `real-daylight` + `real-ugc` styles, `REALISTIC_STYLES` pool, `pick_style(pool="realistic")`; render_carousel restricted to photo-real pool (TypeError-safe).
 - preflight: 26 symbols. Tests: 294 (14 new in test_v51122_quality.py). Gates: compile ✅ pytest ✅ preflight ✅ boot ✅
+
+## DEC-076 — v5.11.23 "Batch 2": chrome, account approvals, lessons loop, Railway eyes (2026-07-24)
+
+**Decision.** Ship four founder-requested capabilities in one release: (1) pin the
+version banner + header + sidebar as one sticky chrome unit, (2) an account-scoped
+**Live content** tab with approve/reject so owners review content inside the
+project instead of the admin Studio, (3) a real learning channel — human rejection
+reasons are stored and injected into every future write for that account, (4)
+read-only Railway MCP tools (status + logs) now that RAILWAY_PROJECT_TOKEN is in
+Vercel.
+
+**Requirements.**
+- REQ-STICKY-CHROME — VersionBanner is `position:sticky` (class `vbanner`);
+  `body:has(.vbanner)` offsets header to 32px and sidebar/right-rail to 116px.
+  Dismissing the banner unmounts the node and every offset self-heals. <1100px the
+  banner goes static (mobile space wins). Root cause of the report: the banner was
+  `position:relative`, scrolled away first, and read as "all chrome broke".
+- REQ-ACCOUNT-PIPELINE — new endpoint
+  `/api/projects/[pid]/accounts/[aid]/pipeline` (GET items, POST approve/reject)
+  with the same ownership chain as the account API and the same CAS
+  `status='drafted'` transition Studio uses; UI tab "Live content" on the account
+  page. Root cause of "No posts yet": the Posts tab reads legacy `account_posts`,
+  the agents work in `board_items`.
+- REQ-LESSONS-LOOP — `workers/common.lessons_for(sb, account_id)` collects
+  deduped human rejection reasons (14d window) and both writers consume it:
+  write_script via the existing grade_feedback channel, write_carousel via prompt
+  prepend. The reject dialog's promise "the agents read this" is now literally
+  true. Honesty note: this is retrieval of track record, not self-modification.
+- REQ-RAILWAY-MCP — `agentx_railway_status` + `agentx_railway_logs` (Project-
+  Access-Token header, 15s timeout, read-only by test contract; restart/redeploy
+  intentionally remain human actions).
+
+**Gates.** pytest 301/301 (7 new in test_v51123_batch2.py) · preflight 27 symbols
+· boot_check 70 modules OK · **npm run build PASSED** (full Next.js production
+compile). Versions: web/version.json + agentcore fallback → 5.11.23.
+
+**Verified live pre-batch.** v5.11.22 deployed (banner agree ✓); quota governor
+speaking ("@puppy.parent quota met — no ideation"); new Groq key validated in
+free ladder (7 rungs).

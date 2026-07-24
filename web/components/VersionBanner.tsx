@@ -57,8 +57,12 @@ export default function VersionBanner() {
   };
 
   return (
-    <div role="status" style={{
-      position: "relative",
+    <div role="status" className="vbanner" style={{
+      /* v5.11.23 REQ-STICKY-CHROME: the banner scrolled away with the page.
+         Sticky here + :has() offsets in globals.css keep banner, header and
+         sidebar pinned as one chrome unit; dismissing the banner unmounts
+         .vbanner and every offset collapses back automatically. */
+      position: "sticky", top: 0, zIndex: 60,
       display: "flex", alignItems: "center", justifyContent: "center",
       gap: 12, flexWrap: "wrap",
       padding: "7px 96px 7px 14px", fontSize: 12.5, lineHeight: 1.4,

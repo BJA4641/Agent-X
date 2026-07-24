@@ -255,3 +255,23 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 
 /* light theme: the same contrast problem inverted */
 [data-theme="light"] { --dim: #4A5260; --dim-soft: #6B7280; }
+
+
+/* ── v5.11.23 REQ-STICKY-CHROME ──────────────────────────────────────────
+   Founder report (2026-07-24): banner + header + sidebar were scrolling with
+   the page. The banner was position:relative (never pinned) and sat ABOVE
+   header.site, so at top:0 the stuck header hid under/behind nothing while
+   the banner vanished — reading as "all chrome is gone". The banner is now
+   sticky (see VersionBanner.tsx) and everything below offsets from it via
+   :has(), which self-heals when the banner is dismissed (node unmounts →
+   selectors stop matching → offsets return to 0/84px). */
+body:has(.vbanner) header.site { top: 32px; }
+body:has(.vbanner) .wrap.shell > .sidebar,
+body:has(.vbanner) .wrap.shell > .rightpanel { top: 116px; max-height: calc(100vh - 132px); }
+
+@media (max-width: 1100px) {
+  /* small screens: chrome real-estate is precious — banner scrolls away,
+     header stays; sidebar is already static here (v5.8.9 rule). */
+  .vbanner { position: static !important; }
+  body:has(.vbanner) header.site { top: 0; }
+}

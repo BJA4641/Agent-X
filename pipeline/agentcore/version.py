@@ -3,7 +3,7 @@
 Why this exists
 ---------------
 The platform carried THREE independent version numbers:
-  1. workers/runner.py         VERSION = "5.9.7"
+  1. workers/runner.py         VERSION = "5.11.23"
   2. web/app/api/version/route.ts  WEB_VERSION = "5.9.4"   (hardcoded, never bumped)
   3. ops.heartbeat job payload  — frozen at whichever boot started that chain
 

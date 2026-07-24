@@ -64,6 +64,8 @@ REQUIRED = [
     # v5.11.22 — topic memory, content-derived carousel titles, photo-real slides
     ("workers.departments.editorial", "_topics_recent", "v5.11.22", "pipeline/workers/departments/editorial.py"),
     ("agent.visuals", "REALISTIC_STYLES", "v5.11.22", "pipeline/agent/visuals.py"),
+    # v5.11.23 — lessons loop: rejection reasons feed the writers
+    ("workers.common", "lessons_for", "v5.11.23", "pipeline/workers/common.py"),
 ]
 
 

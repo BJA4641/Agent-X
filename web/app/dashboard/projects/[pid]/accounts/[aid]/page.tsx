@@ -128,6 +128,7 @@ const TABS = [
   { key:"visuals",   label:"Visuals",     icon:"🎬", doc:"visual_rules" },
   { key:"content",   label:"Content rules", icon:"📐", doc:"content_rules" },
   { key:"posts",     label:"Posts",       icon:"📱" },
+  { key:"pipeline",  label:"Live content", icon:"🎞️" },
   { key:"library",   label:"All documents", icon:"📚" },
 ];
 
@@ -323,6 +324,7 @@ export default function AccountDetailPage() {
         </div>
       )}
       {tab==="posts" && <PostsGrid posts={posts} />}
+      {tab==="pipeline" && <PipelineTab pid={pid} aid={aid} />}
 
       <style>{`
         .markdown h1{font-size:22px;margin:18px 0 10px;}
@@ -649,6 +651,97 @@ function CloneBox({ pid, aid }: { pid: string; aid: string }) {
         </button>
       </div>
       {msg && <p className="note" style={{ color: state === "err" ? "#e5484d" : "var(--approved)", marginTop: 8 }}>{msg}</p>}
+    </div>
+  );
+}
+
+/* ── v5.11.23 REQ-ACCOUNT-PIPELINE (DEC-076) ─────────────────────────────
+   "Posts" reads account_posts (kickoff planner); the agents actually work in
+   board_items. This tab is the account-scoped Studio: the same live items,
+   the same approve/reject transition, filtered to THIS account — so owners
+   can review content without leaving the project. */
+function PipelineTab({ pid, aid }: { pid: string; aid: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string>("");
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    try {
+      const r = await fetch(`/api/projects/${pid}/accounts/${aid}/pipeline`);
+      const j = await r.json();
+      if (j.ok) { setItems(j.items || []); setErr(""); }
+      else setErr(j.error || "load failed");
+    } catch (e: any) { setErr(String(e?.message || e)); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, [pid, aid]);
+
+  const act = async (itemId: string, action: "approve" | "reject") => {
+    let reason: string | undefined;
+    if (action === "reject") {
+      reason = window.prompt("Why reject? (the agents read this and avoid the mistake)") || undefined;
+      if (reason === undefined) return; // cancelled
+    }
+    setBusy(itemId);
+    try {
+      const r = await fetch(`/api/projects/${pid}/accounts/${aid}/pipeline`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, itemId, reason }),
+      });
+      const j = await r.json();
+      if (!j.ok) alert(j.error || "failed");
+    } catch (e: any) { alert(String(e?.message || e)); }
+    setBusy(""); load();
+  };
+
+  if (loading) return <p className="note">Loading live content…</p>;
+  if (err) return <div className="card"><p className="note">⚠️ {err}</p></div>;
+  if (items.length === 0) return (
+    <div className="card"><p className="note">
+      Nothing in the pipeline for this account yet. When agents draft a reel or
+      carousel it appears here the moment it exists — drafts can be approved or
+      rejected right on this page.
+    </p></div>
+  );
+
+  const order: Record<string, number> = { drafted: 0, idea: 1, approved: 2, scheduled: 3, quarantined: 4, published: 5 };
+  const sorted = [...items].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px,1fr))", gap: 14 }}>
+      {sorted.map((it) => {
+        const st = STATUS_STYLE[it.status] || { bg: "#334155", fg: "#fff", label: it.status };
+        return (
+          <div key={it.id} className="card" style={{ margin: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, background: st.bg, color: st.fg, fontWeight: 600 }}>
+                {st.label}{it.dry_run_only ? " · dry-run" : ""}
+              </span>
+              <span className="note" style={{ fontSize: 11 }}>
+                {it.format} · {new Date(it.created_at).toLocaleString()}
+              </span>
+            </div>
+            <h4 style={{ margin: "10px 0 6px" }}>{it.topic}</h4>
+            {it.images.length > 0 && (
+              <div style={{ display: "flex", gap: 4, overflowX: "auto", margin: "6px 0" }}>
+                {it.images.map((u: string, i: number) => (
+                  <img key={i} src={u} alt="" style={{ height: 96, borderRadius: 6, flex: "0 0 auto" }} />
+                ))}
+              </div>
+            )}
+            {it.hook && <p style={{ fontSize: 13, margin: "4px 0" }}><b>Hook:</b> {it.hook}</p>}
+            {it.caption && <p className="note" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{it.caption.slice(0, 220)}</p>}
+            {it.status === "drafted" && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button className="btn" disabled={busy === it.id} onClick={() => act(it.id, "approve")}
+                  style={{ background: "#10b981", color: "#000", fontWeight: 600 }}>Approve</button>
+                <button className="btn" disabled={busy === it.id} onClick={() => act(it.id, "reject")}>Reject</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -224,9 +224,57 @@ function buildToolsList() {
             limit: { type: "number", default: 10, maximum: 30 }
           }
         }
+      },
+      {
+        name: "agentx_railway_status",
+        description: "Live Railway status for the Python worker: services, latest deployment state (SUCCESS/FAILED/CRASHED/BUILDING) and deploy time. Use when the heartbeat banner looks wrong or after pushing a new build.",
+        inputSchema: { type: "object", properties: {} }
+      },
+      {
+        name: "agentx_railway_logs",
+        description: "Tail the Railway worker's logs (build + runtime). Omit deployment_id to read the latest deployment. This is how you see crash tracebacks without opening the Railway dashboard.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deployment_id: { type: "string", description: "Optional — from agentx_railway_status; defaults to the latest deployment" },
+            limit: { type: "number", default: 80, maximum: 400 }
+          }
+        }
       }
     ]
   };
+}
+
+// ---------- Railway (v5.11.23 REQ-RAILWAY-MCP, DEC-076) ----------
+// A production-scoped Railway project token (env RAILWAY_PROJECT_TOKEN, set in
+// Vercel) lets the assistant read deploy status + logs directly instead of
+// asking the founder for dashboard screenshots. Read-only queries only —
+// restarts/redeploys stay a human action on purpose.
+const RAILWAY_GQL = "https://backboard.railway.com/graphql/v2";
+async function railwayGQL(query: string, variables: Record<string, any>) {
+  const token = process.env.RAILWAY_PROJECT_TOKEN || "";
+  if (!token) throw new Error("RAILWAY_PROJECT_TOKEN is not set in Vercel env — add it (Production scope) and redeploy.");
+  const r = await fetch(RAILWAY_GQL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Project-Access-Token": token },
+    body: JSON.stringify({ query, variables }),
+    // Railway GraphQL can be slow on cold logs — cap it so MCP doesn't hang.
+    signal: AbortSignal.timeout(15000),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.errors?.length)
+    throw new Error("Railway API: " + (j.errors?.[0]?.message || `HTTP ${r.status}`));
+  return j.data;
+}
+async function railwayLatestDeployments() {
+  // A project token is already scoped to one project+environment, so the
+  // deployments query needs no ids — ask for the newest few, newest first.
+  const d = await railwayGQL(
+    `query { deployments(first: 8) { edges { node {
+        id status createdAt staticUrl
+        service { name }
+      } } } }`, {});
+  return (d?.deployments?.edges || []).map((e: any) => e.node);
 }
 
 // ---------- tool handlers ----------
@@ -530,6 +578,36 @@ async function runTool(name: string, params: any, userId: string) {
     if (params?.niche) q = q.eq("niche", String(params.niche));
     const { data } = await q.limit(limit);
     return { trends: data || [] };
+  }
+
+  if (name === "agentx_railway_status") {
+    const deps = await railwayLatestDeployments();
+    return {
+      deployments: deps.map((n: any) => ({
+        id: n.id, service: n.service?.name || "?", status: n.status,
+        created_at: n.createdAt, url: n.staticUrl || null,
+      })),
+      hint: "status BUILDING/DEPLOYING = push in progress; CRASHED/FAILED = read agentx_railway_logs",
+    };
+  }
+
+  if (name === "agentx_railway_logs") {
+    const limit = Math.min(Number(params?.limit) || 80, 400);
+    let depId = String(params?.deployment_id || "").trim();
+    if (!depId) {
+      const deps = await railwayLatestDeployments();
+      if (!deps.length) throw new Error("No deployments visible to this token.");
+      depId = deps[0].id;
+    }
+    const d = await railwayGQL(
+      `query($id: String!, $limit: Int!) {
+         deploymentLogs(deploymentId: $id, limit: $limit) {
+           timestamp severity message
+         }
+       }`, { id: depId, limit });
+    const logs = (d?.deploymentLogs || []).map((l: any) =>
+      `${l.timestamp} [${l.severity}] ${l.message}`);
+    return { deployment_id: depId, lines: logs.length, logs };
   }
 
   throw new Error("Unknown tool: " + name);

@@ -263,9 +263,17 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
         # Claude call). verify=False kills the legacy double-grading inside
         # brain; allow_demo=False means "no model" delays instead of shipping
         # template junk.
+        # v5.11.23 REQ-LESSONS-LOOP: human rejection reasons ride the same
+        # feedback channel the CQO grader uses — one pipe, brain already
+        # listens to it, zero new plumbing inside the writer.
+        from ..common import lessons_for as _lessons_for
+        _fb = str(job.payload.get("grade_feedback", "") or "")
+        _lessons = _lessons_for(sb, account_id)
+        if _lessons:
+            _fb = (_fb + "\n\n" + _lessons).strip()
         script = _brain.write_script(
             topic, item_id=item_id, account_id=account_id, project_id=project_id,
-            grade_feedback=job.payload.get("grade_feedback", ""),
+            grade_feedback=_fb,
             verify=False, allow_demo=False,
         )
     except RuntimeError as e:
@@ -697,10 +705,13 @@ def write_carousel(w: Worker, job: Job, ctx: AgentContext):
     geos, lang = _account_geo(sb, account_id)
     clone_notes = (job.payload.get("source_notes") or "").strip()
 
+    from ..common import lessons_for as _lessons_for
+    _lessons = _lessons_for(sb, account_id)
     prompt = (
         "You write viral Instagram/TikTok CAROUSEL posts (image slides).\n"
         f"Topic: {topic}\n"
         f"Brand voice/context: {str(brand)[:900]}\n"
+        + (_lessons if _lessons else "")
         + (f"CLONE BRIEF (recreate this ANGLE originally, never copy wording): {clone_notes[:500]}\n" if clone_notes else "")
         + (f"Audience countries: {', '.join(geos)}. Avoid region-specific slang; only universally available products.\n" if geos else "")
         + f"Language: {lang}.\n"
