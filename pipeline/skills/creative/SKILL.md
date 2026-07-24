@@ -45,3 +45,56 @@ raises the stakes. Include a digit or metric whenever truthful.
 6. FUTURE SHOCK — a concrete prediction. "This tool won't exist in 2 years. / Learn the skill behind it instead."
 Hook families that also work: curiosity ("The real reason X happens isn't what you think"), value ("How to X without Y"), story ("Last week, [unexpected thing] happened").
 HARD RULE: no fabricated numbers, names, or claims. If a pattern needs a fact you don't have, pick another pattern.
+
+---
+
+## HOOK CRAFT (v5.11.12)
+
+The grader rejects more scripts on `hook` than on any other axis. A hook is not
+a topic sentence — it is the reason someone does not scroll.
+
+Six patterns that score 8+. Pick one, do not blend:
+
+1. **Contradiction** — state the thing the audience believes, then break it.
+   "Most smart feeders starve puppies." (scored 9)
+2. **Cost of ignorance** — name what they are already losing.
+   "Your phone is punishing your dog."
+3. **Specific number + timeframe** — precision reads as evidence.
+   "Three actives. Eight weeks. Spots gone."
+4. **Mid-action open** — start as though the video already began.
+   "Stop. Put the crate there instead."
+5. **Named mistake** — the viewer recognises themselves.
+   "You are washing your face at the wrong time."
+6. **Withheld answer** — a real question with a concrete payoff coming.
+   "Why does your puppy cry only at 3am?"
+
+Anti-patterns that score 4 or less: "Learn about…", "In this video…",
+"Let's talk about…", "Here are 5 tips…", anything beginning with a greeting,
+anything a brand account would post.
+
+Hard rules: MAX 8 words. Say it out loud before writing it down — if you would
+not say it to a friend, it fails. Never repeat the hook at the end of the reel;
+the closing line is a CTA, not a reprise.
+
+## BEAT STRUCTURE
+
+Each beat carries exactly ONE new idea and one visual change. Six to seven beats:
+
+  0  hook          — pattern interrupt, own poster frame, under 2 seconds
+  1  the stakes    — why this matters to THEM, not in general
+  2  the mistake   — what most people do, concretely
+  3  the fix       — the actual answer, specific enough to act on
+  4  the proof     — a number, a before/after, a named detail
+  5  the nuance    — the exception, which is what makes it credible
+  6  CTA           — one verb, held 2-3 seconds
+
+If two adjacent beats could swap without anyone noticing, they are the same
+beat and one should be cut. Repetition is the most common pacing failure.
+
+## SOUNDING HUMAN
+
+Write the way a knowledgeable friend talks. Use contractions. Vary sentence
+length hard — a four-word sentence next to a fifteen-word one. Include one
+detail so specific a model would not have invented it. Never use: "dive in",
+"game-changer", "unlock", "revolutionise", "in today's video", "let's explore",
+"the truth is", or three-item lists that all have the same shape.

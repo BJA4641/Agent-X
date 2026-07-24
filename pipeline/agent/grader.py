@@ -44,6 +44,16 @@ carries this same rubric, so a low score means the script genuinely missed it):
          on a kitchen counter, hard morning light"
   cta 5 = "check the link in bio and also follow" · cta 9 = "save this."
 
+`human` (v5.11.12) — does this sound like a PERSON talking, or like a model?
+  1-4  = AI tells: "in today's video we'll explore", "let's dive in", "game-changer",
+         "revolutionise", tidy tricolons, every sentence the same length, no contractions
+  5-6  = competent but flat; correct sentences nobody would say out loud
+  7    = mostly natural, one or two stock phrases
+  8-10 = sounds like a real person with an opinion — contractions, uneven rhythm,
+         one specific concrete detail a model would not invent
+This axis exists because the other six can all pass while the script still reads
+as machine-written, which is the fastest way to lose a short-form audience.
+
 Score 1-10 on EACH axis. Return STRICT JSON with no commentary:
 {{
   "hook": int,
@@ -52,6 +62,7 @@ Score 1-10 on EACH axis. Return STRICT JSON with no commentary:
   "audio": int,
   "caption": int,
   "cta": int,
+  "human": int,
   "notes": "two sentences: what WORKS specifically",
   "fix_instruction": "ONE concrete rewrite instruction — what to change, exactly. If overall >= 8, say exactly 'publish'"
 }}"""
@@ -240,7 +251,7 @@ def _clamp(n, lo, hi):
 
 def _default_verdict(note: str = "") -> dict:
     return {
-        "scores": {"hook":6,"visuals":6,"pacing":6,"audio":6,"caption":6,"cta":6},
+        "scores": {"hook":6,"visuals":6,"pacing":6,"audio":6,"caption":6,"cta":6,"human":6},
         "overall": 6.0,
         "passed": False,
         "notes": note or "Grader unavailable — defaulting to fail-safe.",

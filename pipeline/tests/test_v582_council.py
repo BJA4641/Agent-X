@@ -60,7 +60,7 @@ def test_skills_load_and_cap():
     skills.clear_cache()
     s = skills.load_skill("creative")
     assert "3-second" in s or "hook" in s.lower()
-    assert len(s) <= 3500
+    assert len(s) <= skills._MAX_CHARS
     assert skills.skill_block("creative").startswith("\n\n=== EXPERT PLAYBOOK")
 
 
@@ -120,6 +120,6 @@ def test_new_department_skills_load():
     for dept in ("distribution", "brand_studio", "community", "analytics",
                  "creative", "cqo", "editorial", "research"):
         block = skills.skill_block(dept)
-        assert block and len(block) < 4000, dept
+        assert block and len(block) < skills._MAX_CHARS + 600, dept
     assert "hashtags" in skills.skill_block("distribution").lower()
     assert "hook" in skills.skill_block("creative").lower()

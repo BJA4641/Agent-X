@@ -20,7 +20,11 @@ Public API:
 from __future__ import annotations
 import os
 
-_MAX_CHARS = 3500          # hard cap per skill — tokens cost money
+# v5.11.12: raised from 3500. The cap truncates from the START of the file, so
+# appending guidance to a skill that already exceeded it did NOTHING and said
+# nothing — exactly the workflow ("drop a SKILL.md in") this system advertises.
+# Still bounded: every character here is billed on every call that loads it.
+_MAX_CHARS = int(os.environ.get("MAX_SKILL_CHARS", "6000"))
 _CACHE: dict = {}
 
 _BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "skills")
@@ -37,7 +41,12 @@ def load_skill(dept: str) -> str:
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
-                text = f.read()[:_MAX_CHARS]
+                raw = f.read()
+            text = raw[:_MAX_CHARS]
+            if len(raw) > _MAX_CHARS:
+                # Loud, not silent: a truncated skill is guidance the agents
+                # never received, and the failure is otherwise invisible.
+                _note_truncated(dept, len(raw), _MAX_CHARS)
     except Exception:
         text = ""
     _CACHE[dept] = text
@@ -53,3 +62,33 @@ def skill_block(dept: str) -> str:
 
 def clear_cache():
     _CACHE.clear()
+
+
+TRUNCATED: dict = {}
+
+
+def _note_truncated(dept: str, actual: int, cap: int):
+    """Record and print truncation so a too-long skill cannot fail quietly."""
+    TRUNCATED[dept] = {"chars": actual, "cap": cap, "lost": actual - cap}
+    try:
+        print(f"[skills] WARNING: {dept}/SKILL.md is {actual} chars, cap is {cap} — "
+              f"{actual - cap} chars were NOT sent to the agent. Trim the file or "
+              f"raise MAX_SKILL_CHARS.")
+    except Exception:
+        pass
+
+
+def health() -> dict:
+    """Operator view: which skills load, their size, and what was cut."""
+    out = {}
+    try:
+        for dept in sorted(os.listdir(_BASE)):
+            path = os.path.join(_BASE, dept, "SKILL.md")
+            if not os.path.exists(path):
+                continue
+            size = os.path.getsize(path)
+            out[dept] = {"chars": size, "truncated": size > _MAX_CHARS,
+                         "cap": _MAX_CHARS}
+    except Exception:
+        pass
+    return out

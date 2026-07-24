@@ -128,7 +128,7 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
     passed = bool(verdict.get("passed")) and overall >= PASS_THRESHOLD
     if passed:
         # Guard against any single dimension below MIN_DIM slipping through
-        dims = [scores.get(k, 10) for k in ("hook","visuals","pacing","audio","caption","cta")]
+        dims = [scores.get(k, 10) for k in ("hook","visuals","pacing","audio","caption","cta","human")]
         if dims and min(dims) < MIN_DIM:
             passed = False
             fix = f"weak dimension (min={min(dims)}): {fix}"

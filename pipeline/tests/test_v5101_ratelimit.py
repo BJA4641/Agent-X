@@ -672,3 +672,51 @@ def test_mix_is_spawned_before_the_reel_path():
     from workers.departments import portfolio as pf
     src = inspect.getsource(pf.tick)
     assert src.index("formats_needed(") < src.index("need = max(0, target")
+
+
+# ------------------------------------------------- v5.11.12 skills + human axis
+
+def test_skills_load_completely_and_report_truncation():
+    """The cap truncates from the START of a file, so appending guidance to an
+    over-cap skill silently did nothing — the exact 'drop a SKILL.md in'
+    workflow this system advertises."""
+    from agentcore import skills
+    skills.clear_cache()
+    for dept in ("creative", "cqo"):
+        body = skills.load_skill(dept)
+        assert body, f"{dept} skill did not load"
+    assert not skills.TRUNCATED, f"skills silently truncated: {skills.TRUNCATED}"
+
+
+def test_truncation_is_recorded_not_silent():
+    import inspect
+    from agentcore import skills
+    src = inspect.getsource(skills.load_skill)
+    assert "_note_truncated" in src
+    assert callable(skills.health)
+
+
+def test_writer_skill_covers_hooks_and_beats():
+    from agentcore import skills
+    skills.clear_cache()
+    body = skills.load_skill("creative").lower()
+    assert "hook craft" in body and "beat structure" in body
+    assert "max 8 words" in body
+    assert "never repeat the hook at the end" in body   # REQ-DUP-HOOK guidance
+
+
+def test_grader_has_a_human_sounding_axis():
+    """Six axes could all pass while the script still read as machine-written."""
+    from agentcore import skills
+    skills.clear_cache()
+    assert "human" in skills.load_skill("cqo").lower()
+    import inspect
+    from agent import grader
+    assert '"human": int' in inspect.getsource(grader) or '"human"' in inspect.getsource(grader)
+
+
+def test_human_axis_is_enforced_by_the_min_dimension_guard():
+    import inspect
+    from workers.departments import cqo
+    src = inspect.getsource(cqo.grade_script)
+    assert '"human"' in src, "a new axis that is not enforced is decoration"

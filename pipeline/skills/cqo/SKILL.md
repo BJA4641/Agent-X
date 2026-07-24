@@ -37,3 +37,40 @@ sentences, no "in today's fast-paced world". 5) PAYOFF — the last beat
 delivers the promise from the hook, then ONE clear next action.
 An 8+ script nails all five. Fail any script whose hook is a question,
 whose claims can't be verified, or that reads like a template.
+
+---
+
+## THE `human` AXIS (v5.11.12)
+
+Seventh scoring dimension. The other six can all pass while a script still reads
+as machine-written — that is the fastest way to lose short-form attention, and
+nothing was measuring it.
+
+Score LOW (1-4) when you see:
+  * opener boilerplate: "in today's video", "let's dive in", "let's explore"
+  * marketing filler: "game-changer", "unlock", "revolutionise", "seamless"
+  * every sentence roughly the same length
+  * no contractions anywhere
+  * tidy three-item lists with identical grammatical shape
+  * claims with no concrete, checkable detail
+
+Score HIGH (8-10) when you see:
+  * contractions and uneven rhythm — short sentence, then a long one
+  * at least one specific detail a model would not invent (a time, a brand of
+    object, a smell, a number that is not round)
+  * an actual opinion, not a balanced summary
+  * something that would sound normal said aloud to a friend
+
+Be strict here. A script that scores 9 on hook and 3 on human is a script an
+audience will recognise as AI and scroll past.
+
+## ADDING THIRD-PARTY SKILLS
+
+Any public SKILL.md can be dropped into `pipeline/skills/<department>/SKILL.md`
+and it loads at boot — no code change. Check the licence first (MIT/Apache are
+fine, and attribution belongs in this file). Trim aggressively: every character
+here is billed on every single call, and the loader hard-caps the file anyway.
+
+Departments that read skills today:
+  creative → the writer · cqo → the grader · editorial → the planner
+  research → the scout · brand_studio · community · distribution · analytics
