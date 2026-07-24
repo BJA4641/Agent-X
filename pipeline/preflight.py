@@ -66,6 +66,8 @@ REQUIRED = [
     ("agent.visuals", "REALISTIC_STYLES", "v5.11.22", "pipeline/agent/visuals.py"),
     # v5.11.23 — lessons loop: rejection reasons feed the writers
     ("workers.common", "lessons_for", "v5.11.23", "pipeline/workers/common.py"),
+    # v5.11.24 — workbook system: per-agent playbooks + per-account manual
+    ("agentcore.playbooks", "get_playbook", "v5.11.24", "pipeline/agentcore/playbooks.py"),
 ]
 
 

@@ -127,6 +127,7 @@ const TABS = [
   { key:"tone",      label:"Tone",        icon:"🗣️", doc:"tone_guide" },
   { key:"visuals",   label:"Visuals",     icon:"🎬", doc:"visual_rules" },
   { key:"content",   label:"Content rules", icon:"📐", doc:"content_rules" },
+  { key:"workbook",  label:"Workbook",    icon:"📖", doc:"workbook" },
   { key:"posts",     label:"Posts",       icon:"📱" },
   { key:"pipeline",  label:"Live content", icon:"🎞️" },
   { key:"library",   label:"All documents", icon:"📚" },

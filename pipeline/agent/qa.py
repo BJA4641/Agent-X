@@ -38,6 +38,13 @@ def review(script: dict, captions: dict, style: str, platform_targets: list,
             prompt_tpl, version = config.load_prompt("qa_v1")
         except Exception:
             prompt_tpl, version = _FALLBACK_QA_PROMPT, "qa_v1"
+        # v5.11.24 REQ-WORKBOOK: the QA role playbook leads the grounding —
+        # concrete reject criteria beat vibes-based grading.
+        try:
+            from agentcore.playbooks import get_playbook as _pb
+            grounding = (_pb("qa") + (grounding or "")).strip()
+        except Exception:
+            pass
         prompt = prompt_tpl.replace("{brand_grounding}", grounding).replace("{draft}", json.dumps(draft))
         try:
             text, cost, mlabel = llm.chat(prompt, max_tokens=400)

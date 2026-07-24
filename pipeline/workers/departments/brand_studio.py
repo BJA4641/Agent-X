@@ -17,6 +17,9 @@ REQUIRED_DOCS = [
     "visual_identity", "marketing_strategy", "instagram_playbook",
     "tiktok_playbook", "youtube_playbook", "content_calendar", "content_rules",
     "hashtags_seo", "production_sop",
+    # v5.11.24 REQ-WORKBOOK: the per-account operating manual. Loaded into
+    # every write via _load_brand_context; owner-editable in the account page.
+    "workbook",
 ]
 
 
@@ -131,6 +134,22 @@ def _fallback_brand_bible(niche, name, w, job, ctx) -> dict:
 def _DEFAULT_DOCS(niche, name):
     base = (niche or "productivity tips").lower()
     return {
+        # v5.11.24 REQ-WORKBOOK: default operating manual until the free
+        # council writes (or the owner edits) a richer one.
+        "workbook": (
+            f"AGENT WORKBOOK for {name} ({base}).\n"
+            "PROCESS (every post): 1) Strategist picks a topic native to the "
+            f"{base} niche — trends may inspire, but the result must read as if "
+            "made BY this account FOR its audience. 2) Writer drafts hook → "
+            "beats/slides → CTA per the writer playbook. 3) Title always "
+            "describes the content itself. 4) QA rejects anything generic, "
+            "off-niche, or violating a LESSON; a rejection reason is an "
+            "instruction, not an insult. 5) Visuals match the account's "
+            "visual identity doc — realistic style pool for lifestyle niches.\n"
+            "QUALITY BAR: one concrete takeaway a viewer can act on today; "
+            "no income/medical/guarantee claims; no engagement-bait hooks.\n"
+            "VOICE: confident, specific, zero fluff. Numbers beat adjectives."
+        ),
         "executive_summary": f"{name} is a short-form media brand in the {base} niche. "
                              f"Our goal: publish 2 vertical videos per day, grow to 100k followers "
                              "in 90 days, and monetize via affiliates, sponsorships, and a digital product.",

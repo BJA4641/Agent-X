@@ -531,7 +531,10 @@ def angle_from_trend(title: str, niche: str = "") -> str:
             f"CAPTION: {raw[:180]}\n"
             f"NICHE: {niche or 'general'}\n\n"
             "Rules: describe the SUBJECT, not the creator. No names, no first "
-            "person, no emoji, no question marks. 4-10 words. Return ONLY the "
+            "person, no emoji, no question marks. 4-10 words. The topic must "
+            "read NATIVE to the niche above — adapt the pattern; if the "
+            "caption's subject belongs to a different niche, translate it "
+            "(spa bedtime routine -> puppy bedtime routine). Return ONLY the "
             "topic line, nothing else.",
             max_tokens=40)
         cand = (out or "").strip().strip('"').splitlines()[0].strip()

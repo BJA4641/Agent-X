@@ -1,34 +1,36 @@
-AGENT-X v5.11.23 — "Batch 2" (DEC-076)
-Upload all files to the repo root (GitHub web UI drag-drop, keep paths).
-Vercel redeploys the web layer automatically; then Railway → Redeploy for the worker.
+AGENT-X v5.11.24 — "Batch 3: The Workbook" (DEC-077)
+Upload to repo root (keep paths) → Vercel auto-deploys → Railway Redeploy.
+REQUIRES v5.11.23 already deployed (it is — your Live content tab proves it).
 
-WHAT'S IN THIS RELEASE
-1. STICKY CHROME FIX — banner + header + sidebar stay pinned while you scroll
-   (the banner was position:relative and scrolled away, dragging the illusion
-   that everything broke). Dismiss the banner and spacing self-heals.
-2. LIVE CONTENT TAB — open any account → "🎞️ Live content": the real pipeline
-   items for THAT account (drafted/approved/published), with Approve / Reject
-   buttons. Reject asks for a reason — write a real one, the agents use it.
-3. LESSONS LOOP — every rejection reason you type is injected into future
-   scripts/carousels for that account ("do NOT repeat these mistakes"). This is
-   honest learning: retrieval of track record, not fake self-improvement.
-4. RAILWAY MCP TOOLS — Claude can now read your Railway deploy status and crash
-   logs directly (agentx_railway_status / agentx_railway_logs) using the token
-   you saved. Read-only; restarts stay yours.
+WHAT'S NEW
+1. THE WORKBOOK SYSTEM (your ask, made real):
+   • Per-AGENT playbooks in code — writer, carousel writer, strategist, QA
+     each follow a short, checkable procedure on every single call.
+   • Per-ACCOUNT workbook document — generated for each account, and YOU can
+     edit it in the account page → 📖 Workbook tab. Whatever you write there
+     is read by the agents on every script and carousel for that account.
+   Honest framing: agents follow written procedure + your rejection lessons.
+2. REEL TITLES FIXED — reels now take the writer's own title (carousels got
+   this in v5.11.22). No more "Get unready with me in the Bahamas" on a puppy
+   account. The old wrong title was also fixed in the DB.
+3. PREP VISIBLE — paused accounts' $0 banked outlines now show in Live content.
+4. ENTERTAINMENT PROJECT — created in your dashboard: 5 paused accounts
+   (AI Cinema, Toon Lab, Kids Spark, Mascot Forge, Scene Remix). Scene Remix
+   ships with hard copyright rules (ORIGINAL recreations only); Kids Spark
+   ships with child-safety rules. Resume any account when you're ready.
 
 FILES (13)
-web/components/VersionBanner.tsx                                  (sticky banner)
-web/app/globals.css                                               (chrome offsets)
-web/app/dashboard/projects/[pid]/accounts/[aid]/page.tsx          (Live content tab)
-web/app/api/projects/[pid]/accounts/[aid]/pipeline/route.ts       (NEW - account pipeline API)
-web/app/api/mcp/route.ts                                          (railway tools)
-web/version.json                                                  (5.11.23)
-pipeline/workers/common.py                                        (lessons_for)
-pipeline/workers/departments/creative.py                          (lessons wired x2)
-pipeline/agentcore/version.py                                     (fallback bump)
-pipeline/preflight.py                                             (28th symbol)
-pipeline/tests/test_v51123_batch2.py                              (NEW - 7 tests)
-docs/LEDGER.md                                                    (DEC-076)
-UPLOAD-THIS-FIRST.txt                                             (this file)
-
-GATES: pytest 301/301 · preflight OK · boot_check OK · npm run build PASSED
+pipeline/agentcore/playbooks.py                                   (NEW)
+pipeline/agent/brain.py
+pipeline/agent/qa.py
+pipeline/workers/departments/creative.py
+pipeline/workers/departments/brand_studio.py
+pipeline/workers/departments/editorial.py
+pipeline/agentcore/version.py
+pipeline/preflight.py
+pipeline/tests/test_v51124_workbook.py                            (NEW)
+web/app/api/projects/[pid]/accounts/[aid]/pipeline/route.ts
+web/app/dashboard/projects/[pid]/accounts/[aid]/page.tsx
+web/version.json
+docs/LEDGER.md
+GATES: pytest 308/308 · preflight 28 · boot OK · npm run build PASSED

@@ -50,6 +50,16 @@ def write_script(topic: str, item_id=None, account_id=None, project_id=None,
     _job_feedback = (grade_feedback or "").strip()
     prompt_tpl, version = config.load_prompt("script_v3")
     brand = _load_brand_context(account_id)
+    # v5.11.24 REQ-WORKBOOK: the per-account workbook + the writer's role
+    # playbook ride the content_rules channel — every prompt template already
+    # includes content_rules, so both reach the model with zero template edits.
+    try:
+        from agentcore.playbooks import get_playbook as _pb
+    except Exception:
+        _pb = lambda r: ""
+    _wb = (brand.get("workbook") or "").strip()
+    brand["content_rules"] = ((_pb("writer") + _wb + "\n" if (_wb or _pb("writer")) else "")
+                              + (brand.get("content_rules") or "")).strip()
     # v5.4: look up niche once so all fallbacks (hashtags/visuals/captions)
     #       are niche-correct — never again #ai on a cat post.
     account_niche = _niche_for_account(account_id)

@@ -317,6 +317,21 @@ def write_script(w: Worker, job: Job, ctx: AgentContext):
             "script": script,
             "last_rewrite": rewrite,
         })
+        # v5.11.24 REQ-REEL-TITLES (DEC-077): carousels got content-derived
+        # titles in v5.11.22; reels kept whatever the topic arrived as — for
+        # clone/trend flows that is the SOURCE's raw caption (spa emojis on a
+        # dog account). The item now takes the writer's own title so the board
+        # always names what the content actually is. Never on rewrites (the
+        # human may have edited the title between drafts).
+        if rewrite == 0:
+            try:
+                gen_title = str(script.get("title") or script.get("hook") or "").strip()
+                if 8 <= len(gen_title) <= 110:
+                    sb.table("board_items").update({"topic": gen_title}) \
+                      .eq("id", str(item_id)).execute()
+                    topic = gen_title
+            except Exception:
+                pass  # cosmetic — a bad title must never fail the draft
 
     # Hand to CQO
     bus.agent("brain", f"✍️ draft ready — {len(script.get('beats',[]))} beats, "
@@ -707,8 +722,21 @@ def write_carousel(w: Worker, job: Job, ctx: AgentContext):
 
     from ..common import lessons_for as _lessons_for
     _lessons = _lessons_for(sb, account_id)
+    # v5.11.24 REQ-WORKBOOK: role playbook + per-account workbook excerpt.
+    try:
+        from agentcore.playbooks import get_playbook as _pb
+        _play = _pb("carousel_writer")
+    except Exception:
+        _play = ""
+    _wb = ""
+    try:
+        _wb = str((brand or {}).get("workbook") or "")[:700] if isinstance(brand, dict) else ""
+    except Exception:
+        _wb = ""
+    _wb_line = ("WORKBOOK: " + _wb + "\n") if _wb else ""
     prompt = (
         "You write viral Instagram/TikTok CAROUSEL posts (image slides).\n"
+        f"{_play}{_wb_line}"
         f"Topic: {topic}\n"
         f"Brand voice/context: {str(brand)[:900]}\n"
         + (_lessons if _lessons else "")

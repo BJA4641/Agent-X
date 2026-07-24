@@ -33,7 +33,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   const { data, error } = await admin.from("board_items")
     .select("id,topic,status,created_at,payload")
     .eq("account_id", params.aid)
-    .in("status", ["idea", "drafted", "approved", "scheduled", "published", "quarantined"])
+    .in("status", ["idea", "prep", "drafted", "approved", "scheduled", "published", "quarantined"])
     .order("created_at", { ascending: false })
     .limit(60);
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
