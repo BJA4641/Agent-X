@@ -579,3 +579,46 @@ def test_fallback_never_uses_narration_as_the_image_subject():
     pack = fallback_pack(beats, "puppy gadgets", "", niche_hint="pets")
     assert "starve" not in pack[0]["subject"], "narration must never be the image prompt"
     assert "puppy" in pack[0]["subject"]
+
+
+# ------------------------------------------------- v5.11.10
+
+def test_worker_beats_from_the_claim_loop():
+    """Liveness had two failure-prone signals (a job and a thread). On
+    2026-07-24 the worker wrote a provider report at 02:12 while worker_health
+    was frozen at 01:46 and heartbeat_pulse was NULL — a working worker showing
+    a 29-minute-dead banner."""
+    import inspect
+    from agentcore.worker import Worker
+    src = inspect.getsource(Worker.run_forever)
+    assert "self._beat()" in src
+    assert src.index("self._beat()") < src.index("self.queue.claim")
+
+
+def test_beat_is_rate_limited_and_never_raises():
+    import inspect
+    from agentcore.worker import Worker
+    src = inspect.getsource(Worker._beat)
+    assert "min_interval_s" in src
+    assert "except Exception" in src and "pass" in src
+
+
+def test_version_hint_resolves():
+    from workers.departments.ops import VERSION_HINT
+    v = VERSION_HINT()
+    assert v and v != "unknown" and v[0].isdigit()
+
+
+def test_motion_surface_is_smaller_than_the_old_default():
+    """zoompan buffered a 1296x2304 surface — over a gigabyte of working set for
+    one beat in a 512MB container."""
+    from agent.composer import MOTION_W, MOTION_H, ZOOM_FPS
+    assert MOTION_W * MOTION_H < 1296 * 2304
+    assert ZOOM_FPS <= 30
+
+
+def test_ffmpeg_thread_count_is_capped():
+    import inspect
+    from agent import composer
+    src = inspect.getsource(composer._run)
+    assert "-threads" in src, "each ffmpeg thread allocates its own frame buffers"

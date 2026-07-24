@@ -175,6 +175,20 @@ def _write_health_row(sb, worker_id, started, version, in_flight=0):
     }, on_conflict="worker_id").execute()
 
 
+def VERSION_HINT() -> str:
+    """Single source of truth for the running version (v5.11.10).
+    Used by the worker loop heartbeat so liveness never depends on a thread."""
+    try:
+        from agentcore.version import VERSION
+        return VERSION
+    except Exception:
+        try:
+            from workers.runner import VERSION as _v
+            return _v
+        except Exception:
+            return "unknown"
+
+
 def start_heartbeat_pulse(supabase_factory, worker_id: str, version: str,
                           started: float, interval_s: int = HEARTBEAT_PULSE_S):
     """Heartbeat from a DAEMON THREAD instead of only from a queued job.

@@ -65,6 +65,8 @@ class Worker:
         }
         self._lane_sems = {k: threading.Semaphore(v) for k, v in self._lane_caps.items()}
         self._state_lock = threading.Lock()
+        self._last_beat = 0.0
+        self._started_at = time.time()
 
     def register(self, job_type: str, handler: Handler):
         self.handlers[job_type] = handler
@@ -76,6 +78,19 @@ class Worker:
         self._running = True
         self.bus.agent(self.id, f"worker {self.id} started — types: {list(self.handlers.keys())}", "success", "worker_up")
         while self._running:
+            # v5.11.10 REQ-HEALTH-3 — heartbeat from the LOOP, not only a thread.
+            #
+            # Liveness has been signalled two ways, and both can fail silently:
+            # an ops.heartbeat JOB (dies when the queue stalls) and a daemon
+            # PULSE thread (v5.9.6). On 2026-07-24 the worker wrote a provider
+            # report at 02:12 while worker_health had been frozen since 01:46 and
+            # settings.heartbeat_pulse was NULL — the thread was not running at
+            # all, so a working worker showed a 29-minute-dead banner.
+            #
+            # The claim loop is the one thing that MUST execute for the worker to
+            # be doing anything. Beating from here makes the signal structural:
+            # if this line stops running, the worker really has stopped.
+            self._beat()
             try:
                 jobs = self.queue.claim(self.id, job_types=list(self.handlers.keys()),
                                         limit=self.concurrency)
@@ -92,6 +107,25 @@ class Worker:
                 self.bus.agent(self.id, f"worker loop error: {e}", "error", "worker_error")
                 traceback.print_exc()
                 time.sleep(self.poll_interval)
+
+    def _beat(self, min_interval_s: float = 15.0):
+        """Write worker_health straight from the claim loop. Rate-limited, and
+        failure here must never interrupt work."""
+        now = time.time()
+        if now - getattr(self, "_last_beat", 0) < min_interval_s:
+            return
+        self._last_beat = now
+        try:
+            factory = self.deps.get("supabase") if hasattr(self, "deps") else None
+            factory = factory or (self._ctx.deps.get("supabase") if self._ctx else None)
+            sb = factory() if callable(factory) else None
+            if sb is None:
+                return
+            from workers.departments.ops import _write_health_row, VERSION_HINT
+            _write_health_row(sb, self.id, getattr(self, "_started_at", now),
+                              VERSION_HINT())
+        except Exception:
+            pass
 
     def _execute_batch(self, jobs):
         """Run a claimed batch across the thread pool, respecting lane caps."""

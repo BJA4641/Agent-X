@@ -107,9 +107,26 @@ def assemble(frames: list, audio_path: str, out_path: str,
     return out_path
 
 
+# v5.11.10 REQ-RENDER-MEMORY — the OOM that has been killing the worker.
+#
+# Every motion preset upscaled to 1296x2304 before zoompan. ffmpeg's zoompan
+# buffers its output surface, and 1296*2304*3 bytes is ~9 MB per frame; a
+# 4-second beat at 30fps is 120 frames, i.e. over a gigabyte of working set for
+# ONE beat inside a 512 MB container. The worker died mid-render, Railway
+# restarted it, the same job was re-claimed and it died again — re-billing
+# ElevenLabs on every pass.
+#
+# 1188x2112 still gives ~10% zoom headroom (the presets never exceed 1.12) at
+# roughly 84% of the pixels, and ZOOM_FPS lowers the buffered frame count.
+# Motion is preserved; the memory spike is not.
+MOTION_W = int(os.environ.get("MOTION_W", "1188"))
+MOTION_H = int(os.environ.get("MOTION_H", "2112"))
+ZOOM_FPS = int(os.environ.get("ZOOM_FPS", "24"))
+
+
 def _motion_for(i: int, n: int, dur: float) -> str:
     """Different motion preset per beat position so cuts feel purposeful."""
-    fps = 30
+    fps = ZOOM_FPS
     frames = int(dur * fps)
     # Always slow push-in (Ken Burns)
     z_start = 1.00
@@ -117,27 +134,27 @@ def _motion_for(i: int, n: int, dur: float) -> str:
     # Small bounce on first hook frame
     if i == 0:
         # Big intro punch: zoom from 1.2 -> 1.0 in 6 frames then settle
-        return (f"scale=1296:2304,"
+        return (f"scale={MOTION_W}:{MOTION_H},"
                 f"zoompan=z='if(lte(on,8),1.25-on*0.03,min(zoom+0.0008,1.10))':d={frames}:s=1080x1920:fps={fps},"
                 f"fade=t=in:st=0:d=0.15,setsar=1")
     if i == n - 1:
         # End card: very slow zoom out + fade in
-        return (f"scale=1296:2304,"
+        return (f"scale={MOTION_W}:{MOTION_H},"
                 f"zoompan=z='max(zoom-0.0004,0.96)':d={frames}:s=1080x1920:fps={fps},"
                 f"fade=t=in:st=0:d=0.25,setsar=1")
     # Body beats: randomize between gentle zoom, side slide, or jitter
     preset = i % 4
     if preset == 0:  # push-in
-        vf = (f"scale=1296:2304,"
+        vf = (f"scale={MOTION_W}:{MOTION_H},"
               f"zoompan=z='min(zoom+0.001,1.12)':d={frames}:s=1080x1920:fps={fps}")
     elif preset == 1:  # slide left
-        vf = (f"scale=1296:2304,"
+        vf = (f"scale={MOTION_W}:{MOTION_H},"
               f"zoompan=z=1.08:x='iw/2-(iw/zoom/2)+on*0.6':d={frames}:s=1080x1920:fps={fps}")
     elif preset == 2:  # slide right
-        vf = (f"scale=1296:2304,"
+        vf = (f"scale={MOTION_W}:{MOTION_H},"
               f"zoompan=z=1.08:x='iw/2-(iw/zoom/2)-on*0.6':d={frames}:s=1080x1920:fps={fps}")
     else:  # subtle tilt + push
-        vf = (f"scale=1296:2304,"
+        vf = (f"scale={MOTION_W}:{MOTION_H},"
               f"zoompan=z='min(zoom+0.0009,1.11)':d={frames}:s=1080x1920:fps={fps},"
               f"rotate=0.01*sin(2*PI*on/{frames}):fillcolor=black@0")
     return vf + f",fade=t=in:st=0:d=0.12,setsar=1"
@@ -213,7 +230,15 @@ def _mix_audio(voice_path, music_path, sfx_paths, durs, total_dur, work, base):
         return None
 
 
+FFMPEG_THREADS = os.environ.get("FFMPEG_THREADS", "1")
+
+
 def _run(cmd):
+    # v5.11.10: ffmpeg allocates per-thread frame buffers. On a 512 MB container
+    # the default (one thread per core) multiplies the working set for no useful
+    # speed-up, because the bottleneck is memory, not CPU.
+    if cmd and cmd[0] == "ffmpeg" and "-threads" not in cmd:
+        cmd = [cmd[0], "-threads", FFMPEG_THREADS] + list(cmd[1:])
     r = subprocess.run(cmd, capture_output=True)
     if r.returncode != 0:
         err = r.stderr.decode(errors="ignore")
