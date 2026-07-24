@@ -76,14 +76,53 @@ def compose_prompt(shot: dict, style_hint: str = "") -> str:
     return (body + ", vertical 9:16 composition, high detail")[:900]
 
 
-def fallback_pack(beats: list, topic: str, style_hint: str = "") -> list:
+NICHE_SUBJECTS = {
+    "pets": ["a golden retriever puppy mid-play on a wooden floor",
+             "a puppy sleeping curled in a soft blanket",
+             "a hand clipping a small dog's collar in warm light",
+             "a puppy staring up at a food bowl on a tiled floor",
+             "two puppies wrestling on a rug",
+             "a puppy chewing a rope toy, shallow depth of field"],
+    "skincare": ["a ceramic serum bottle on a wet bathroom tile",
+                 "close-up of a face mid-cleanse, water droplets on skin",
+                 "a hand pressing cream onto a cheekbone in soft daylight",
+                 "a row of unbranded skincare bottles on a stone shelf",
+                 "a cotton pad resting on a marble counter",
+                 "morning light across a bathroom mirror and sink"],
+    "_default": ["a person's hands working at a wooden desk in warm light",
+                 "a close-up of the main object on a clean surface",
+                 "a wide room shot with soft window light",
+                 "an overhead flat-lay of related objects",
+                 "a detail macro shot of texture",
+                 "a calm establishing shot of the space"],
+}
+
+
+def _subject_bank(hint: str) -> list:
+    """Concrete, photographable scenes for a niche — never abstractions."""
+    h = (hint or "").lower()
+    for key, bank in NICHE_SUBJECTS.items():
+        if key != "_default" and (key in h or any(w in h for w in key.split())):
+            return bank
+    if any(w in h for w in ("puppy", "puppies", "dog", "pet")):
+        return NICHE_SUBJECTS["pets"]
+    if any(w in h for w in ("skin", "glow", "acne", "serum", "beauty")):
+        return NICHE_SUBJECTS["skincare"]
+    return NICHE_SUBJECTS["_default"]
+
+
+def fallback_pack(beats: list, topic: str, style_hint: str = "", niche_hint: str = "") -> list:
     """Deterministic shot list — used when no model is available. Varies
     composition/camera/lighting per beat so a reel never renders six
     identical frames."""
     out = []
+    # v5.11.9: the old fallback used the beat's NARRATION as the image subject,
+    # so the generator was handed a sentence instead of a scene — the same fault
+    # the Art Director exists to remove. Build a concrete subject from the niche.
+    subject_bank = _subject_bank(niche_hint or topic)
     for i, beat in enumerate(beats[:ART_MAX_BEATS]):
         text = (beat.get("voiceover") or beat.get("text") or topic or "").strip()
-        subject = text[:120] if text else topic[:120]
+        subject = subject_bank[i % len(subject_bank)]
         shot = {
             "subject": subject,
             "composition": _COMPOSITIONS[i % len(_COMPOSITIONS)],
@@ -156,9 +195,19 @@ def _brief(topic: str, beats: list, brand: dict, style_hint: str) -> str:
         "  style        - visual treatment consistent across all beats\n"
         "  palette      - 2-3 dominant colours\n"
         "  negative     - what must not appear\n\n"
-        "Rules: keep `style` and `palette` IDENTICAL across every beat so the reel "
-        "looks like one piece. Vary composition and camera so no two frames match. "
-        "No text or words in any image. No preamble, no markdown — JSON only."
+        "Rules:\n"
+        "1. `subject` MUST name a living, photographable scene from this niche —\n"
+        "   for a puppy account: 'a golden retriever puppy chewing a rope toy on a\n"
+        "   kitchen floor'. NEVER an abstract concept, NEVER a colour or gradient,\n"
+        "   NEVER a UI screenshot. If the beat is about an idea, show the ANIMAL or\n"
+        "   PERSON doing the thing the idea is about.\n"
+        "2. Every beat needs a DIFFERENT scene. Six near-identical frames read as a\n"
+        "   slideshow; the viewer should feel motion between beats.\n"
+        "3. Keep `style` and `palette` IDENTICAL across all beats so it looks like\n"
+        "   one piece, while composition and camera change.\n"
+        "4. No text, words, logos or watermarks in any image.\n"
+        "5. Leave the lower third uncluttered so captions stay readable.\n"
+        "No preamble, no markdown — JSON only."
     )
 
 
@@ -205,7 +254,7 @@ def direct(w: Worker, job: Job, ctx: AgentContext):
 
     if len(shots) < len(beats[:ART_MAX_BEATS]):
         # partial or empty -> top up deterministically so every beat gets a shot
-        fb = fallback_pack(beats, topic, style_hint)
+        fb = fallback_pack(beats, topic, style_hint, niche_hint=(acct or {}).get("niche") or topic)
         shots = shots + fb[len(shots):]
         if label == "fallback":
             label = "deterministic"

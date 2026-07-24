@@ -122,10 +122,42 @@ def beat_frame(text: str, image_prompt: str, out_path: str, seed: int = 0,
             ledger.record("visuals", ok=False, detail=str(e)[:200], item_id=item_id)
             if "429" in str(e):
                 _gemini_cooldown_until = time.time() + 600
-    # 3) Free procedural fallback (always works)
+    # 2.5) FREE, KEYLESS image generation — v5.11.9 REQ-VISUALS-REAL.
+    #
+    # Root cause of "why is the background a still colour": on 2026-07-24 every
+    # frame of all three published reels fell through to the procedural gradient.
+    # run_ledger showed aisuite:t2i "all t2i providers failed: fal timed out",
+    # a gemini 429, and then rich-gradient-v2 SIXTEEN times — silently, at $0.
+    # The reels looked like coloured slides because no image was ever generated.
+    #
+    # Pollinations needs no API key, no quota and no billing, so it is the right
+    # last line of defence before giving up on imagery altogether. It should be
+    # tried on EVERY failure of the paid ladder, not skipped.
+    if bg is None and not is_cta:
+        try:
+            from urllib.parse import quote as _q
+            import urllib.request as _u
+            free_prompt = (image_prompt or spec.get("prompt") or "")[:380]
+            url = ("https://image.pollinations.ai/prompt/" + _q(free_prompt)
+                   + f"?width=1080&height=1920&nologo=true&seed={abs(hash((item_id, seed))) % 99999}")
+            req = _u.Request(url, headers={"User-Agent": "agentx/5.11.9"})
+            with _u.urlopen(req, timeout=90) as r:
+                data = r.read()
+            import io as _io
+            bg = Image.open(_io.BytesIO(data)).convert("RGB")
+            ledger.record("visuals", model="pollinations-free", cost_usd=0, item_id=item_id)
+            used_ai = True
+        except Exception as e:
+            ledger.record("visuals", ok=False, model="pollinations-free",
+                          detail=f"free image fallback failed: {str(e)[:120]}", item_id=item_id)
+
+    # 3) Procedural fallback — LAST resort, and no longer silent.
     if bg is None:
         bg = _rich_background(seed, style)
-        ledger.record("visuals", model="rich-gradient-v2", cost_usd=0, item_id=item_id)
+        ledger.record("visuals", ok=False, model="rich-gradient-v2", cost_usd=0, item_id=item_id,
+                      detail="NO IMAGE GENERATED — every provider failed, frame is a plain "
+                             "gradient. This is why a reel looks like coloured slides.")
+        _note_gradient_fallback(item_id)
 
     # Resize to 1080x1920 exactly
     bg = bg.resize((W, H)).convert("RGB")
@@ -247,3 +279,34 @@ def _apply_looks(img: Image.Image, style: str) -> Image.Image:
     img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
     img = img.filter(ImageFilter.GaussianBlur(0.3))
     return img
+
+
+# --------------------------------------------------------------- v5.11.9
+
+def _note_gradient_fallback(item_id=None):
+    """Make gradient frames VISIBLE to the operator.
+
+    Sixteen gradient frames were produced across three reels without a single
+    warning anywhere — the fallback recorded a $0 ledger line and nothing else,
+    so a reel with no imagery at all looked like a successful render.
+    """
+    try:
+        from agentcore.runtime import get_runtime
+        rt = get_runtime()
+        sb = rt.deps.get("supabase") and rt.deps["supabase"]()
+        if sb is None:
+            return
+        row = (sb.table("settings").select("value").eq("key", "visuals_health")
+               .limit(1).execute().data or [{}])
+        val = (row[0].get("value") if row else {}) or {}
+        val["gradient_frames"] = int(val.get("gradient_frames") or 0) + 1
+        val["last_gradient_at"] = time.time()
+        val["last_item"] = str(item_id or "")
+        val["meaning"] = ("Frames rendered as a plain gradient because every image "
+                          "provider failed. Reels will look like coloured slides.")
+        sb.table("settings").upsert(
+            {"tenant_id": os.environ.get("TENANT_ID", "me"),
+             "key": "visuals_health", "value": val},
+            on_conflict="tenant_id,key").execute()
+    except Exception:
+        pass

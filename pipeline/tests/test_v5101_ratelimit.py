@@ -532,3 +532,50 @@ def test_writer_prompt_carries_the_grading_rubric():
     assert "HOW THIS SCRIPT WILL BE GRADED" in body
     for axis in ("hook", "visuals", "pacing", "audio", "caption", "cta"):
         assert axis in body
+
+
+# ------------------------------------------------- v5.11.9 REQ-VISUALS-REAL
+
+def test_free_keyless_image_rung_runs_before_the_gradient():
+    """All three published reels were plain gradients: aisuite failed (fal
+    timeout), gemini 429'd, and the procedural fallback ran silently 16 times."""
+    import inspect
+    from agent import visuals
+    src = inspect.getsource(visuals)
+    i_free = src.index("pollinations-free")
+    i_grad = src.index('model="rich-gradient-v2"')
+    assert i_free < i_grad, "the free keyless generator must be tried before giving up"
+
+
+def test_gradient_fallback_is_no_longer_silent():
+    import inspect
+    from agent import visuals
+    src = inspect.getsource(visuals)
+    assert "NO IMAGE GENERATED" in src
+    assert "_note_gradient_fallback" in src
+    assert "ok=False" in src.split('model="rich-gradient-v2"')[0][-200:]
+
+
+def test_art_director_demands_a_photographable_subject():
+    import inspect
+    from workers.departments import art_director as ad
+    src = inspect.getsource(ad._brief)
+    assert "photographable" in src.lower()
+    assert "NEVER an abstract concept" in src
+
+
+def test_niche_subjects_are_concrete_scenes():
+    from workers.departments.art_director import _subject_bank
+    pets = _subject_bank("puppy parenting")
+    assert any("puppy" in s for s in pets)
+    assert all(len(s) > 15 for s in pets), "a subject must be a scene, not a word"
+    skin = _subject_bank("glow up daily skincare")
+    assert any("serum" in s or "skin" in s for s in skin)
+
+
+def test_fallback_never_uses_narration_as_the_image_subject():
+    from workers.departments.art_director import fallback_pack
+    beats = [{"voiceover": "Most smart feeders starve puppies."}]
+    pack = fallback_pack(beats, "puppy gadgets", "", niche_hint="pets")
+    assert "starve" not in pack[0]["subject"], "narration must never be the image prompt"
+    assert "puppy" in pack[0]["subject"]
