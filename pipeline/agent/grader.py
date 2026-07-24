@@ -36,6 +36,14 @@ Current viral trend patterns to match the energy of (clone the ANGLE, not the wo
 Content to grade (script + shot plan):
 {content}
 
+ANCHORS (v5.11.8 — keep grading consistent across runs; the writer prompt now
+carries this same rubric, so a low score means the script genuinely missed it):
+  hook 4 = "Learn about skincare" · hook 7 = "Three actives, eight weeks"
+         · hook 9 = "Most smart feeders starve puppies."
+  visuals 4 = "AI innovation" (abstract) · visuals 9 = "a cracked phone screen
+         on a kitchen counter, hard morning light"
+  cta 5 = "check the link in bio and also follow" · cta 9 = "save this."
+
 Score 1-10 on EACH axis. Return STRICT JSON with no commentary:
 {{
   "hook": int,

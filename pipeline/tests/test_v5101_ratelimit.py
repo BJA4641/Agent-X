@@ -480,3 +480,55 @@ def test_voice_is_not_rebilled_on_retry():
     from workers.departments import creative as cr
     src = inspect.getsource(cr.render)
     assert "voice_cached" in src and "os.path.getsize(audio)" in src
+
+
+# ------------------------------------------------- v5.11.8 REQ-SCOUT-TITLES
+
+def test_borrowed_captions_are_detected():
+    from workers.departments.editorial import _looks_borrowed
+    assert _looks_borrowed("Can Salish do her skincare in 1 minute?") is True
+    assert _looks_borrowed("Get unready with me in the Bahamas!") is True
+
+
+def test_real_topics_are_not_flagged():
+    """'i ' must not match inside 'ai ' — word boundaries required."""
+    from workers.departments.editorial import _looks_borrowed
+    assert _looks_borrowed("7 AI Pet Gadgets That Save Time") is False
+    assert _looks_borrowed("Why AI-Powered Pet Training Apps Are Making Your Dog More Anxious") is False
+
+
+def test_personal_scaffolding_is_stripped():
+    from workers.departments.editorial import _strip_personal, _looks_borrowed
+    out = _strip_personal("Can Salish do her skincare in 1 minute?")
+    assert "Salish" not in out and "her" not in out.split()
+    assert "skincare" in out
+    assert _looks_borrowed(out) is False
+
+
+def test_angle_never_raises_and_passes_clean_titles_through():
+    from workers.departments.editorial import angle_from_trend
+    clean = "7 AI Pet Gadgets That Save Time"
+    assert angle_from_trend(clean, "pets") == clean
+    assert angle_from_trend("", "pets") == ""
+    assert isinstance(angle_from_trend("Get ready with me!!! 🧖🏾‍♀️", "beauty"), str)
+
+
+def test_picker_routes_trend_titles_through_the_rewriter():
+    import inspect
+    from workers.departments import editorial as ed
+    src = inspect.getsource(ed._pick_topics)
+    assert 'topics.append((title[:120], "trend"))' not in src, \
+        "raw scraped titles must never become topics"
+    assert "angle_from_trend" in src
+
+
+def test_writer_prompt_carries_the_grading_rubric():
+    """Three consecutive scripts scored 6.0/5.7/6.0 against an 8.0 floor because
+    the writer was never shown the rubric it is judged against."""
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    p = os.path.normpath(os.path.join(here, "..", "..", "prompts", "script_v3.md"))
+    body = open(p, encoding="utf-8").read()
+    assert "HOW THIS SCRIPT WILL BE GRADED" in body
+    for axis in ("hook", "visuals", "pacing", "audio", "caption", "cta"):
+        assert axis in body

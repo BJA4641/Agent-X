@@ -253,7 +253,7 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
                 if not title or len(title.strip()) < 8: continue
                 low = title.lower()
                 if niche_kw and any(kw in low for kw in niche_kw) and low not in seen:
-                    topics.append((title[:120], "trend")); seen.add(low)
+                    topics.append((angle_from_trend(title, niche)[:120], "trend")); seen.add(low)
             # Second pass: any trend (but if niche is set, skip generic AI ones)
             for t in trends:
                 if len(topics) >= n: break
@@ -263,7 +263,7 @@ def _pick_topics(n: int, account=None, account_id=None) -> list:
                 if niche and niche not in ("ai","ai tools","ai_tools","tech") and _is_generic_ai(" " + low + " "):
                     continue  # skip generic AI topics if this isn't an AI account
                 if low not in seen:
-                    topics.append((title[:120], "trend")); seen.add(low)
+                    topics.append((angle_from_trend(title, niche)[:120], "trend")); seen.add(low)
         except Exception:
             pass
 
@@ -371,3 +371,86 @@ def _drop_recent_duplicates(sb, account_id, topics: list) -> list:
         seen.add(key)
         out.append(pair)
     return out
+
+
+# ------------------------------------------------- v5.11.8 REQ-SCOUT-TITLES
+
+# Markers that a scraped title is somebody's PERSONAL post rather than a topic.
+_BORROWED_MARKERS = (
+    "with me", "get ready", "get unready", "grwm", "my", "i", "im",
+    "vlog", "day in the life", "come with", "lets", "watch me",
+    "storytime", "who else", "she", "he", "her", "his",
+)
+
+
+def _looks_borrowed(title: str) -> bool:
+    """True when a title reads as another creator's caption, not a subject.
+
+    Word-boundary matching matters: a naive substring test flagged
+    "7 AI Pet Gadgets That Save Time" because "i " occurs inside "ai ".
+    """
+    import re as _re
+    t = (title or "").lower().strip()
+    if not t:
+        return False
+    if any(ord(ch) > 0x2100 for ch in t):        # emoji-heavy captions
+        return True
+    if t.endswith("?") or "!" in t:
+        return True
+    for m in _BORROWED_MARKERS:
+        if _re.search(r"\b" + _re.escape(m.strip()) + r"\b", t):
+            return True
+    return False
+
+
+def _strip_personal(title: str) -> str:
+    """Deterministic fallback — turn a caption into a subject phrase."""
+    import re as _re
+    t = _re.sub(r"[^\w\s\-]", " ", title or "")          # drop emoji/punctuation
+    # Strip creator-voice scaffolding, question framing and leading proper names.
+    t = _re.sub(r"\b(get (un)?ready with me|grwm|come with me|day in the life|"
+                r"watch me|storytime|vlog|with me|who else has|"
+                r"my|im|lets?|she|he|her|his|do|does|can)\b", " ", t, flags=_re.I)
+    t = _re.sub(r"\bi\b", " ", t)                       # bare "I", never "ai"
+    t = _re.sub(r"^\s*[A-Z][a-z]+\b(?=\s)", " ", t)      # leading proper name
+    t = _re.sub(r"\b(a|an|the|very|in|the)\b\s*$", "", t, flags=_re.I)
+    t = _re.sub(r"\s+", " ", t).strip()
+    return t[:90]
+
+
+def angle_from_trend(title: str, niche: str = "") -> str:
+    """Convert a scraped trend title into an ORIGINAL angle.
+
+    The scout reads public trend feeds, and the picker was using those titles
+    VERBATIM as topics — so the board carried "Can Salish do her skincare in 1
+    minute?" and "Get unready with me in the Bahamas!", which are other
+    creators' captions naming other creators. The founder's own rule is clone
+    the PATTERN, not the post.
+
+    Free-model rewrite when available; deterministic subject extraction when not.
+    Never raises — a bad angle must not stop planning.
+    """
+    raw = (title or "").strip()
+    if not raw:
+        return raw
+    if not _looks_borrowed(raw):
+        return raw                                   # already a topic, leave it
+    try:
+        from agentcore.council import free_chat
+        out, _cost, _label = free_chat(
+            "Rewrite this social post caption into a NEUTRAL content topic.\n"
+            f"CAPTION: {raw[:180]}\n"
+            f"NICHE: {niche or 'general'}\n\n"
+            "Rules: describe the SUBJECT, not the creator. No names, no first "
+            "person, no emoji, no question marks. 4-10 words. Return ONLY the "
+            "topic line, nothing else.",
+            max_tokens=40)
+        cand = (out or "").strip().strip('"').splitlines()[0].strip()
+        if 8 <= len(cand) <= 120 and not _looks_borrowed(cand):
+            return cand
+    except Exception:
+        pass
+    stripped = _strip_personal(raw)
+    if len(stripped) < 8:
+        return (niche or "daily tips").strip() + " routine that actually works"
+    return stripped

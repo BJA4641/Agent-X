@@ -86,3 +86,31 @@ Content rules (pillars, hook patterns, hashtags, forbidden):
 CTA line to use at the end (verbatim on the end card): "{cta_line}"
 
 Topic: {topic}
+
+## HOW THIS SCRIPT WILL BE GRADED (v5.11.8)
+
+A separate grader scores this script 1-10 on SIX axes and REJECTS anything below
+8.0 overall or below 6 on any single axis. Observed live: three consecutive
+scripts scored 6.0, 5.7 and 6.0 and were all rejected — because the writer was
+never shown the standard it is measured against. Write to this rubric directly.
+
+  hook     — first spoken line, MAX 8 words. A 7 is "passable, a few hundred
+             views". An 8+ is a genuine pattern interrupt: result-first, a
+             specific number, or a contrarian claim. "Learn about X" scores 4.
+  visuals  — every beat must name a CONCRETE, photographable subject. An
+             abstract idea ("AI innovation") scores 4. "a cracked phone screen
+             on a kitchen counter" scores 9.
+  pacing   — one new idea per beat, no repetition, no throat-clearing. Beat 1
+             must land information immediately.
+  audio    — narration must read naturally aloud in under 3 seconds per beat.
+             Long clauses and semicolons score low.
+  caption  — the on-screen caption is not the narration. It is shorter, punchier
+             and readable in one glance.
+  cta      — ONE verb. "follow for more" beats "check the link in bio and also".
+
+The grading scale is deliberately harsh:
+  1-4 garbage/corporate · 5-6 generic and scrollable · 7 passable · 8 publishable
+  · 9-10 real viral potential.
+
+Aim for 8+ on EVERY axis. A single weak axis fails the whole script and triggers
+a rewrite, which costs money and delays the post.
