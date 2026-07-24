@@ -316,7 +316,7 @@ async function runTool(name: string, params: any, userId: string) {
   if (name === "agentx_projects_list") {
     const { data } = await sb.from("projects")
       .select("id,name,niche,platforms,status,created_at")
-      .eq("user_id", userId).eq("status", "active").order("created_at");
+      .eq("user_id", userId).eq("status", "active").order("created_at").limit(200);
     return { projects: data || [] };
   }
 
@@ -399,18 +399,18 @@ async function runTool(name: string, params: any, userId: string) {
 
   if (name === "agentx_diagnostics") {
     const out: any = {};
-    const { data: wh } = await sb.from("worker_health").select("*");
+    const { data: wh } = await sb.from("worker_health").select("*").limit(50);
     out.workers = (wh || []).map((r: any) => ({
       id: r.worker_id, version: r.version, host: r.host,
       heartbeat_age_s: Math.round(Date.now() / 1000 - Number(r.last_heartbeat_at || 0)),
       jobs_completed: r.jobs_completed, jobs_failed: r.jobs_failed,
     }));
-    const { data: st } = await sb.from("settings").select("key,value")
+    const { data: st } = await sb.from("settings").select("key,value").limit(300)
       .in("key", ["free_ladder_report", "escalation_last", "heartbeat_pulse",
                   "cost_per_post", "kill_switch", "cost_mode", "sla_status"]);
     for (const row of st || []) out[(row as any).key] = (row as any).value;
     const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0);
-    const { data: led } = await sb.from("run_ledger").select("cost_usd,model")
+    const { data: led } = await sb.from("run_ledger").select("cost_usd,model").limit(5000)
       .gte("created_at", startOfDay.toISOString());
     const rows = led || [];
     out.spend_today_usd = Number(rows.reduce((a: number, r: any) => a + Number(r.cost_usd || 0), 0).toFixed(4));
@@ -457,23 +457,69 @@ async function runTool(name: string, params: any, userId: string) {
   }
 
   if (name === "agentx_pipeline_state") {
+    /* v5.11.19 REQ-MCP-EXACT-COUNTS — these numbers were silently wrong.
+     *
+     * The previous implementation did `select("status")` and counted the rows
+     * that came back. PostgREST caps a request at 1000 rows by default, so
+     * EVERY count saturated at exactly 1000. Verified against the database on
+     * 2026-07-24:
+     *      board cleared   MCP 984   actual 7,402   (7.5x under)
+     *      jobs done       MCP 987   actual 40,554  (41x under)
+     *      jobs queued     MCP 3     actual 25
+     *      jobs in_progress / claimed — absent entirely, because no such row
+     *      appeared in the first 1000
+     * The totals gave it away: board 984+2+1+5+3+5 = 1000, jobs 987+3+10 = 1000.
+     *
+     * This matters more than an internal metric. The connector is intended to be
+     * the ONLY diagnostic surface for users who never touch the database, and it
+     * was reporting a 40,554-job queue as 987 healthy jobs.
+     *
+     * Fixed with head-only exact counts (count: "exact", head: true) — no rows
+     * are transferred, so this is cheaper than the broken version as well as
+     * correct.
+     */
     const out: any = {};
-    const { data: board } = await sb.from("board_items").select("status");
+
+    const countWhere = async (table: string, col: string, val: string) => {
+      const { count, error } = await sb.from(table)
+        .select("*", { count: "exact", head: true }).eq(col, val);
+      return error ? null : (count ?? 0);
+    };
+
+    const BOARD_STATUSES = ["idea", "drafted", "approved", "scheduled",
+                            "published", "rejected", "failed", "cleared"];
+    const JOB_STATUSES = ["queued", "claimed", "in_progress", "done", "failed"];
+
     const bc: Record<string, number> = {};
-    for (const r of board || []) bc[(r as any).status] = (bc[(r as any).status] || 0) + 1;
+    await Promise.all(BOARD_STATUSES.map(async (st) => {
+      const n = await countWhere("board_items", "status", st);
+      if (n) bc[st] = n;
+    }));
     out.board_by_status = bc;
-    const { data: jobs } = await sb.from("jobs").select("status,job_type");
+
     const jc: Record<string, number> = {};
-    const qt: Record<string, number> = {};
-    for (const r of jobs || []) {
-      jc[(r as any).status] = (jc[(r as any).status] || 0) + 1;
-      if ((r as any).status === "queued") qt[(r as any).job_type] = (qt[(r as any).job_type] || 0) + 1;
-    }
+    await Promise.all(JOB_STATUSES.map(async (st) => {
+      const n = await countWhere("jobs", "status", st);
+      if (n) jc[st] = n;
+    }));
     out.jobs_by_status = jc;
+
+    // Queued work is bounded and small, so listing it is safe.
+    const { data: queued } = await sb.from("jobs").select("job_type")
+      .eq("status", "queued").limit(500);
+    const qt: Record<string, number> = {};
+    for (const r of queued || []) qt[(r as any).job_type] = (qt[(r as any).job_type] || 0) + 1;
     out.queued_by_type = qt;
-    const { data: acc } = await sb.from("project_accounts").select("handle,status,paused,posts_per_day");
-    out.accounts = (acc || []).map((a: any) => ({
-      handle: a.handle, status: a.status, paused: a.paused, posts_per_day: a.posts_per_day }));
+
+    /* Accounts: the old version returned all 107, of which 105 are paused —
+     * thousands of tokens per call to say "paused" over and over. */
+    const { data: acc } = await sb.from("project_accounts")
+      .select("handle,status,paused,posts_per_day").limit(500);
+    const all = acc || [];
+    out.accounts_active = all.filter((a: any) => !a.paused).map((a: any) => ({
+      handle: a.handle, status: a.status, posts_per_day: a.posts_per_day }));
+    out.accounts_paused_count = all.filter((a: any) => a.paused).length;
+    out.counts_are_exact = true;
     return out;
   }
 

@@ -1,25 +1,27 @@
-AGENT-X v5.11.17 — TWO LIVE ERRORS, FIRING EVERY TICK
-=====================================================
+AGENT-X v5.11.19 — MCP CONNECTOR WAS LYING
+==========================================
 
-Found through the MCP connector (agentx_failures), not guesswork:
+You asked me to verify the connector against Supabase. It failed:
 
-  coo: "format mix skipped: name '_dt' is not defined"
-       -> my v5.11.11 bug. The ENTIRE content mix never ran.
-          This is why you still had 0 carousels and 0 stories.
+    metric           MCP     Supabase    error
+    board cleared    984     7,402       7.5x under
+    jobs done        987     40,554      41x  under
+    jobs queued      3       25          8x   under
+    jobs in_progress absent  5           not reported at all
 
-  coo: "carousel spawn skipped: Priority has no attribute 'MEDIUM'"
-       -> Priority.MEDIUM never existed. Every carousel spawn threw
-          and was swallowed by a try/except, so no carousel was EVER made.
+MCP board total = 1000 exactly. MCP jobs total = 1000 exactly.
+The tools ran select() with no limit; PostgREST caps at 1000 rows; the code
+counted the rows it got back. Every count saturated silently.
 
-Both were downgraded to warnings by their guards, which is why they ran
-unnoticed for hours.
+This matters because the connector is meant to be the ONLY diagnostic surface
+for users who never touch the database.
 
-UPLOAD 4 FILES:
-  pipeline/workers/departments/portfolio.py   <-- both fixes
-  pipeline/workers/departments/creative.py    <-- topic recovery
-  pipeline/tests/test_v5101_ratelimit.py
-  web/version.json                            <-- 5.11.17
+FIXED: exact head-counts (count:"exact", head:true) — transfers no rows, so it
+is cheaper as well as correct. All 5 MCP queries audited and bounded.
 
-After deploy, expect within ~2 minutes:
-  coo: "🎛️ format mix for @puppy.parent: 1x carousel, 5x story"
-If you see that line, the mix is finally running.
+UPLOAD 2 FILES:
+  web/app/api/mcp/route.ts
+  web/version.json          <-- 5.11.19
+
+AFTER DEPLOY: delete and re-add the connector (Claude caches the tool list),
+then ask me to run agentx_pipeline_state. jobs done should read ~40,000+.
