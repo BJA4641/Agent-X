@@ -164,7 +164,12 @@ def test_cfo_blocks_when_killswitch_on(monkeypatch):
 
 
 def test_cqo_rejects_after_max_rewrites(monkeypatch):
-    """CQO must cap rewrites at MAX_REWRITES and final-reject — no infinite loop."""
+    """CQO must cap rewrites at MAX_REWRITES — no infinite loop.
+
+    v5.11.15: the OUTCOME changed from 'rejected' to 'parked for the human'.
+    The cap is still the point of this test; discarding the work was never the
+    point, and 18 graded / 0 passed showed why. Only the founder rejects now.
+    """
     from workers.departments import cqo
     from agentcore import JobQueue, Worker, Job, JobStatus
     from agentcore.runtime import reset_runtime_for_tests
@@ -200,7 +205,10 @@ def test_cqo_rejects_after_max_rewrites(monkeypatch):
     claimed = q.claim("cqo-test", job_types=["cqo.grade_script"])[0]
     w._execute(claimed)
     assert claimed.status == JobStatus.DONE
-    assert claimed.result.get("rejected") is True
+    # the loop terminated (the actual invariant) ...
+    assert claimed.result.get("retried") is not True
+    # ... and the work went to the founder's queue instead of the bin
+    assert claimed.result.get("parked_for_human") is True
 
 
 def test_department_registers_all_handlers():

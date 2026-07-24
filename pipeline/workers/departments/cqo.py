@@ -257,18 +257,37 @@ def grade_script(w: Worker, job: Job, ctx: AgentContext):
                metadata={"grade": overall, "item_id": item_id})
     except Exception:
         pass
-    # Mark board_item as rejected (legacy board)
+    # v5.11.15 REQ-REWRITE-NOT-REJECT — the grader no longer DISCARDS work.
+    #
+    # Founder instruction: "tell the agents to work and update the video, do not
+    # reject just edit." The data supported it: 18 scripts graded, 0 passed —
+    # a gate nothing passes is a wall, and every rejection threw away money
+    # already spent on writing, grading and rewriting.
+    #
+    # The grader keeps its standard (it still refuses to auto-render a weak
+    # script) but the OUTCOME changes: the best attempt is parked as `drafted`
+    # with its score and the exact fix, so it lands in the founder's queue
+    # instead of the bin. A human can approve it, edit it, or reject it with a
+    # reason that becomes a lesson. Only the founder rejects now.
+    keep = best_script if (best_overall or 0) >= (overall or 0) else script
+    keep_score = max(float(best_overall or 0), float(overall or 0))
     if sb and item_id:
         try:
             from ..common import board_patch
-            board_patch(sb, item_id, status="rejected", payload_patch={
-                "script": script,
-                "rejection": {"reason": "grade_fail", "fix": fix, "score": overall,
-                              "rewrites": rewrite_attempt},
+            board_patch(sb, item_id, status="drafted", payload_patch={
+                "script": keep,
+                "grade": {"score": keep_score, "fix": fix, "rewrites": rewrite_attempt,
+                          "below_floor": True, "scores": scores},
+                "needs_edit": True,
             })
         except Exception:
             pass
-    w.queue.complete(job, {"ok": False, "rejected": True, "quality": qg.model_dump()})
+    bus.agent("cqo", f"📝 best attempt {keep_score:.1f}/10 after {rewrite_attempt + 1} tries — "
+                     f"below the {PASS_THRESHOLD:.0f} bar, so it goes to YOUR queue rather "
+                     f"than the bin. Fix suggested: {fix[:110]}",
+              "warn", "cqo_to_human", job_id=job.id, item_id=item_id)
+    w.queue.complete(job, {"ok": True, "parked_for_human": True,
+                           "score": keep_score, "quality": qg.model_dump()})
 
 
 # ------------------------------------------------- v5.9.7 REQ-AUTOAPPROVE-1
