@@ -97,8 +97,16 @@ def _approved_sweep(w: Worker, job: Job, sb, bus, max_renders: int = 2):
                 hook = ((payload.get("script") or {}).get("hook") or "")[:90]
                 _m.add_lesson(
                     "human_" + it["status"],
+                    # v5.11.14 REQ-FOUNDER-FEEDBACK: the REASON was being dropped.
+                    # The writer learned that an item was rejected but never why,
+                    # so "duplicate topic" and "weak hook" taught it the same
+                    # thing — nothing. The reason is the entire lesson.
                     f"Founder {it['status'].upper()}: \"{(it.get('topic') or '')[:90]}\""
-                    + (f" (hook: \"{hook}\")" if hook else ""),
+                    + (f" (hook: \"{hook}\")" if hook else "")
+                    + (f" — REASON: {str((payload.get('rejection') or {}).get('reason'))[:120]}"
+                       if (payload.get("rejection") or {}).get("reason") else "")
+                    + (f" — FOUNDER NOTE: {str(payload.get('founder_note'))[:200]}"
+                       if payload.get("founder_note") else ""),
                     account_id=it.get("account_id"),
                     niche=(payload.get("niche") or ""),
                     metadata={"item_id": item_id})
@@ -183,7 +191,9 @@ def rescan(w: Worker, job: Job, ctx: AgentContext):
 import os as _os
 # v5.9.5: 20s cadence generated ~14,400 sync jobs/week of pure overhead.
 # 120s is plenty for an approval desk a human checks a few times a day.
-HUMAN_DESK_SYNC_SECONDS = int(_os.environ.get("HUMAN_DESK_SYNC_SECONDS", "120"))
+# v5.11.14: 120s produced 3,107 runs/day against 54 script writes. An approval
+# queue does not need checking every two minutes; five is invisible to a human.
+HUMAN_DESK_SYNC_SECONDS = int(_os.environ.get("HUMAN_DESK_SYNC_SECONDS", "300"))
 
 
 def _reschedule(w: Worker):

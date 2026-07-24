@@ -183,6 +183,9 @@ def test_stale_sweep_reads_topic_column():
 
 def test_human_desk_cadence_is_env_tunable_and_slower():
     from workers.departments import human_desk as _hd
-    assert _hd.HUMAN_DESK_SYNC_SECONDS == 120  # default
+    # v5.11.14: raised 120 -> 300. 120s produced 3,107 runs/day against 54 script
+    # writes. Assert the PROPERTY (slower than the original 20s, env-tunable),
+    # not a literal that goes stale every time the cadence is tuned.
+    assert _hd.HUMAN_DESK_SYNC_SECONDS >= 120
     src = inspect.getsource(_hd._reschedule)
     assert "HUMAN_DESK_SYNC_SECONDS" in src and "+ 20," not in src

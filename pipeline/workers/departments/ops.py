@@ -19,7 +19,9 @@ def register(w: Worker):
     w.register("ops.snapshot",  snapshot)
 
 
-HEARTBEAT_INTERVAL_S = 30
+# v5.11.14: the claim loop now beats every 15s (REQ-HEALTH-3), so this JOB is
+# only a backstop. 30s cost 2,209 runs/day for a signal already covered.
+HEARTBEAT_INTERVAL_S = int(__import__("os").environ.get("HEARTBEAT_INTERVAL_S", "180"))
 HEARTBEAT_PULSE_S = 20   # daemon-thread pulse (v5.9.6 REQ-HEALTH-1)
 JOBS_COMPLETED = 0
 JOBS_FAILED = 0

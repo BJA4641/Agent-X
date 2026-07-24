@@ -15,7 +15,11 @@ from ..common import (active_accounts, first_active_account, board_get,
 # Cap to prevent runaway parallel production per tick.
 MAX_INFLIGHT_PER_ACCOUNT = 2
 POSTS_PER_DAY_DEFAULT = 2
-TICK_SECONDS = 60
+# v5.11.14: 60s is fine for the tick itself, but it spawned a killswitch check
+# EVERY time (1,201/day). The check now runs on a slower multiple.
+import os as _os_early
+TICK_SECONDS = int(_os_early.environ.get("TICK_SECONDS", "60"))
+KILLSWITCH_EVERY_N_TICKS = int(_os_early.environ.get("KILLSWITCH_EVERY_N_TICKS", "5"))
 # v5.9.5: at most one ideation per account per window (DEC-021)
 import os as _os
 IDEATE_COOLDOWN_S = int(_os.environ.get("IDEATE_COOLDOWN_S", "1800"))
@@ -273,7 +277,11 @@ def tick(w: Worker, job: Job, ctx: AgentContext):
     # CFO daily report every ~4 hours
     if int(time.time()) % (4*3600) < TICK_SECONDS:
         job_of(w, "cfo.daily_report", {}, parent=job, priority=Priority.LOW)
-    job_of(w, "cfo.killswitch_check", {}, parent=job, priority=Priority.LOW)
+    # v5.11.14 REQ-CHAIN-1: this fired on EVERY tick — 1,201 runs/day to read one
+    # boolean. The kill switch is a safety net, not a hot path.
+    _tick_n = int(time.time() // max(TICK_SECONDS, 1))
+    if _tick_n % max(KILLSWITCH_EVERY_N_TICKS, 1) == 0:
+        job_of(w, "cfo.killswitch_check", {}, parent=job, priority=Priority.LOW)
 
     _schedule_next_tick(w, job)
     w.queue.complete(job, {"ok": True, "accounts": touched})

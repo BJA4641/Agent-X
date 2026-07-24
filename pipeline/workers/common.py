@@ -411,3 +411,48 @@ class _LoggedAgent(BaseAgent):
 
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+# ------------------------------------------------- v5.11.14 REQ-CHAIN-1
+
+def schedule_next(w, job_type: str, interval_s: float, payload: dict = None,
+                  priority=None, account_id=None, sb=None) -> bool:
+    """Schedule the next run of a self-scheduling job — but ONLY if no run of
+    that type is already queued.
+
+    The chain-multiplication bug, measured 2026-07-24:
+      human_desk.sync has a 120s cadence, so it should run 720 times a day.
+      It ran 3,107 times — 4.3 parallel chains. Every worker boot starts a fresh
+      chain and the chains from previous boots never stop, so a day of redeploys
+      quietly multiplies the queue. Windowed idempotency keys do not prevent it:
+      two chains a second apart land in different buckets and both survive.
+      Net effect: 92.9% of ALL jobs were self-maintenance, against 0.6% writing
+      scripts.
+
+    Checking for an existing queued row collapses N chains back to 1 on the next
+    cycle, without needing to identify or kill the extras.
+
+    Returns True if a job was scheduled, False if one already existed.
+    Fails OPEN (schedules) if the check itself errors — a missed tick is worse
+    than a duplicate one.
+    """
+    import time as _t
+    try:
+        if sb is None:
+            sb = w.deps.get("supabase")() if callable(w.deps.get("supabase")) else None
+        if sb is not None:
+            existing = (sb.table("jobs").select("id")
+                        .eq("job_type", job_type).eq("status", "queued")
+                        .limit(1).execute().data)
+            if existing:
+                return False
+    except Exception:
+        pass
+    try:
+        job_of(w, job_type, payload or {},
+               scheduled_for=_t.time() + interval_s,
+               priority=priority, account_id=account_id,
+               idempotency_key=f"chain:{job_type}:{int(_t.time() // max(interval_s, 1))}")
+        return True
+    except Exception:
+        return False

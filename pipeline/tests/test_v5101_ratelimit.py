@@ -780,3 +780,50 @@ def test_scorecard_handler_registered():
         def register(self, t, f): self.h[t] = f
     w = _W(); register_all(w)
     assert "ops.scorecard" in w.h
+
+
+# ------------------------------------------------- v5.11.14
+
+def test_chain_guard_prevents_parallel_self_scheduling():
+    """human_desk.sync has a 120s cadence = 720 runs/day. It ran 3,107 — 4.3
+    parallel chains, because every boot started one and none ever stopped."""
+    import inspect
+    from workers import common
+    src = inspect.getsource(common.schedule_next)
+    assert 'eq("status", "queued")' in src
+    assert "return False" in src
+
+
+def test_chain_guard_fails_open():
+    import inspect
+    from workers import common
+    src = inspect.getsource(common.schedule_next)
+    i_try = src.index("except Exception")
+    assert "pass" in src[i_try:i_try + 60], "a missed tick is worse than a duplicate"
+
+
+def test_overhead_cadences_are_slower_than_before():
+    from workers.departments.human_desk import HUMAN_DESK_SYNC_SECONDS
+    from workers.departments.ops import HEARTBEAT_INTERVAL_S
+    from workers.departments.portfolio import KILLSWITCH_EVERY_N_TICKS
+    assert HUMAN_DESK_SYNC_SECONDS >= 300
+    assert HEARTBEAT_INTERVAL_S >= 120     # the claim loop is the primary signal now
+    assert KILLSWITCH_EVERY_N_TICKS >= 5
+
+
+def test_killswitch_is_not_spawned_every_tick():
+    import inspect
+    from workers.departments import portfolio as pf
+    src = inspect.getsource(pf)
+    i = src.index('"cfo.killswitch_check"')
+    assert "KILLSWITCH_EVERY_N_TICKS" in src[max(0, i - 400):i]
+
+
+def test_founder_reject_reason_reaches_memory():
+    """The writer learned THAT an item was rejected, never WHY — so 'duplicate
+    topic' and 'weak hook' taught it the same thing: nothing."""
+    import inspect
+    from workers.departments import human_desk as hd
+    src = inspect.getsource(hd)
+    assert "REASON:" in src
+    assert "rejection" in src and "reason" in src
