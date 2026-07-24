@@ -33,6 +33,11 @@ jobs:
         run: |
           cd pipeline
           python boot_check.py
+      - name: Preflight (partial-upload guard)
+        run: |
+          cd pipeline
+          python preflight.py
+
       - name: Run tests
         run: |
           cd pipeline
